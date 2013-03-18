@@ -1230,6 +1230,7 @@ MACHINE_START(ODROIDX, "ODROID-X")
 	.init_irq	= exynos4_init_irq,
 	.map_io		= hkdk4412_map_io,
 	.handle_irq	= gic_handle_irq,
+        .init_early     = exynos_firmware_init,
 	.init_machine	= hkdk4412_machine_init,
 	.init_late	= exynos_init_late,
 	.timer		= &exynos4_timer,
