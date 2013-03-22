@@ -190,7 +190,7 @@ static struct snd_soc_dai_link odroid_dai[] = {
 		.stream_name = "Playback",
 		.cpu_dai_name = "samsung-i2s.0",
 		.codec_dai_name = "max98090-aif1",
-		.platform_name = "samsung-audio",
+		.platform_name = "samsung-i2s.0",
 		.codec_name = "max98090.1-0010",
 		.init = max98090_init,
 		.ops = &odroid_ops,
@@ -200,7 +200,7 @@ static struct snd_soc_dai_link odroid_dai[] = {
 		.stream_name = "Capture",
 		.cpu_dai_name = "samsung-i2s.0",
 		.codec_dai_name = "max98090-aif1",
-		.platform_name = "samsung-audio",
+		.platform_name = "samsung-i2s.0",
 		.codec_name = "max98090.1-0010",
 		.init = max98090_init,
 		.ops = &odroid_ops,
@@ -242,7 +242,7 @@ static int hkdk_max98090_driver_remove(struct platform_device *pdev)
 
 static struct platform_driver hkdk_max98090_driver = {
 	.driver		= {
-		.name	= "hkdk-snd-max89090",
+		.name	= "hkdk-snd-max98090",
 		.owner	= THIS_MODULE,
 		.pm	= &snd_soc_pm_ops,
 	},

@@ -1008,7 +1008,7 @@ static struct platform_device hkdk4412_gpio_keys = {
 
 #if defined(CONFIG_SND_SOC_HKDK_MAX98090)
 static struct platform_device hardkernel_audio_device = {
-	.name	= "hkdk-snd-max89090",
+	.name	= "hkdk-snd-max98090",
 	.id	= -1,
 };
 #endif
