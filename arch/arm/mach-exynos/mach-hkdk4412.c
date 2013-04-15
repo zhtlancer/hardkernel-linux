@@ -177,11 +177,15 @@ static struct regulator_init_data __initdata max77686_buck1_data = {
 	.constraints = {
 		.name		= "VDD_MIF_1.0V",
 		.min_uV		= 800000,
-		.max_uV		= 1050000,
+		.max_uV		= 1100000,
 		.always_on	= 1,
 		.boot_on	= 1,
-		.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE |
-				REGULATOR_CHANGE_STATUS,
+		.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE | REGULATOR_CHANGE_STATUS,
+		.state_mem = 	{
+		        .uV = 1100000,
+                        .mode = REGULATOR_MODE_NORMAL,
+                        .enabled = 1,
+                },
 	},
 	.num_consumer_supplies = ARRAY_SIZE(max77686_buck1_consumer),
 	.consumer_supplies = max77686_buck1_consumer,
@@ -191,7 +195,7 @@ static struct regulator_init_data __initdata max77686_buck2_data = {
 	.constraints = {
 		.name		= "VDD_ARM_1.3V",
 		.min_uV		= 800000,
-		.max_uV		= 1350000,
+		.max_uV		= 1500000,
 		.always_on	= 1,
 		.boot_on	= 1,
 		.valid_ops_mask = REGULATOR_CHANGE_VOLTAGE,
@@ -1226,7 +1230,13 @@ static void __init hkdk4412_machine_init(void)
 	platform_add_devices(hkdk4412_devices, ARRAY_SIZE(hkdk4412_devices));
 }
 
-MACHINE_START(ODROIDX, "ODROID-X")
+#if defined(CONFIG_ODROID_X)
+MACHINE_START(ODROIDX, "ODROIDX")
+#elif defined(CONFIG_ODROID_X2)
+MACHINE_START(ODROIDX, "ODROIDX2")
+#elif defined(CONFIG_ODROID_U2)
+MACHINE_START(ODROIDX, "ODROIDU2"
+#endif
 	/* Maintainer: Dongjin Kim <dongjin.kim@agreeyamobiity.net> */
 	.atag_offset	= 0x100,
 	.smp		= smp_ops(exynos_smp_ops),
