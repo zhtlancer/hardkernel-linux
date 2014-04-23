@@ -1641,16 +1641,15 @@ static int pl330_submit_req(void *ch_id, struct pl330_req *r)
 		goto xfer_exit;
 	}
 
-	/* Use last settings, if not provided */
 	if (r->cfg) {
 		/* Prefer Secure Channel */
 		if (!_manager_ns(thrd))
 			r->cfg->nonsecure = 0;
 		else
 			r->cfg->nonsecure = 1;
-
 		ccr = _prepare_ccr(r->cfg);
 	} else {
+		/* Use last settings, if not provided */
 		ccr = readl(regs + CC(thrd->id));
 	}
 
@@ -2547,8 +2546,6 @@ static void pl330_free_chan_resources(struct dma_chan *chan)
 	struct dma_pl330_chan *pch = to_pchan(chan);
 	unsigned long flags;
 
-	tasklet_kill(&pch->task);
-
 	spin_lock_irqsave(&pch->lock, flags);
 
 	pl330_release_channel(pch->pl330_chid);
@@ -3037,9 +3034,9 @@ pl330_probe(struct amba_device *adev, const struct amba_id *id)
 
 	pdmac->peripherals = kzalloc(num_chan * sizeof(*pch), GFP_KERNEL);
 	if (!pdmac->peripherals) {
+		dev_err(&adev->dev, "unable to allocate mem for channel\n");
 		ret = -ENOMEM;
-		dev_err(&adev->dev, "unable to allocate pdmac->peripherals\n");
-		goto probe_err5;
+		goto probe_err4;
 	}
 
 	for (i = 0; i < num_chan; i++) {

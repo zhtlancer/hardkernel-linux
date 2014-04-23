@@ -137,7 +137,7 @@ static struct dw_mci_board smdk5410_dwmci0_pdata __initdata = {
     	.bus_hz			= 40 * 1000 * 1000,
     #else
     // SDR
-    	.bus_hz			= 160 * 1000 * 1000,
+   	.bus_hz			= 160 * 1000 * 1000,
     #endif
 #else
     #if defined(EMMC_DDR_MODE)
@@ -187,13 +187,11 @@ static void exynos_dwmci2_cfg_gpio(int width)
 	unsigned int gpio;
 
 	/* set to pull up pin for write protection */
-	/* odroidxu write protection pin is open, default pull down	*/
-	/*
 	gpio = EXYNOS5410_GPM5(0);
 	s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
 	s3c_gpio_setpull(gpio, S3C_GPIO_PULL_NONE);
 	s5p_gpio_set_drvstr(gpio, S5P_GPIO_DRVSTR_LV4);
-	*/	
+	
 	// T-Flash CD_TYPE INTERNAL
 	for (gpio = EXYNOS5410_GPC2(0); gpio < EXYNOS5410_GPC2(3); gpio++) {
 		s3c_gpio_cfgpin(gpio, S3C_GPIO_SFN(2));
@@ -235,13 +233,13 @@ static int exynos_dwmci2_get_bus_wd(u32 slot_id)
 
 static struct dw_mci_board smdk5410_dwmci2_pdata __initdata = {
 	.num_slots		= 1,
-	.quirks			= DW_MCI_QUIRK_BROKEN_CARD_DETECTION | DW_MCI_QUIRK_HIGHSPEED,
+	.quirks			= DW_MCI_QUIRK_BROKEN_CARD_DETECTION |
+				  DW_MCI_QUIRK_HIGHSPEED,
 	.bus_hz			= 80 * 1000 * 1000,
 	.caps			= MMC_CAP_CMD23 | MMC_CAP_4_BIT_DATA |
-						MMC_CAP_UHS_SDR50 | MMC_CAP_UHS_SDR25 | MMC_CAP_UHS_SDR104 |
-						MMC_CAP_1_8V_DDR | MMC_CAP_UHS_DDR50 |
-						MMC_CAP_ERASE,
-						
+					  MMC_CAP_UHS_SDR50 | MMC_CAP_UHS_SDR25 | MMC_CAP_UHS_SDR104 |
+					  MMC_CAP_1_8V_DDR | MMC_CAP_UHS_DDR50 |
+					  MMC_CAP_ERASE,
 	.fifo_depth		= 0x80,
 	.detect_delay_ms	= 200,
 	.hclk_name		= "dwmci",

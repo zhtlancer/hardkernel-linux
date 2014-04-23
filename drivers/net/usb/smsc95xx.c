@@ -73,7 +73,7 @@ MODULE_PARM_DESC(turbo_mode, "Enable multiple frames per Rx transaction");
 #if defined(CONFIG_ANDROID_PARANOID_NETWORK)
 	const	char *filepath = "/data/misc/smsc95xx_mac_addr";
 #else
-	const	char *filepath = "/etc/smsc95xx_mac_addr";
+	const	char *filepath = "/usr/smsc95xx_mac_addr";
 #endif
 
 int smsc95xx_read_mac_addr(unsigned char *mac)
@@ -1124,10 +1124,6 @@ static void smsc95xx_rx_csum_offload(struct sk_buff *skb)
 
 static int smsc95xx_rx_fixup(struct usbnet *dev, struct sk_buff *skb)
 {
-	/* This check is no longer done by usbnet */
-	if (skb->len < dev->net->hard_header_len)
-		return 0;
-
 	while (skb->len > 0) {
 		u32 header, align_count;
 		struct sk_buff *ax_skb;

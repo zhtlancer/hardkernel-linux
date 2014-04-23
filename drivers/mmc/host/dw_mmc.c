@@ -2015,7 +2015,7 @@ static void dw_mci_tasklet_func(unsigned long priv)
 					}
 
 				} else if (status & SDMMC_INT_SBE) {
-					dev_err(&host->dev,
+					dev_dbg(&host->dev,
 						"Start bit error "
 						"(status=%08x)\n",
 						status);
@@ -3472,6 +3472,7 @@ int dw_mci_suspend(struct dw_mci *host)
 //			dw_mci_ciu_clk_en(host);
 //#else
 			dw_mci_ciu_clk_en(host);
+//#endif
 			clkena = mci_readl(host, CLKENA);
 			clkena &= ~((SDMMC_CLKEN_LOW_PWR) << slot->id);
 			mci_writel(host, CLKENA, clkena);
@@ -3520,6 +3521,7 @@ int dw_mci_resume(struct dw_mci *host)
 		regulator_enable(host->vmmc);
 
 //#if defined(CONFIG_MACH_JA_KOR_SKT) || defined(CONFIG_MACH_JA_KOR_KT) || defined(CONFIG_MACH_JA_KOR_LGT)
+//	int cclk_disabled;
 //	spin_lock(&host->cclk_lock);
 //	cclk_disabled = !atomic_read(&host->cclk_cnt);
 //	if (cclk_disabled)

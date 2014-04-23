@@ -162,8 +162,6 @@ static enum hrtimer_restart ina231_timer(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
-extern bool xupluse;
-
 //[*]--------------------------------------------------------------------------------------------------[*]
 static int __devinit 	ina231_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
@@ -216,9 +214,8 @@ static int __devinit 	ina231_i2c_probe(struct i2c_client *client, const struct i
 
     if(sensor->pd->enable)  ina231_i2c_enable(sensor);
 
-    rc = 0;
     // display register message
-#ifdef CONFIG_ODROIDXU_DEBUG_MESSAGES
+    rc = 0;
     printk("============= Probe INA231 : %s ============= \n", sensor->pd->name);
     printk("SENSOR ENABLE   : %s\n"     , sensor->pd->enable ? "true" : "false");
     printk("REG CONFIG      : 0x%04X\n" , sensor->pd->config        );
@@ -228,10 +225,7 @@ static int __devinit 	ina231_i2c_probe(struct i2c_client *client, const struct i
     printk("Current LSB uA  : %d uA\n"  , sensor->cur_lsb_uA        );
     printk("Conversion Time : %d us\n"  , sensor->pd->update_period );
     printk("=====================================================\n");
-#else
-    printk("odroidxu+e: ina231, probed: %s\n", sensor->pd->name);
-#endif    
-	xupluse = true;
+    
     return  0;
 out:
     printk("============= Probe INA231 Fail! : %s (0x%04X) ============= \n", sensor->pd->name, rc); 

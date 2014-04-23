@@ -623,11 +623,9 @@ static ssize_t export_store(struct class *class,
 	 */
 
 	status = gpio_request(gpio, "sysfs");
-	if (status < 0) {
-		if (status == -EPROBE_DEFER)
-			status = -ENODEV;
+	if (status < 0)
 		goto done;
-	}
+
 	status = gpio_export(gpio, true);
 	if (status < 0)
 		gpio_free(gpio);
@@ -1094,9 +1092,11 @@ unlock:
 	status = gpiochip_export(chip);
 	if (status)
 		goto fail;
-#ifdef CONFIG_ODROIDXU_DEBUG_MESSAGES
-	pr_info("gpiochip_add: registered GPIOs %d to %d on device: %s\n", chip->base, chip->base + chip->ngpio - 1, chip->label ? : "generic");
-#endif
+
+	pr_info("gpiochip_add: registered GPIOs %d to %d on device: %s\n",
+		chip->base, chip->base + chip->ngpio - 1,
+		chip->label ? : "generic");
+
 	return 0;
 fail:
 	/* failures here can mean systems won't boot... */
@@ -1191,10 +1191,8 @@ int gpio_request(unsigned gpio, const char *label)
 
 	spin_lock_irqsave(&gpio_lock, flags);
 
-	if (!gpio_is_valid(gpio)) {
-		status = -EINVAL;
+	if (!gpio_is_valid(gpio))
 		goto done;
-	}
 	desc = &gpio_desc[gpio];
 	chip = desc->chip;
 	if (chip == NULL)

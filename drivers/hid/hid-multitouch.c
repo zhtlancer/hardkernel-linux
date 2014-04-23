@@ -769,6 +769,21 @@ static void mt_remove(struct hid_device *hdev)
 
 static const struct hid_device_id mt_devices[] = {
 
+    /* Focaltech System FT5926 Multitouch(Hardkernel 9" Touch Screen) */
+    { .driver_data = MT_CLS_DEFAULT,
+        HID_USB_DEVICE(USB_VENDOR_ID_FOCALTECH, 
+            USB_DEVICE_ID_FOCALTECH_TOUCH) },
+
+    /* Elitegroup Computer Systems */
+    { .driver_data = MT_CLS_DEFAULT,
+    	HID_USB_DEVICE(USB_VENDOR_ID_ELITEGROUP, 
+    	    USB_DEVICE_ID_ELITEGROUP_TOUCH) },
+
+    /* Nexio Co., Ltd */
+    { .driver_data = MT_CLS_DEFAULT,
+    	HID_USB_DEVICE(USB_VENDOR_ID_NEXIO, 
+    	    USB_DEVICE_ID_NEXIO_TOUCH) },
+    
 	/* 3M panels */
 	{ .driver_data = MT_CLS_3M,
 		HID_USB_DEVICE(USB_VENDOR_ID_3M,
@@ -793,10 +808,6 @@ static const struct hid_device_id mt_devices[] = {
 		HID_USB_DEVICE(USB_VENDOR_ID_ATMEL,
 			USB_DEVICE_ID_ATMEL_MXT_DIGITIZER) },
 
-	/* Baanto multitouch devices */
-	{ .driver_data = MT_CLS_DEFAULT,
-		HID_USB_DEVICE(USB_VENDOR_ID_BAANTO,
-			USB_DEVICE_ID_BAANTO_MT_190W2) },
 	/* Cando panels */
 	{ .driver_data = MT_CLS_DUAL_INRANGE_CONTACTNUMBER,
 		HID_USB_DEVICE(USB_VENDOR_ID_CANDO,
@@ -949,11 +960,6 @@ static const struct hid_device_id mt_devices[] = {
 	{ .driver_data = MT_CLS_PANASONIC,
 		HID_USB_DEVICE(USB_VENDOR_ID_PANASONIC,
 			USB_DEVICE_ID_PANABOARD_UBT880) },
-
-	/* Novatek Panel */
-	{ .driver_data = MT_CLS_DEFAULT,
-		HID_USB_DEVICE(USB_VENDOR_ID_NOVATEK,
-			USB_DEVICE_ID_NOVATEK_PCT) },
 
 	/* PenMount panels */
 	{ .driver_data = MT_CLS_CONFIDENCE,

@@ -146,7 +146,7 @@ static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 	int ret = 0;
 	void __iomem *regs;
 
-	unsigned int gscl0 = 0, gscl1 = 0;
+	unsigned int gscl0, gscl1;
 
 	pd = container_of(domain, struct exynos_pm_domain, pd);
 	base = pd->base;
@@ -295,9 +295,7 @@ static int exynos_pd_power(struct generic_pm_domain *domain, bool power_on)
 			power_on && base == EXYNOS5410_DISP1_CONFIGURATION) {
 		regs = ioremap(0x14530000, SZ_32);
 		__raw_writel(0x1, regs + 0x30);
-#ifdef CONFIG_ODROIDXU_DEBUG_MESSAGES
 		pr_info("HDMI phy power off : %x\n", __raw_readl(regs + 0x30));
-#endif
 		iounmap(regs);
 	}
 
@@ -423,9 +421,7 @@ static __init void exynos_pm_add_dev_to_genpd(struct platform_device *pdev,
 	if (pdev->dev.bus) {
 		if (!pm_genpd_add_device(&pd->pd, &pdev->dev)) {
 			pm_genpd_dev_need_restore(&pdev->dev, true);
-#ifdef CONFIG_ODROIDXU_DEBUG_MESSAGES
 			pr_info("PowerDomain : %s, Device : %s Registered\n", pd->pd.name, pdev->name);
-#endif
 		} else {
 			pr_debug("%s: error in adding %s device to %s power domain\n",
 				__func__, dev_name(&pdev->dev), pd->pd.name);
