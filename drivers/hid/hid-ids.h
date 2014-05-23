@@ -800,6 +800,7 @@
 
 /* Nexio Co., Ltd */
 #define USB_VENDOR_ID_NEXIO     0x1870
+#define USB_DEVICE_ID_NEXIO_42TOUCH     0x0100
 #define USB_DEVICE_ID_NEXIO_TOUCH   0x0119
 
 /* Focaltech System FT5926 Multitouch(Hardkernel 9" Touch Screen) */

@@ -783,6 +783,9 @@ static const struct hid_device_id mt_devices[] = {
     { .driver_data = MT_CLS_DEFAULT,
     	HID_USB_DEVICE(USB_VENDOR_ID_NEXIO, 
     	    USB_DEVICE_ID_NEXIO_TOUCH) },
+    { .driver_data = MT_CLS_DEFAULT,
+    	HID_USB_DEVICE(USB_VENDOR_ID_NEXIO, 
+    	    USB_DEVICE_ID_NEXIO_42TOUCH) },
     
 	/* 3M panels */
 	{ .driver_data = MT_CLS_3M,
