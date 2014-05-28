@@ -75,6 +75,9 @@ resume_with_mmu:
 
 	ldr	r0, =SMC_CMD_C15RESUME
 	mov	r3, #0
+#if __GNUC__ >= 4 && __GNUC_MINOR__ >= 6
+        .arch_extension sec
+#endif
 	smc	0
 #else
 	ldr	r1, [r0], #4
