@@ -33,9 +33,9 @@ extern unsigned long exynos_thermal_get_value(void);
 
 //duty percent
 #define FAN_SPEED_0		1
-#define FAN_SPEED_1		30
+#define FAN_SPEED_1		40
 #define FAN_SPEED_2		60
-#define FAN_SPEED_3		90
+#define FAN_SPEED_3		80
 
 //-----------------------------------------------------------------------------
 //-----------------------------------------------------------------------------
