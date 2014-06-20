@@ -744,7 +744,7 @@ struct odroid_fan_platform_data odroid_fan_pdata = {
 	
 	.pwm_id = 0,
 	.pwm_periode_ns = 20972,		// Freq 22KHz,
-	.pwm_duty = 255,				// max=255, 
+	.pwm_duty = 128,			// max=255, 
 };
 
 static struct platform_device odroidxu_fan = {
