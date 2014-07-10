@@ -5,13 +5,13 @@
  *
  * Samsung SoC SGX DVFS driver
  *
- * This software is proprietary of Samsung Electronics. 
+ * This software is proprietary of Samsung Electronics.
  * No part of this software, either material or conceptual may be copied or distributed, transmitted,
  * transcribed, stored in a retrieval system or translated into any human or computer language in any form by any means,
  * electronic, mechanical, manual or otherwise, or disclosed
  * to third parties without the express written permission of Samsung Electronics.
  *
- * Alternatively, this program is free software in case of Linux Kernel; 
+ * Alternatively, this program is free software in case of Linux Kernel;
  * you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -63,18 +63,15 @@ extern void sec_gpu_dvfs_handler(int utilization_value);
 IMG_VOID SysSGXIdleTransition(IMG_BOOL bSGXIdle)
 {
 	#if defined(CONFIG_ARM_EXYNOS5410_BUS_DEVFREQ)
-	if(bEnableMIFMornitering)
-	{
+	if (bEnableMIFMornitering) {
 	#endif
 		if (bSGXIdle)
 			sgx_hw_end(); /* wakeup state */
 		else
 			sgx_hw_start(); /* idle state */
 	#if defined(CONFIG_ARM_EXYNOS5410_BUS_DEVFREQ)
-	}
-	else
-	{
-		if (bSGXIdle){
+	} else	{
+		if (bSGXIdle) {
 			sgx_hw_end(); /* wakeup state */
 			{
 				pm_qos_update_request(&exynos5_g3d_int_qos, 0);
@@ -85,8 +82,7 @@ IMG_VOID SysSGXIdleTransition(IMG_BOOL bSGXIdle)
 				status = EXYNOS_CLKREG(0x2051c);
 				__raw_writel(0x3F, status);
 			}
-		}
-		else {
+		} else {
 			{
 				void __iomem *status;
 				status = EXYNOS_CLKREG(0x2051c);
@@ -94,7 +90,7 @@ IMG_VOID SysSGXIdleTransition(IMG_BOOL bSGXIdle)
 			}
 			{
 				pm_qos_update_request(&exynos5_g3d_int_qos, 200000);
-				if(sgx_dvfs_level > 2)
+				if (sgx_dvfs_level > 2)
 					pm_qos_update_request(&exynos5_g3d_mif_qos, 267000);
 				else
 					pm_qos_update_request(&exynos5_g3d_mif_qos, 800000);

@@ -86,11 +86,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 
-#if defined(PVR_ANDROID_NATIVE_WINDOW_HAS_SYNC)
-#include <linux/file.h>
-#include <linux/sync.h>
-#endif
-
 #include "srvkm.h"
 
 /* FIXME: we should include an OS specific header here to allow configuration of
@@ -1015,7 +1010,7 @@ PVRSRVUnmapDeviceMemoryBW(IMG_UINT32 ui32BridgeID,
 											PVRSRV_HANDLE_TYPE_MEM_INFO);
 	if(psRetOUT->eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceMemoryBW: PVRSRVLookupHandle failed %d",psRetOUT->eError));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceMemoryBW: PVRSRVLookupHandle failed %d", psRetOUT->eError));
 		return 0;
 	}
 
@@ -1033,8 +1028,8 @@ PVRSRVUnmapDeviceMemoryBW(IMG_UINT32 ui32BridgeID,
 		psRetOUT->eError = PVRSRVUnmapDeviceMemoryKM(psKernelMemInfo);
 		if(psRetOUT->eError != PVRSRV_OK)
 		{
-			PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceMemoryBW: PVRSRVUnmapDeviceMemoryKM failed %d",psRetOUT->eError));
-			PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceMemoryKM: psKernelMemInfo: 0x%x",(unsigned int)psKernelMemInfo));
+			PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceMemoryBW: PVRSRVUnmapDeviceMemoryKM failed %d", psRetOUT->eError));
+			PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceMemoryKM: psKernelMemInfo: 0x%x", (unsigned int)psKernelMemInfo));
 			return 0;
 		}
 	}
@@ -1045,8 +1040,8 @@ PVRSRVUnmapDeviceMemoryBW(IMG_UINT32 ui32BridgeID,
 
 	if(psRetOUT->eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceMemoryBW: PVRSRVReleaseHandle failed %d",psRetOUT->eError));
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVReleaseHandle: psHandleBase: 0x%x, psKernelMemInfo: 0x%x",(unsigned int)psPerProc->psHandleBase,(unsigned int)psUnmapDevMemIN->psKernelMemInfo));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceMemoryBW: PVRSRVReleaseHandle failed %d", psRetOUT->eError));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVReleaseHandle: psHandleBase: 0x%x, psKernelMemInfo: 0x%x", (unsigned int)psPerProc->psHandleBase, (unsigned int)psUnmapDevMemIN->psKernelMemInfo));
 		return 0;
 	}
 	return 0;
@@ -1202,7 +1197,7 @@ PVRSRVUnmapDeviceClassMemoryBW(IMG_UINT32 ui32BridgeID,
 						   PVRSRV_HANDLE_TYPE_MEM_INFO);
 	if(psRetOUT->eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceClassMemoryBW: PVRSRVLookupHandle failed %d",psRetOUT->eError));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceClassMemoryBW: PVRSRVLookupHandle failed %d", psRetOUT->eError));
 		return 0;
 	}
 
@@ -1210,8 +1205,8 @@ PVRSRVUnmapDeviceClassMemoryBW(IMG_UINT32 ui32BridgeID,
 
 	if(psRetOUT->eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceClassMemoryBW: PVRSRVUnmapDeviceClassMemoryKM failed %d",psRetOUT->eError));
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceClassMemoryKM: pvKernelMemInfo: 0x%x",(unsigned int)pvKernelMemInfo));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceClassMemoryBW: PVRSRVUnmapDeviceClassMemoryKM failed %d", psRetOUT->eError));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceClassMemoryKM: pvKernelMemInfo: 0x%x", (unsigned int)pvKernelMemInfo));
 		return 0;
 	}
 
@@ -1222,8 +1217,8 @@ PVRSRVUnmapDeviceClassMemoryBW(IMG_UINT32 ui32BridgeID,
 
 	if(psRetOUT->eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceClassMemoryBW: PVRSRVReleaseHandle failed %d",psRetOUT->eError));
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVReleaseHandle: psHandleBase: 0x%x, psKernelMemInfo: 0x%x",(unsigned int)psPerProc->psHandleBase,(unsigned int)psUnmapDevClassMemIN->psKernelMemInfo));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapDeviceClassMemoryBW: PVRSRVReleaseHandle failed %d", psRetOUT->eError));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVReleaseHandle: psHandleBase: 0x%x, psKernelMemInfo: 0x%x", (unsigned int)psPerProc->psHandleBase, (unsigned int)psUnmapDevClassMemIN->psKernelMemInfo));
 		return 0;
 	}
 	return 0;
@@ -1389,7 +1384,7 @@ PVRSRVUnwrapExtMemoryBW(IMG_UINT32 ui32BridgeID,
 						   PVRSRV_HANDLE_TYPE_MEM_INFO);
 	if(psRetOUT->eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnwrapExtMemoryBW: PVRSRVLookupHandle failed %d",psRetOUT->eError));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnwrapExtMemoryBW: PVRSRVLookupHandle failed %d", psRetOUT->eError));
 		return 0;
 	}
 
@@ -1397,8 +1392,8 @@ PVRSRVUnwrapExtMemoryBW(IMG_UINT32 ui32BridgeID,
 		PVRSRVUnwrapExtMemoryKM((PVRSRV_KERNEL_MEM_INFO *)pvMemInfo);
 	if(psRetOUT->eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnwrapExtMemoryBW: PVRSRVUnwrapExtMemoryKM failed %d",psRetOUT->eError));
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnwrapExtMemoryKM: pvMemInfo: 0x%x",(unsigned int)pvMemInfo));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnwrapExtMemoryBW: PVRSRVUnwrapExtMemoryKM failed %d", psRetOUT->eError));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnwrapExtMemoryKM: pvMemInfo: 0x%x", (unsigned int)pvMemInfo));
 		return 0;
 	}
 
@@ -1409,10 +1404,11 @@ PVRSRVUnwrapExtMemoryBW(IMG_UINT32 ui32BridgeID,
 
 	if(psRetOUT->eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnwrapExtMemoryBW: PVRSRVReleaseHandle failed %d",psRetOUT->eError));
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVReleaseHandle: psHandleBase: 0x%x, hKernelMemInfo: 0x%x",(unsigned int)psPerProc->psHandleBase,(unsigned int)psUnwrapExtMemIN->hKernelMemInfo));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnwrapExtMemoryBW: PVRSRVReleaseHandle failed %d", psRetOUT->eError));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVReleaseHandle: psHandleBase: 0x%x, hKernelMemInfo: 0x%x", (unsigned int)psPerProc->psHandleBase, (unsigned int)psUnwrapExtMemIN->hKernelMemInfo));
 		return 0;
 	}
+
 	return 0;
 }
 #endif
@@ -1450,8 +1446,7 @@ PVRSRVMapIonHandleBW(IMG_UINT32 ui32BridgeID,
 	psMapIonOUT->eError = PVRSRVMapIonHandleKM(psPerProc,
 											   psMapIonIN->hDevCookie,
 											   psMapIonIN->hDevMemHeap,
-											   psMapIonIN->ui32NumFDs,
-											   psMapIonIN->ai32BufferFDs,
+											   psMapIonIN->handle,
 											   psMapIonIN->ui32Attribs,
 											   psMapIonIN->ui32ChunkCount,
 											   psMapIonIN->auiOffset,
@@ -1546,7 +1541,7 @@ PVRSRVUnmapIonHandleBW(IMG_UINT32 ui32BridgeID,
 
 	if(psUnmapIonOUT->eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapIonHandleBW: PVRSRVLookupHandle failed %d",psUnmapIonOUT->eError));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapIonHandleBW: PVRSRVLookupHandle failed %d", psUnmapIonOUT->eError));
 		return 0;
 	}
 
@@ -1554,7 +1549,7 @@ PVRSRVUnmapIonHandleBW(IMG_UINT32 ui32BridgeID,
 
 	if(psUnmapIonOUT->eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapIonHandleBW: PVRSRVUnmapIonHandleKM failed %d",psUnmapIonOUT->eError));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapIonHandleBW: PVRSRVUnmapIonHandleKM failed %d", psUnmapIonOUT->eError));
 		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapIonHandleKM: pvKernelMemInfo: 0x%x", (unsigned int)pvKernelMemInfo));
 		return 0;
 	}
@@ -1565,10 +1560,11 @@ PVRSRVUnmapIonHandleBW(IMG_UINT32 ui32BridgeID,
 							PVRSRV_HANDLE_TYPE_MEM_INFO);
 	if(psUnmapIonOUT->eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapIonHandleBW: PVRSRVReleaseHandle failed %d",psUnmapIonOUT->eError));
-		PVR_DPF((PVR_DBG_ERROR, "PVRSRVReleaseHandle: psHandleBase: 0x%x, psKernelMemInfo: 0x%x", (unsigned int)psPerProc->psHandleBase,(unsigned int)psUnmapIonIN->psKernelMemInfo));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVUnmapIonHandleBW: PVRSRVReleaseHandle failed %d", psUnmapIonOUT->eError));
+		PVR_DPF((PVR_DBG_ERROR, "PVRSRVReleaseHandle: psHandleBase: 0x%x, psKernelMemInfo: 0x%x", (unsigned int)psPerProc->psHandleBase, (unsigned int)psUnmapIonIN->psKernelMemInfo));
 		return 0;
 	}
+
 	return 0;
 }
 #endif	/* SUPPORT_ION */
@@ -2896,35 +2892,34 @@ PVRSRVSwapToDCBufferBW(IMG_UINT32 ui32BridgeID,
 static IMG_INT
 PVRSRVSwapToDCBuffer2BW(IMG_UINT32 ui32BridgeID,
 						PVRSRV_BRIDGE_IN_SWAP_DISPCLASS_TO_BUFFER2 *psSwapDispClassBufferIN,
-						PVRSRV_BRIDGE_OUT_SWAP_DISPCLASS_TO_BUFFER2 *psSwapDispClassBufferOUT,
+						PVRSRV_BRIDGE_RETURN *psRetOUT,
 						PVRSRV_PER_PROCESS_DATA *psPerProc)
 {
 	IMG_VOID *pvPrivData = IMG_NULL;
-	IMG_HANDLE hFence = IMG_NULL;
 	IMG_VOID *pvDispClassInfo;
 	IMG_VOID *pvSwapChain;
 	IMG_UINT32 i;
 
 	PVRSRV_BRIDGE_ASSERT_CMD(ui32BridgeID, PVRSRV_BRIDGE_SWAP_DISPCLASS_TO_BUFFER2);
 
-	psSwapDispClassBufferOUT->eError =
+	psRetOUT->eError =
 		PVRSRVLookupHandle(psPerProc->psHandleBase,
 						   &pvDispClassInfo,
 						   psSwapDispClassBufferIN->hDeviceKM,
 						   PVRSRV_HANDLE_TYPE_DISP_INFO);
-	if(psSwapDispClassBufferOUT->eError != PVRSRV_OK)
+	if(psRetOUT->eError != PVRSRV_OK)
 	{
 		PVR_DPF((PVR_DBG_ERROR, "PVRSRVSwapToDCBuffer2BW: Failed to look up DISP_INFO handle"));
 		return 0;
 	}
 
-	psSwapDispClassBufferOUT->eError =
+	psRetOUT->eError =
 		PVRSRVLookupSubHandle(psPerProc->psHandleBase,
 							  &pvSwapChain,
 							  psSwapDispClassBufferIN->hSwapChain,
 							  PVRSRV_HANDLE_TYPE_DISP_SWAP_CHAIN,
 							  psSwapDispClassBufferIN->hDeviceKM);
-	if(psSwapDispClassBufferOUT->eError != PVRSRV_OK)
+	if(psRetOUT->eError != PVRSRV_OK)
 	{
 		PVR_DPF((PVR_DBG_ERROR, "PVRSRVSwapToDCBuffer2BW: Failed to look up DISP_BUFFER handle"));
 		return 0;
@@ -2948,37 +2943,33 @@ PVRSRVSwapToDCBuffer2BW(IMG_UINT32 ui32BridgeID,
 
 	for (i = 0; i < psSwapDispClassBufferIN->ui32NumMemInfos; i++)
 	{
+		PVRSRV_KERNEL_SYNC_INFO *psKernelSyncInfo;
 		PVRSRV_KERNEL_MEM_INFO *psKernelMemInfo;
 
-		psSwapDispClassBufferOUT->eError =
+		psRetOUT->eError =
 			PVRSRVLookupHandle(psPerProc->psHandleBase,
 							   (IMG_PVOID *)&psKernelMemInfo,
 							   psSwapDispClassBufferIN->ppsKernelMemInfos[i],
 							   PVRSRV_HANDLE_TYPE_MEM_INFO);
-		if(psSwapDispClassBufferOUT->eError != PVRSRV_OK)
+		if(psRetOUT->eError != PVRSRV_OK)
 		{
 			PVR_DPF((PVR_DBG_ERROR, "PVRSRVSwapToDCBuffer2BW: Failed to look up MEM_INFO handle"));
 			return 0;
 		}
-		psSwapDispClassBufferIN->ppsKernelMemInfos[i] = psKernelMemInfo;
 
-#if !defined(PVR_ANDROID_NATIVE_WINDOW_HAS_SYNC)
+		psRetOUT->eError =
+			PVRSRVLookupHandle(psPerProc->psHandleBase,
+							   (IMG_PVOID *)&psKernelSyncInfo,
+							   psSwapDispClassBufferIN->ppsKernelSyncInfos[i],
+							   PVRSRV_HANDLE_TYPE_SYNC_INFO);
+		if(psRetOUT->eError != PVRSRV_OK)
 		{
-			PVRSRV_KERNEL_SYNC_INFO *psKernelSyncInfo;
-
-			psSwapDispClassBufferOUT->eError =
-				PVRSRVLookupHandle(psPerProc->psHandleBase,
-								   (IMG_PVOID *)&psKernelSyncInfo,
-								   psSwapDispClassBufferIN->ppsKernelSyncInfos[i],
-								   PVRSRV_HANDLE_TYPE_SYNC_INFO);
-			if(psSwapDispClassBufferOUT->eError != PVRSRV_OK)
-			{
-				PVR_DPF((PVR_DBG_ERROR, "PVRSRVSwapToDCBuffer2BW: Failed to look up SYNC_INFO handle"));
-				return 0;
-			}
-			psSwapDispClassBufferIN->ppsKernelSyncInfos[i] = psKernelSyncInfo;
+			PVR_DPF((PVR_DBG_ERROR, "PVRSRVSwapToDCBuffer2BW: Failed to look up SYNC_INFO handle"));
+			return 0;
 		}
-#endif /* !defined(PVR_ANDROID_NATIVE_WINDOW_HAS_SYNC) */
+
+		psSwapDispClassBufferIN->ppsKernelMemInfos[i] = psKernelMemInfo;
+		psSwapDispClassBufferIN->ppsKernelSyncInfos[i] = psKernelSyncInfo;
 	}
 
 	if(psSwapDispClassBufferIN->ui32PrivDataLength > 0)
@@ -3006,7 +2997,7 @@ PVRSRVSwapToDCBuffer2BW(IMG_UINT32 ui32BridgeID,
 		}
 	}
 
-	psSwapDispClassBufferOUT->eError =
+	psRetOUT->eError =
 		PVRSRVSwapToDCBuffer2KM(pvDispClassInfo,
 								pvSwapChain,
 								psSwapDispClassBufferIN->ui32SwapInterval,
@@ -3014,29 +3005,13 @@ PVRSRVSwapToDCBuffer2BW(IMG_UINT32 ui32BridgeID,
 								psSwapDispClassBufferIN->ppsKernelSyncInfos,
 								psSwapDispClassBufferIN->ui32NumMemInfos,
 								pvPrivData,
-								psSwapDispClassBufferIN->ui32PrivDataLength,
-								&hFence);
+								psSwapDispClassBufferIN->ui32PrivDataLength);
 
-	if(psSwapDispClassBufferOUT->eError != PVRSRV_OK)
+	if(psRetOUT->eError != PVRSRV_OK)
 	{
 		OSFreeMem(PVRSRV_OS_PAGEABLE_HEAP,
 				  psSwapDispClassBufferIN->ui32PrivDataLength,
 				  pvPrivData, IMG_NULL);
-	}
-
-#if defined(PVR_ANDROID_NATIVE_WINDOW_HAS_SYNC)
-	if(hFence)
-	{
-		struct sync_fence *psFence = hFence;
-		int fd = get_unused_fd();
-
-		sync_fence_install(psFence, fd);
-		psSwapDispClassBufferOUT->hFence = (IMG_HANDLE)fd;
-	}
-	else
-#endif /* defined(PVR_ANDROID_NATIVE_WINDOW_HAS_SYNC) */
-	{
-		psSwapDispClassBufferOUT->hFence = (IMG_HANDLE)-1;
 	}
 
     return 0;

@@ -5,13 +5,13 @@
  *
  * Samsung SoC SGX clock driver
  *
- * This software is proprietary of Samsung Electronics. 
+ * This software is proprietary of Samsung Electronics.
  * No part of this software, either material or conceptual may be copied or distributed, transmitted,
  * transcribed, stored in a retrieval system or translated into any human or computer language in any form by any means,
  * electronic, mechanical, manual or otherwise, or disclosed
  * to third parties without the express written permission of Samsung Electronics.
  *
- * Alternatively, this program is free software in case of Linux Kernel; 
+ * Alternatively, this program is free software in case of Linux Kernel;
  * you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -37,7 +37,7 @@ void __iomem *sgx_bts_base;
 unsigned int sgx_clk_status;
 #endif
 
-#define DEBUG_BW
+//#define DEBUG_BW
 
 /* clock control */
 static struct clk	*sgx_core;
@@ -266,8 +266,9 @@ void gpu_clock_disable()
 /*this function using for DVFS*/
 void gpu_clock_set(int sgx_clk)
 {
+#ifdef DEBUG_BW
 	int old_clk = clk_get_rate(g3d_clock_core)/MHZ;
-
+#endif
 	if (clk_get_rate(fout_vpll_clock)/MHZ != sgx_clk)
 		sgx_gpu_src_clk = clk_set_rate(fout_vpll_clock, sgx_clk * MHZ);
 
@@ -294,10 +295,10 @@ void gpu_clock_set(int sgx_clk)
 			else
 				bts = 0;
 
-			PVR_LOG(("SGX change clock [%d] Mhz -> [%d] MHz req [%d] MHz / M[%d] / B[%d]", old_clk, sgx_gpu_clk, sgx_clk, (800/mif_sdiv), bts));
+			PVR_LOG(("SGX change clock [%d] Mhz -> [%d] MHz req [%d] MHz / M[%d] / B[%d]", old_clk, sgx_gpu_clk, sgx_clk, (800 / mif_sdiv), bts));
 		}
 #else
-		PVR_LOG(("SGX change clock [%d] Mhz -> [%d] MHz req [%d] MHz / M[%d]", old_clk, sgx_gpu_clk, sgx_clk, (800/mif_sdiv)));
+		PVR_LOG(("SGX change clock [%d] Mhz -> [%d] MHz req [%d] MHz / M[%d]", old_clk, sgx_gpu_clk, sgx_clk, (800 / mif_sdiv)));
 #endif
 	}
 #endif

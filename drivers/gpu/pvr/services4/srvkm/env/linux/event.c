@@ -204,7 +204,7 @@ PVRSRV_ERROR LinuxEventObjectDelete(IMG_HANDLE hOSEventObjectList, IMG_HANDLE hO
 #endif
 			if(ResManFreeResByPtr(psLinuxEventObject->hResItem, CLEANUP_WITH_POLL) != PVRSRV_OK)
 			{
-				PVR_DPF((PVR_DBG_ERROR, "LinuxEventObjectDelete: ResManFreeResByPtr failed %d",PVRSRV_ERROR_UNABLE_TO_DESTROY_EVENT));
+				PVR_DPF((PVR_DBG_ERROR, "LinuxEventObjectDelete: ResManFreeResByPtr failed %d", PVRSRV_ERROR_UNABLE_TO_DESTROY_EVENT));
 				PVR_DPF((PVR_DBG_ERROR, "ResManFreeResByPtr: hResItem 0x%x", (unsigned int)psLinuxEventObject->hResItem));
 				return PVRSRV_ERROR_UNABLE_TO_DESTROY_EVENT;
 			}
@@ -398,7 +398,7 @@ PVRSRV_ERROR LinuxEventObjectWait(IMG_HANDLE hOSEventObject, IMG_UINT32 ui32MSTi
 
 		ui32TimeOutJiffies = (IMG_UINT32)schedule_timeout((IMG_INT32)ui32TimeOutJiffies);
 		
-		LinuxLockMutexNested(&gPVRSRVLock, PVRSRV_LOCK_CLASS_BRIDGE);
+		LinuxLockMutex(&gPVRSRVLock);
 #if defined(DEBUG)
 		psLinuxEventObject->ui32Stats++;
 #endif			

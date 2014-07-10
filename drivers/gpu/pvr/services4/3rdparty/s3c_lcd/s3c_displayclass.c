@@ -590,10 +590,10 @@ static PVRSRV_ERROR CreateDCSwapChain(IMG_HANDLE hDevice,
 	}
 
 	psSwapChain = (S3C_SWAPCHAIN *)kmalloc(sizeof(S3C_SWAPCHAIN),GFP_KERNEL);
-	if(!psSwapChain)
-		return (PVRSRV_ERROR_OUT_OF_MEMORY);
+	if (!psSwapChain)
+		return PVRSRV_ERROR_OUT_OF_MEMORY;
 	psBuffer = (S3C_FRAME_BUFFER*)kmalloc(sizeof(S3C_FRAME_BUFFER) * ui32BufferCount, GFP_KERNEL);
-
+	
 	if(!psBuffer)
 	{
 		kfree(psSwapChain);
@@ -1062,7 +1062,7 @@ int s3c_displayclass_init(void)
 		IMG_UINT32	aui32SyncCountList[DC_S3C_LCD_COMMAND_COUNT][2];
 
 		g_psLCDInfo = (S3C_LCD_DEVINFO*)kmalloc(sizeof(S3C_LCD_DEVINFO),GFP_KERNEL);
-		if(!g_psLCDInfo)
+		if (!g_psLCDInfo)
 		{
 			printk("Fail to get memory for g_psLCDInfo\n");
 			goto err_out;
@@ -1148,7 +1148,7 @@ int s3c_displayclass_init(void)
 			goto err_out;
 		}
 
-		pfnCmdProcList[DC_FLIP_COMMAND] = (PFN_CMD_PROC)ProcessFlip;
+		pfnCmdProcList[DC_FLIP_COMMAND] = ProcessFlip;
 		aui32SyncCountList[DC_FLIP_COMMAND][0] = 0;
 		aui32SyncCountList[DC_FLIP_COMMAND][1] = 2;
 

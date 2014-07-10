@@ -67,7 +67,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 IMG_UINT64 ui64KickCount;
-int g_debug_CCB_Info_WCNT = 0;
+int g_debug_CCB_Info_WCNT;
 
 #if defined(SYS_CUSTOM_POWERDOWN)
 PVRSRV_ERROR SysPowerDownMISR(PVRSRV_DEVICE_NODE	* psDeviceNode, IMG_UINT32 ui32CallerID);
@@ -550,7 +550,7 @@ PVRSRV_ERROR SGXScheduleCCBCommand(PVRSRV_DEVICE_NODE	*psDeviceNode,
 		Increment the write offset
 	*/
 	*psKernelCCB->pui32WriteOffset = (*psKernelCCB->pui32WriteOffset + 1) & 255;
-	g_debug_CCB_Info_WCNT ++;
+	g_debug_CCB_Info_WCNT++;
 
 #if defined(PDUMP)
 	if ((ui32CallerID != ISR_ID) && (bPDumpIsSuspended == IMG_FALSE) &&
@@ -669,9 +669,9 @@ PVRSRV_ERROR SGXScheduleCCBCommandKM(PVRSRV_DEVICE_NODE		*psDeviceNode,
 	eError = PVRSRVPowerLock(ui32CallerID, IMG_FALSE);
 
 	if (psDevInfo->psKernelCCBCtl->ui32ReadOffset  > 0xff || psDevInfo->psKernelCCBCtl->ui32WriteOffset > 0xff)
-		PVR_DPF((PVR_DBG_ERROR,"SGX CCB check error: RO: %x, WO:%x ", psDevInfo->psKernelCCBCtl->ui32ReadOffset,
-								psDevInfo->psKernelCCBCtl->ui32WriteOffset));
-	PVR_ASSERT(psDevInfo->psKernelCCBCtl->ui32ReadOffset  <= 0xff &&
+		PVR_DPF((PVR_DBG_ERROR, "SGX CCB check error: RO: %x, WO:%x ", psDevInfo->psKernelCCBCtl->ui32ReadOffset,
+					psDevInfo->psKernelCCBCtl->ui32WriteOffset));
+	PVR_ASSERT(psDevInfo->psKernelCCBCtl->ui32ReadOffset <= 0xff &&
 		psDevInfo->psKernelCCBCtl->ui32WriteOffset <= 0xff);
 
 	if (eError == PVRSRV_ERROR_RETRY)
@@ -1249,7 +1249,7 @@ PVRSRV_ERROR SGXUnregisterHWRenderContextKM(IMG_HANDLE hHWRenderContext, IMG_BOO
 	eError = ResManFreeResByPtr(psCleanup->psResItem, bForceCleanup);
 	if(eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "SGXUnregisterHWRenderContextKM: ResManFreeResByPtr failed %d",eError));
+		PVR_DPF((PVR_DBG_ERROR, "SGXUnregisterHWRenderContextKM: ResManFreeResByPtr failed %d", eError));
 		PVR_DPF((PVR_DBG_ERROR, "ResManFreeResByPtr: hResItem 0x%x", (unsigned int)psCleanup->psResItem));
 	}
 	return eError;
@@ -1443,7 +1443,7 @@ PVRSRV_ERROR SGXUnregisterHWTransferContextKM(IMG_HANDLE hHWTransferContext, IMG
 	eError = ResManFreeResByPtr(psCleanup->psResItem, bForceCleanup);
 	if(eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "SGXUnregisterHWTransferContextKM: ResManFreeResByPtr failed %d",eError));
+		PVR_DPF((PVR_DBG_ERROR, "SGXUnregisterHWTransferContextKM: ResManFreeResByPtr failed %d", eError));
 		PVR_DPF((PVR_DBG_ERROR, "ResManFreeResByPtr: hResItem 0x%x", (unsigned int)psCleanup->psResItem));
 	}
 	return eError;
@@ -1783,7 +1783,7 @@ PVRSRV_ERROR SGXUnregisterHW2DContextKM(IMG_HANDLE hHW2DContext, IMG_BOOL bForce
 	eError = ResManFreeResByPtr(psCleanup->psResItem, bForceCleanup);
 	if(eError != PVRSRV_OK)
 	{
-		PVR_DPF((PVR_DBG_ERROR, "SGXUnregisterHW2DContextKM: ResManFreeResByPtr failed %d",eError));
+		PVR_DPF((PVR_DBG_ERROR, "SGXUnregisterHW2DContextKM: ResManFreeResByPtr failed %d", eError));
 		PVR_DPF((PVR_DBG_ERROR, "ResManFreeResByPtr: hResItem 0x%x", (unsigned int)psCleanup->psResItem));
 	}
 	return eError;

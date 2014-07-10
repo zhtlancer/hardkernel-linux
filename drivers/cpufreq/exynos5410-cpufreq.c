@@ -835,13 +835,11 @@ static void __init set_volt_table_CA7(void)
 		max_support_idx_CA7 = L7;
 	}
 
-	printk("\nCKKIM -> %s(%d)\n\n",__func__,__LINE__);
 	if (get_asv_is_bin2()) {
-//		exynos5410_freq_table_CA7[L1].frequency = CPUFREQ_ENTRY_INVALID;
-//		exynos5410_freq_table_CA7[L2].frequency = CPUFREQ_ENTRY_INVALID;
-//		exynos5410_freq_table_CA7[L3].frequency = CPUFREQ_ENTRY_INVALID;
-//		max_support_idx_CA7 = L4;
-		printk("\nCKKIM -> %s(%d) : Bin2 \n\n",__func__,__LINE__);
+		exynos5410_freq_table_CA7[L1].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA7[L2].frequency = CPUFREQ_ENTRY_INVALID;
+		exynos5410_freq_table_CA7[L3].frequency = CPUFREQ_ENTRY_INVALID;
+		max_support_idx_CA7 = L4;
 	}
 
 	exynos5410_freq_table_CA7[L9].frequency = CPUFREQ_ENTRY_INVALID;

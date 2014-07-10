@@ -5,13 +5,13 @@
  *
  * Samsung SoC SGX power clock control driver
  *
- * This software is proprietary of Samsung Electronics. 
+ * This software is proprietary of Samsung Electronics.
  * No part of this software, either material or conceptual may be copied or distributed, transmitted,
  * transcribed, stored in a retrieval system or translated into any human or computer language in any form by any means,
  * electronic, mechanical, manual or otherwise, or disclosed
  * to third parties without the express written permission of Samsung Electronics.
  *
- * Alternatively, this program is free software in case of Linux Kernel; 
+ * Alternatively, this program is free software in case of Linux Kernel;
  * you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -43,7 +43,7 @@ struct pm_qos_request exynos5_g3d_int_qos;
 static int sec_gpu_top_clock;
 static int gpu_voltage_marin;
 int sec_wakeup_lock_state = 1;
-bool sec_gpu_power_on = false;
+bool sec_gpu_power_on;
 
 module_param(sec_wakeup_lock_state, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 MODULE_PARM_DESC(sec_wakeup_lock_state, "SGX wakeup lock setting");
@@ -99,13 +99,12 @@ void sec_gpu_vol_clk_change(int sgx_clock, int sgx_voltage)
 	sgx_voltage += gpu_voltage_marin;
 #if defined(CONFIG_ARM_EXYNOS5410_BUS_DEVFREQ)
 	if (sec_gpu_power_on) {
-
-	if (sgx_clock >= sec_gpu_top_clock) {
-	#ifdef CONFIG_ARM_EXYNOS_IKS_CPUFREQ
+		if (sgx_clock >= sec_gpu_top_clock) {
+#ifdef CONFIG_ARM_EXYNOS_IKS_CPUFREQ
 			pm_qos_update_request(&exynos5_g3d_cpu_qos, 600000);
-	#else
+#else
 			pm_qos_update_request(&exynos5_g3d_cpu_qos, 800000);
-	#endif
+#endif
 		}
 
 		if (sgx_clock < MIF_THRESHHOLD_VALUE_CLK)
@@ -117,23 +116,22 @@ void sec_gpu_vol_clk_change(int sgx_clock, int sgx_voltage)
 		pm_qos_update_request(&exynos5_g3d_int_qos, 0);
 		pm_qos_update_request(&exynos5_g3d_mif_qos, 0);
 	}
-
 #endif
 	if (sec_gpu_power_on)	{
-		if (cur_sgx_clock > sgx_clock) {
-			gpu_clock_set(sgx_clock);
-			gpu_voltage_set(sgx_voltage);
-		} else if (cur_sgx_clock < sgx_clock) {
-			gpu_voltage_set(sgx_voltage);
-			gpu_clock_set(sgx_clock);
-		}
-		sec_gpu_setting_clock = gpu_clock_get();
-		sec_gpu_setting_voltage = gpu_voltage_get();
+	if (cur_sgx_clock > sgx_clock) {
+		gpu_clock_set(sgx_clock);
+		gpu_voltage_set(sgx_voltage);
+	} else if (cur_sgx_clock < sgx_clock) {
+		gpu_voltage_set(sgx_voltage);
+		gpu_clock_set(sgx_clock);
+	}
+	sec_gpu_setting_clock = gpu_clock_get();
+	sec_gpu_setting_voltage = gpu_voltage_get();
 	}
 	else {
 		sec_gpu_setting_clock = sgx_clock;
 		sec_gpu_setting_voltage = sgx_voltage;
-		PVR_LOG(("SGX keep DVFS info sgx_clock:%d MHz, sgx_voltage:%d mV ", sgx_clock, sgx_voltage));
+//		PVR_LOG(("SGX keep DVFS info sgx_clock:%d MHz, sgx_voltage:%d mV ", sgx_clock, sgx_voltage));
 	}
 
 	mutex_unlock(&lock);
@@ -148,18 +146,18 @@ static int sec_gpu_clock_disable(void)
 static int sec_gpu_clock_enable(void)
 {
 	int err = 0;
-	/*adonis must be set parent function after runtime pm resume*/
+	/* adonis must be set parent function after runtime pm resume */
 	err = gpu_clock_set_parent();
 	if (err) {
 		return err;
 	}
 	/* if setting wakeup lock clock, resume clock using that*/
 	/* if different with current clock and default cleck, need to set clock*/
-	if (gpu_clock_get() != sec_gpu_setting_clock)
-		gpu_clock_set(sec_gpu_setting_clock);
+		if (gpu_clock_get() != sec_gpu_setting_clock)
+			gpu_clock_set(sec_gpu_setting_clock);
 
-	if (gpu_voltage_get() != sec_gpu_setting_voltage)
-		gpu_voltage_set(sec_gpu_setting_voltage);
+		if (gpu_voltage_get() != sec_gpu_setting_voltage)
+			gpu_voltage_set(sec_gpu_setting_voltage);
 
 	if (sec_wakeup_lock_state) {
 		if (gpu_voltage_get() < WAKEUP_LOCK_VOLTAGE + gpu_voltage_marin)
@@ -247,7 +245,7 @@ int sec_gpu_pwr_clk_margin_set(unsigned int margin_offset)
 		/* set or reset voltage margin - margin_offset */
 		if (margin_offset != gpu_voltage_marin) {
 			if (sec_gpu_power_on)
-				gpu_voltage_set(sec_gpu_setting_voltage - gpu_voltage_marin + margin_offset);
+			gpu_voltage_set(sec_gpu_setting_voltage - gpu_voltage_marin + margin_offset);
 			sec_gpu_setting_voltage = sec_gpu_setting_voltage - gpu_voltage_marin + margin_offset;
 			gpu_voltage_marin = margin_offset;
 		}
@@ -256,7 +254,7 @@ int sec_gpu_pwr_clk_margin_set(unsigned int margin_offset)
 		/* this case restore voltage */
 		if (gpu_voltage_marin) {
 			if (sec_gpu_power_on)
-				gpu_voltage_set(sec_gpu_setting_voltage - gpu_voltage_marin);
+			gpu_voltage_set(sec_gpu_setting_voltage - gpu_voltage_marin);
 			sec_gpu_setting_voltage = sec_gpu_setting_voltage - gpu_voltage_marin;
 			gpu_voltage_marin = 0;
 		}

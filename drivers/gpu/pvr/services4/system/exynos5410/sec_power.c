@@ -5,13 +5,13 @@
  *
  * Samsung SoC SGX power driver
  *
- * This software is proprietary of Samsung Electronics. 
+ * This software is proprietary of Samsung Electronics.
  * No part of this software, either material or conceptual may be copied or distributed, transmitted,
  * transcribed, stored in a retrieval system or translated into any human or computer language in any form by any means,
  * electronic, mechanical, manual or otherwise, or disclosed
  * to third parties without the express written permission of Samsung Electronics.
  *
- * Alternatively, this program is free software in case of Linux Kernel; 
+ * Alternatively, this program is free software in case of Linux Kernel;
  * you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
@@ -50,7 +50,7 @@ MODULE_PARM_DESC(sgx_gpu_power_state, "SGX power current status");
 
 void gpu_voltage_set(int sgx_vol)
 {
-	PVR_LOG(("SGX change voltage [%d] -> [%d] mV", sgx_gpu_vol, sgx_vol));
+//	PVR_LOG(("SGX change voltage [%d] -> [%d] mV", sgx_gpu_vol, sgx_vol));
 	regulator_set_voltage(g3d_pd_regulator, sgx_vol, sgx_vol);
 	sgx_gpu_vol = regulator_get_voltage(g3d_pd_regulator);
 }
