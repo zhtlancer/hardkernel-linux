@@ -16,6 +16,8 @@
 # limitations under the License.
 #
 
+ifneq ($(TARGET_PRODUCT),odroidu)
+
 ifneq ($(TARGET_SIMULATOR),true)
 
 LOCAL_PATH:= $(call my-dir)
@@ -40,3 +42,5 @@ LOCAL_MODULE_TAGS := debug tests
 include $(BUILD_EXECUTABLE)
 
 endif  # TARGET_SIMULATOR != true
+
+endif
