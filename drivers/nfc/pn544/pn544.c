@@ -20,6 +20,7 @@
 
 #include <linux/delay.h>
 #include <linux/slab.h>
+#include <linux/module.h>
 
 #include <linux/nfc.h>
 #include <net/nfc/hci.h>
@@ -800,7 +801,7 @@ int pn544_hci_probe(void *phy_id, struct nfc_phy_ops *phy_ops, char *llc_name,
 		    struct nfc_hci_dev **hdev)
 {
 	struct pn544_hci_info *info;
-	u32 protocols;
+	u32 protocols, se;
 	struct nfc_hci_init_data init_data;
 	int r;
 
@@ -833,8 +834,10 @@ int pn544_hci_probe(void *phy_id, struct nfc_phy_ops *phy_ops, char *llc_name,
 		    NFC_PROTO_ISO14443_B_MASK |
 		    NFC_PROTO_NFC_DEP_MASK;
 
+	se = NFC_SE_UICC | NFC_SE_EMBEDDED;
+
 	info->hdev = nfc_hci_allocate_device(&pn544_hci_ops, &init_data, 0,
-					     protocols, llc_name,
+					     protocols, se, llc_name,
 					     phy_headroom + PN544_CMDS_HEADROOM,
 					     phy_tailroom, phy_payload);
 	if (!info->hdev) {
@@ -862,6 +865,7 @@ err_alloc_hdev:
 err_info_alloc:
 	return r;
 }
+EXPORT_SYMBOL(pn544_hci_probe);
 
 void pn544_hci_remove(struct nfc_hci_dev *hdev)
 {
@@ -871,3 +875,7 @@ void pn544_hci_remove(struct nfc_hci_dev *hdev)
 	nfc_hci_free_device(hdev);
 	kfree(info);
 }
+EXPORT_SYMBOL(pn544_hci_remove);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION(DRIVER_DESC);

@@ -979,6 +979,8 @@ static int pppoe_recvmsg(struct kiocb *iocb, struct socket *sock,
 	if (error < 0)
 		goto end;
 
+	m->msg_namelen = 0;
+
 	if (skb) {
 		total_len = min_t(size_t, total_len, skb->len);
 		error = skb_copy_datagram_iovec(skb, 0, m->msg_iov, total_len);
@@ -1132,7 +1134,7 @@ static __net_init int pppoe_init_net(struct net *net)
 
 	rwlock_init(&pn->hash_lock);
 
-	pde = proc_net_fops_create(net, "pppoe", S_IRUGO, &pppoe_seq_fops);
+	pde = proc_create("pppoe", S_IRUGO, net->proc_net, &pppoe_seq_fops);
 #ifdef CONFIG_PROC_FS
 	if (!pde)
 		return -ENOMEM;
@@ -1143,7 +1145,7 @@ static __net_init int pppoe_init_net(struct net *net)
 
 static __net_exit void pppoe_exit_net(struct net *net)
 {
-	proc_net_remove(net, "pppoe");
+	remove_proc_entry("pppoe", net->proc_net);
 }
 
 static struct pernet_operations pppoe_net_ops = {

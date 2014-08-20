@@ -3,7 +3,7 @@
 //
 // 
 //  ODROID IOBOARD Board : IOBOARD SST25WF020 SPI Flash driver (charles.park)
-//  2014.05.17
+//  2013.08.28
 // 
 //
 //[*]--------------------------------------------------------------------------------------------------[*]
@@ -25,10 +25,15 @@
 #include <plat/gpio-cfg.h>
 #include <linux/spi/spi.h>
 
+#if defined(CONFIG_OF)
+    #include <linux/of.h>
+    #include <linux/of_gpio.h>
+#endif
+
 #include "ioboard-spi.h"
 
 //[*]--------------------------------------------------------------------------------------------------[*]
-#define SST25WF020_NAME 	    "spidev"
+#define SST25WF020_NAME 	    "ioboard-spi"
 
 //[*]--------------------------------------------------------------------------------------------------[*]
 #define SPI_MAX_BUFFER_SIZE     32
@@ -120,7 +125,7 @@ static int ioboard_spi_write_enable     (struct spi_device *spi, unsigned char e
 
     if(wait_until_ready(spi, 100))  {
         printk("%s : error!!\n", __func__);     return  -1;
-    }
+    }   
     return  0;
 }
 
@@ -128,7 +133,7 @@ static int ioboard_spi_write_enable     (struct spi_device *spi, unsigned char e
 int ioboard_spi_erase        (struct spi_device *spi, unsigned int addr, unsigned char mode)
 {
     unsigned char   tx[4], tx_size;
-    
+
     switch(mode) {
         case CMD_ERASE_4KB :    case CMD_ERASE_32KB:    case CMD_ERASE_64KB:
             tx[0] = mode;  tx_size = 4;
@@ -174,13 +179,13 @@ static int ioboard_spi_byte_write   (struct spi_device *spi, unsigned int addr, 
     tx[4] = wdata;    
     
     spi_write_then_read(spi, &tx[0], 5, NULL, 0);
-    
+
     if(wait_until_ready(spi, 100))     {
         printk("%s : error!!\n", __func__);     return  -1;
     }
 
     if(ioboard_spi_write_enable(spi, 0) != 0)   return  -1;     // write disable
-    
+
     return  0;
 }
 
@@ -239,11 +244,11 @@ int ioboard_spi_read    (struct spi_device *spi, unsigned int addr, unsigned cha
         ioboard_spi_read_memory_highspeed(spi, addr + offset, &rdata[offset], SPI_MAX_BUFFER_SIZE);
         offset += SPI_MAX_BUFFER_SIZE;      mok = mok - 1;
     }
-
+    
     if(na)  {
         ioboard_spi_read_memory_highspeed(spi, addr + offset, &rdata[offset], na);
     }
-
+    
     return  0;
 }
 
@@ -251,7 +256,7 @@ int ioboard_spi_read    (struct spi_device *spi, unsigned int addr, unsigned cha
 int ioboard_spi_write   (struct spi_device *spi, unsigned int addr, unsigned char *wdata, unsigned int size)
 {
     unsigned int    i;
-        
+
     if(size == 0)   {
         printk("%s : write size is 0. error!!\n", __func__); return -1;
     }
@@ -274,7 +279,7 @@ static int ioboard_spi_id_read      (struct spi_device *spi)
     }
     
     printk("%s : id read ! [0x%02X][0x%02X]\n", __func__, rx[0], rx[1]);
-    
+
     return  0;
 }
 
@@ -293,6 +298,34 @@ static int ioboard_spi_write_status_reg (struct spi_device *spi, unsigned char s
     if(ioboard_spi_write_enable(spi, 0) != 0)   return  -1;     // write disable
         
     return  0;
+}
+
+//[*]--------------------------------------------------------------------------------------------------[*]
+#if defined(CONFIG_OF)
+    int     wp_gpio = -1;
+#else
+    int 	wp_gpio = EXYNOS5410_GPX1(5);			// GPIO Number
+#endif    
+
+static void ioboard_spi_wp_disable   (unsigned char disable)
+{
+#if defined(CONFIG_OF)
+    if(wp_gpio < 0) {
+        printk("%s : write protect gpio not defined!!\n", __func__);
+        return;
+    }
+#endif    
+    // write protection port init
+    if(gpio_request(wp_gpio, "ioboard-spi-wp"))  {
+        printk("%s : %s gpio request error!\n", __func__, "ioboard-spi-wp");
+    }
+    else    {
+        s3c_gpio_setpull(wp_gpio, S3C_GPIO_PULL_NONE);
+
+        // write-protection disable 
+        if(disable) gpio_direction_output(wp_gpio, 1);   // write enable
+        else        gpio_direction_output(wp_gpio, 0);   // write disable
+    }
 }
 
 //[*]--------------------------------------------------------------------------------------------------[*]
@@ -343,7 +376,15 @@ static int ioboard_spi_probe        (struct spi_device *spi)
 {
 	int     ret;
 	struct  ioboard_spi     *ioboard_spi;
+
+#if defined(CONFIG_OF)
+	struct  device_node *np = spi->dev.of_node;
 	
+    wp_gpio = of_get_named_gpio(np, "wp-gpio", 0);
+
+	if (!gpio_is_valid(wp_gpio))    wp_gpio = -1;
+#endif        
+
 	if(!(ioboard_spi = kzalloc(sizeof(struct ioboard_spi), GFP_KERNEL)))	{
 		printk("ioboard-spi struct malloc error!\n");
 		return	-ENOMEM;
@@ -352,7 +393,7 @@ static int ioboard_spi_probe        (struct spi_device *spi)
     ioboard_spi->spi                = spi;
     ioboard_spi->spi->mode          = SPI_MODE_0;
     ioboard_spi->spi->bits_per_word = 8;
-    
+
 	dev_set_drvdata(&spi->dev, ioboard_spi);
 
     if((ret = spi_setup(spi)) < 0) {
@@ -360,20 +401,27 @@ static int ioboard_spi_probe        (struct spi_device *spi)
         goto    err;
     }
     
+    // spi write protection disable
+    ioboard_spi_wp_disable(1);
+
     // read chip id
     if((ret = ioboard_spi_id_read(spi)) < 0)
         goto    err;
 
     // software protection disable
-    if((ret = ioboard_spi_write_status_reg(spi, 0))< 0)
+    if((ret = ioboard_spi_write_status_reg(spi, 0))< 0) 
         goto    err;
     
     if((ret = ioboard_spi_misc_probe(spi)) < 0) {
         printk("%s : misc driver added fail!\n", __func__);
         goto    err;
     }
+
+#if defined(CONFIG_ODROID_EXYNOS5_IOBOARD_DEBUG)    
+    ioboard_spi_test(spi);
+#endif
     
-	ioboard_spi_test(spi);
+    printk("\n=================== %s ===================\n\n", __func__);
 
     return  0;
 
@@ -382,24 +430,32 @@ err:
     kfree(ioboard_spi);
 
     return  ret;
+        
 }
 
 //[*]--------------------------------------------------------------------------------------------------[*]
 static int ioboard_spi_remove   (struct spi_device *spi)
 {
-	struct ioboard_spi  *ioboard_spi = dev_get_drvdata(&spi->dev);
-
-	ioboard_spi_misc_remove(&spi->dev);
-	kfree(ioboard_spi);
 	return 0;
 }
 
 //[*]--------------------------------------------------------------------------------------------------[*]
+#if defined(CONFIG_OF)
+static const struct of_device_id ioboard_spi_dt[] = {
+	{ .compatible = "ioboard-spi" },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, ioboard_spi_dt);
+#endif
+
 static struct spi_driver ioboard_spi_driver = {
 	.driver = {
 		.name	= SST25WF020_NAME,
 		.bus	= &spi_bus_type,
 		.owner	= THIS_MODULE,
+#if defined(CONFIG_OF)
+		.of_match_table = of_match_ptr(ioboard_spi_dt),
+#endif
 	},
 	.probe	= ioboard_spi_probe,
 	.remove	= ioboard_spi_remove,

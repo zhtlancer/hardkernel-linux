@@ -839,16 +839,14 @@ static void atombios_crtc_program_pll(struct drm_crtc *crtc,
 			args.v5.ucMiscInfo = 0; /* HDMI depth, etc. */
 			if (ss_enabled && (ss->type & ATOM_EXTERNAL_SS_MASK))
 				args.v5.ucMiscInfo |= PIXEL_CLOCK_V5_MISC_REF_DIV_SRC;
-			if (encoder_mode == ATOM_ENCODER_MODE_HDMI) {
-				switch (bpc) {
-				case 8:
-				default:
-					args.v5.ucMiscInfo |= PIXEL_CLOCK_V5_MISC_HDMI_24BPP;
-					break;
-				case 10:
-					args.v5.ucMiscInfo |= PIXEL_CLOCK_V5_MISC_HDMI_30BPP;
-					break;
-				}
+			switch (bpc) {
+			case 8:
+			default:
+				args.v5.ucMiscInfo |= PIXEL_CLOCK_V5_MISC_HDMI_24BPP;
+				break;
+			case 10:
+				args.v5.ucMiscInfo |= PIXEL_CLOCK_V5_MISC_HDMI_30BPP;
+				break;
 			}
 			args.v5.ucTransmitterID = encoder_id;
 			args.v5.ucEncoderMode = encoder_mode;
@@ -863,22 +861,20 @@ static void atombios_crtc_program_pll(struct drm_crtc *crtc,
 			args.v6.ucMiscInfo = 0; /* HDMI depth, etc. */
 			if (ss_enabled && (ss->type & ATOM_EXTERNAL_SS_MASK))
 				args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_REF_DIV_SRC;
-			if (encoder_mode == ATOM_ENCODER_MODE_HDMI) {
-				switch (bpc) {
-				case 8:
-				default:
-					args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_HDMI_24BPP;
-					break;
-				case 10:
-					args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_HDMI_30BPP;
-					break;
-				case 12:
-					args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_HDMI_36BPP;
-					break;
-				case 16:
-					args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_HDMI_48BPP;
-					break;
-				}
+			switch (bpc) {
+			case 8:
+			default:
+				args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_HDMI_24BPP;
+				break;
+			case 10:
+				args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_HDMI_30BPP;
+				break;
+			case 12:
+				args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_HDMI_36BPP;
+				break;
+			case 16:
+				args.v6.ucMiscInfo |= PIXEL_CLOCK_V6_MISC_HDMI_48BPP;
+				break;
 			}
 			args.v6.ucTransmitterID = encoder_id;
 			args.v6.ucEncoderMode = encoder_mode;
@@ -942,14 +938,11 @@ static bool atombios_crtc_prepare_pll(struct drm_crtc *crtc, struct drm_display_
 							radeon_atombios_get_ppll_ss_info(rdev,
 											 &radeon_crtc->ss,
 											 ATOM_DP_SS_ID1);
-				} else {
+				} else
 					radeon_crtc->ss_enabled =
 						radeon_atombios_get_ppll_ss_info(rdev,
 										 &radeon_crtc->ss,
 										 ATOM_DP_SS_ID1);
-				}
-				/* disable spread spectrum on DCE3 DP */
-				radeon_crtc->ss_enabled = false;
 			}
 			break;
 		case ATOM_ENCODER_MODE_LVDS:
@@ -1663,20 +1656,6 @@ static int radeon_atom_pick_pll(struct drm_crtc *crtc)
 			return ATOM_PPLL1;
 		DRM_ERROR("unable to allocate a PPLL\n");
 		return ATOM_PPLL_INVALID;
-	} else if (ASIC_IS_DCE41(rdev)) {
-		/* Don't share PLLs on DCE4.1 chips */
-		if (ENCODER_MODE_IS_DP(atombios_get_encoder_mode(radeon_crtc->encoder))) {
-			if (rdev->clock.dp_extclk)
-				/* skip PPLL programming if using ext clock */
-				return ATOM_PPLL_INVALID;
-		}
-		pll_in_use = radeon_get_pll_use_mask(crtc);
-		if (!(pll_in_use & (1 << ATOM_PPLL1)))
-			return ATOM_PPLL1;
-		if (!(pll_in_use & (1 << ATOM_PPLL2)))
-			return ATOM_PPLL2;
-		DRM_ERROR("unable to allocate a PPLL\n");
-		return ATOM_PPLL_INVALID;
 	} else if (ASIC_IS_DCE4(rdev)) {
 		/* in DP mode, the DP ref clock can come from PPLL, DCPLL, or ext clock,
 		 * depending on the asic:
@@ -1832,11 +1811,8 @@ static bool atombios_crtc_mode_fixup(struct drm_crtc *crtc,
 
 static void atombios_crtc_prepare(struct drm_crtc *crtc)
 {
-	struct radeon_crtc *radeon_crtc = to_radeon_crtc(crtc);
 	struct drm_device *dev = crtc->dev;
 	struct radeon_device *rdev = dev->dev_private;
-
-	radeon_crtc->in_mode_set = true;
 
 	/* disable crtc pair power gating before programming */
 	if (ASIC_IS_DCE6(rdev))
@@ -1848,11 +1824,8 @@ static void atombios_crtc_prepare(struct drm_crtc *crtc)
 
 static void atombios_crtc_commit(struct drm_crtc *crtc)
 {
-	struct radeon_crtc *radeon_crtc = to_radeon_crtc(crtc);
-
 	atombios_crtc_dpms(crtc, DRM_MODE_DPMS_ON);
 	atombios_lock_crtc(crtc, ATOM_DISABLE);
-	radeon_crtc->in_mode_set = false;
 }
 
 static void atombios_crtc_disable(struct drm_crtc *crtc)

@@ -78,16 +78,13 @@ static inline int omap_mux_late_init(void)
 #endif
 
 extern void omap2_init_common_infrastructure(void);
-extern int omap_register_mac_device_fixup_paths(const char * const *paths,
-								    int count); 
 
-extern struct sys_timer omap2_timer;
-extern struct sys_timer omap3_timer;
-extern struct sys_timer omap3_secure_timer;
-extern struct sys_timer omap3_gp_timer;
-extern struct sys_timer omap3_am33xx_timer;
-extern struct sys_timer omap4_timer;
-extern struct sys_timer omap5_timer;
+extern void omap2_sync32k_timer_init(void);
+extern void omap3_sync32k_timer_init(void);
+extern void omap3_secure_sync32k_timer_init(void);
+extern void omap3_gptimer_timer_init(void);
+extern void omap4_local_timer_init(void);
+extern void omap5_realtime_timer_init(void);
 
 void omap2420_init_early(void);
 void omap2430_init_early(void);
@@ -110,13 +107,28 @@ void omap35xx_init_late(void);
 void omap3630_init_late(void);
 void am35xx_init_late(void);
 void ti81xx_init_late(void);
-void omap4430_init_late(void);
 int omap2_common_pm_late_init(void);
+
+#ifdef CONFIG_SOC_BUS
+void omap_soc_device_init(void);
+#else
+static inline void omap_soc_device_init(void)
+{
+}
+#endif
 
 #if defined(CONFIG_SOC_OMAP2420) || defined(CONFIG_SOC_OMAP2430)
 void omap2xxx_restart(char mode, const char *cmd);
 #else
 static inline void omap2xxx_restart(char mode, const char *cmd)
+{
+}
+#endif
+
+#ifdef CONFIG_SOC_AM33XX
+void am33xx_restart(char mode, const char *cmd);
+#else
+static inline void am33xx_restart(char mode, const char *cmd)
 {
 }
 #endif
@@ -244,7 +256,6 @@ extern int omap4_enter_lowpower(unsigned int cpu, unsigned int power_state);
 extern int omap4_finish_suspend(unsigned long cpu_state);
 extern void omap4_cpu_resume(void);
 extern int omap4_hotplug_cpu(unsigned int cpu, unsigned int power_state);
-extern u32 omap4_mpuss_read_prev_context_state(void);
 #else
 static inline int omap4_enter_lowpower(unsigned int cpu,
 					unsigned int power_state)
@@ -272,10 +283,6 @@ static inline int omap4_finish_suspend(unsigned long cpu_state)
 static inline void omap4_cpu_resume(void)
 {}
 
-static inline u32 omap4_mpuss_read_prev_context_state(void)
-{
-	return 0;
-}
 #endif
 
 struct omap_sdrc_params;

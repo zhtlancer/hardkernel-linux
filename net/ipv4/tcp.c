@@ -268,12 +268,16 @@
 #include <linux/crypto.h>
 #include <linux/time.h>
 #include <linux/slab.h>
+#include <linux/uid_stat.h>
 
 #include <net/icmp.h>
 #include <net/inet_common.h>
 #include <net/tcp.h>
 #include <net/xfrm.h>
 #include <net/ip.h>
+#include <net/ip6_route.h>
+#include <net/ipv6.h>
+#include <net/transp_v6.h>
 #include <net/netdma.h>
 #include <net/sock.h>
 
@@ -281,8 +285,6 @@
 #include <asm/ioctls.h>
 
 int sysctl_tcp_fin_timeout __read_mostly = TCP_FIN_TIMEOUT;
-
-int sysctl_tcp_min_tso_segs __read_mostly = 2;
 
 struct percpu_counter tcp_orphan_count;
 EXPORT_SYMBOL_GPL(tcp_orphan_count);
@@ -402,6 +404,8 @@ void tcp_init_sock(struct sock *sk)
 	tcp_enable_early_retrans(tp);
 	icsk->icsk_ca_ops = &tcp_init_congestion_ops;
 
+	tp->tsoffset = 0;
+
 	sk->sk_state = TCP_CLOSE;
 
 	sk->sk_write_space = sk_stream_write_space;
@@ -409,15 +413,6 @@ void tcp_init_sock(struct sock *sk)
 
 	icsk->icsk_sync_mss = tcp_sync_mss;
 
-	/* TCP Cookie Transactions */
-	if (sysctl_tcp_cookie_size > 0) {
-		/* Default, cookies without s_data_payload. */
-		tp->cookie_values =
-			kzalloc(sizeof(*tp->cookie_values),
-				sk->sk_allocation);
-		if (tp->cookie_values != NULL)
-			kref_init(&tp->cookie_values->kref);
-	}
 	/* Presumed zeroed, in order of appearance:
 	 *	cookie_in_always, cookie_out_never,
 	 *	s_data_constant, s_data_in, s_data_out
@@ -795,24 +790,14 @@ static unsigned int tcp_xmit_size_goal(struct sock *sk, u32 mss_now,
 	xmit_size_goal = mss_now;
 
 	if (large_allowed && sk_can_gso(sk)) {
-		u32 gso_size, hlen;
+		xmit_size_goal = ((sk->sk_gso_max_size - 1) -
+				  inet_csk(sk)->icsk_af_ops->net_header_len -
+				  inet_csk(sk)->icsk_ext_hdr_len -
+				  tp->tcp_header_len);
 
-		/* Maybe we should/could use sk->sk_prot->max_header here ? */
-		hlen = inet_csk(sk)->icsk_af_ops->net_header_len +
-		       inet_csk(sk)->icsk_ext_hdr_len +
-		       tp->tcp_header_len;
-
-		/* Goal is to send at least one packet per ms,
-		 * not one big TSO packet every 100 ms.
-		 * This preserves ACK clocking and is consistent
-		 * with tcp_tso_should_defer() heuristic.
-		 */
-		gso_size = sk->sk_pacing_rate / (2 * MSEC_PER_SEC);
-		gso_size = max_t(u32, gso_size,
-				 sysctl_tcp_min_tso_segs * mss_now);
-
-		xmit_size_goal = min_t(u32, gso_size,
-				       sk->sk_gso_max_size - 1 - hlen);
+		/* TSQ : try to have two TSO segments in flight */
+		xmit_size_goal = min_t(u32, xmit_size_goal,
+				       sysctl_tcp_limit_output_bytes >> 1);
 
 		xmit_size_goal = tcp_bound_to_half_wnd(tp, xmit_size_goal);
 
@@ -907,6 +892,7 @@ new_segment:
 			get_page(page);
 			skb_fill_page_desc(skb, i, page, offset, copy);
 		}
+		skb_shinfo(skb)->tx_flags |= SKBTX_SHARED_FRAG;
 
 		skb->len += copy;
 		skb->data_len += copy;
@@ -1007,8 +993,7 @@ void tcp_free_fastopen_req(struct tcp_sock *tp)
 	}
 }
 
-static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg,
-				int *copied, size_t size)
+static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg, int *size)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	int err, flags;
@@ -1023,12 +1008,11 @@ static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg,
 	if (unlikely(tp->fastopen_req == NULL))
 		return -ENOBUFS;
 	tp->fastopen_req->data = msg;
-	tp->fastopen_req->size = size;
 
 	flags = (msg->msg_flags & MSG_DONTWAIT) ? O_NONBLOCK : 0;
 	err = __inet_stream_connect(sk->sk_socket, msg->msg_name,
 				    msg->msg_namelen, flags);
-	*copied = tp->fastopen_req->copied;
+	*size = tp->fastopen_req->copied;
 	tcp_free_fastopen_req(tp);
 	return err;
 }
@@ -1048,7 +1032,7 @@ int tcp_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 
 	flags = msg->msg_flags;
 	if (flags & MSG_FASTOPEN) {
-		err = tcp_sendmsg_fastopen(sk, msg, &copied_syn, size);
+		err = tcp_sendmsg_fastopen(sk, msg, &copied_syn);
 		if (err == -EINPROGRESS && copied_syn > 0)
 			goto out;
 		else if (err)
@@ -1136,13 +1120,6 @@ new_segment:
 							  sk->sk_allocation);
 				if (!skb)
 					goto wait_for_memory;
-
-				/*
-				 * All packets are restored as if they have
-				 * already been sent.
-				 */
-				if (tp->repair)
-					TCP_SKB_CB(skb)->when = tcp_time_stamp;
 
 				/*
 				 * Check whether we can use HW checksum.
@@ -1245,6 +1222,9 @@ out:
 	if (copied)
 		tcp_push(sk, flags, mss_now, tp->nonagle);
 	release_sock(sk);
+
+	if (copied + copied_syn)
+		uid_stat_tcp_snd(current_uid(), copied + copied_syn);
 	return copied + copied_syn;
 
 do_fault:
@@ -1427,10 +1407,10 @@ static void tcp_service_net_dma(struct sock *sk, bool wait)
 		return;
 
 	last_issued = tp->ucopy.dma_cookie;
-	dma_async_memcpy_issue_pending(tp->ucopy.dma_chan);
+	dma_async_issue_pending(tp->ucopy.dma_chan);
 
 	do {
-		if (dma_async_memcpy_complete(tp->ucopy.dma_chan,
+		if (dma_async_is_tx_complete(tp->ucopy.dma_chan,
 					      last_issued, &done,
 					      &used) == DMA_SUCCESS) {
 			/* Safe to free early-copied skbs now */
@@ -1549,6 +1529,7 @@ int tcp_read_sock(struct sock *sk, read_descriptor_t *desc,
 	if (copied > 0) {
 		tcp_recv_skb(sk, seq, &offset);
 		tcp_cleanup_rbuf(sk, copied);
+		uid_stat_tcp_rcv(current_uid(), copied);
 	}
 	return copied;
 }
@@ -1772,7 +1753,7 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 				tcp_service_net_dma(sk, true);
 				tcp_cleanup_rbuf(sk, copied);
 			} else
-				dma_async_memcpy_issue_pending(tp->ucopy.dma_chan);
+				dma_async_issue_pending(tp->ucopy.dma_chan);
 		}
 #endif
 		if (copied >= target) {
@@ -1865,7 +1846,7 @@ do_prequeue:
 					break;
 				}
 
-				dma_async_memcpy_issue_pending(tp->ucopy.dma_chan);
+				dma_async_issue_pending(tp->ucopy.dma_chan);
 
 				if ((offset + used) == skb->len)
 					copied_early = true;
@@ -1953,6 +1934,9 @@ skip_copy:
 	tcp_cleanup_rbuf(sk, copied);
 
 	release_sock(sk);
+
+	if (copied > 0)
+		uid_stat_tcp_rcv(current_uid(), copied);
 	return copied;
 
 out:
@@ -1961,6 +1945,8 @@ out:
 
 recv_urg:
 	err = tcp_recv_urg(sk, msg, len, flags);
+	if (err > 0)
+		uid_stat_tcp_rcv(current_uid(), err);
 	goto out;
 
 recv_sndq:
@@ -2308,7 +2294,6 @@ int tcp_disconnect(struct sock *sk, int flags)
 	tp->packets_out = 0;
 	tp->snd_ssthresh = TCP_INFINITE_SSTHRESH;
 	tp->snd_cwnd_cnt = 0;
-	tp->bytes_acked = 0;
 	tp->window_clamp = 0;
 	tcp_set_ca_state(sk, TCP_CA_Open);
 	tcp_clear_retrans(tp);
@@ -2416,92 +2401,6 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 		release_sock(sk);
 		return err;
 	}
-	case TCP_COOKIE_TRANSACTIONS: {
-		struct tcp_cookie_transactions ctd;
-		struct tcp_cookie_values *cvp = NULL;
-
-		if (sizeof(ctd) > optlen)
-			return -EINVAL;
-		if (copy_from_user(&ctd, optval, sizeof(ctd)))
-			return -EFAULT;
-
-		if (ctd.tcpct_used > sizeof(ctd.tcpct_value) ||
-		    ctd.tcpct_s_data_desired > TCP_MSS_DESIRED)
-			return -EINVAL;
-
-		if (ctd.tcpct_cookie_desired == 0) {
-			/* default to global value */
-		} else if ((0x1 & ctd.tcpct_cookie_desired) ||
-			   ctd.tcpct_cookie_desired > TCP_COOKIE_MAX ||
-			   ctd.tcpct_cookie_desired < TCP_COOKIE_MIN) {
-			return -EINVAL;
-		}
-
-		if (TCP_COOKIE_OUT_NEVER & ctd.tcpct_flags) {
-			/* Supercedes all other values */
-			lock_sock(sk);
-			if (tp->cookie_values != NULL) {
-				kref_put(&tp->cookie_values->kref,
-					 tcp_cookie_values_release);
-				tp->cookie_values = NULL;
-			}
-			tp->rx_opt.cookie_in_always = 0; /* false */
-			tp->rx_opt.cookie_out_never = 1; /* true */
-			release_sock(sk);
-			return err;
-		}
-
-		/* Allocate ancillary memory before locking.
-		 */
-		if (ctd.tcpct_used > 0 ||
-		    (tp->cookie_values == NULL &&
-		     (sysctl_tcp_cookie_size > 0 ||
-		      ctd.tcpct_cookie_desired > 0 ||
-		      ctd.tcpct_s_data_desired > 0))) {
-			cvp = kzalloc(sizeof(*cvp) + ctd.tcpct_used,
-				      GFP_KERNEL);
-			if (cvp == NULL)
-				return -ENOMEM;
-
-			kref_init(&cvp->kref);
-		}
-		lock_sock(sk);
-		tp->rx_opt.cookie_in_always =
-			(TCP_COOKIE_IN_ALWAYS & ctd.tcpct_flags);
-		tp->rx_opt.cookie_out_never = 0; /* false */
-
-		if (tp->cookie_values != NULL) {
-			if (cvp != NULL) {
-				/* Changed values are recorded by a changed
-				 * pointer, ensuring the cookie will differ,
-				 * without separately hashing each value later.
-				 */
-				kref_put(&tp->cookie_values->kref,
-					 tcp_cookie_values_release);
-			} else {
-				cvp = tp->cookie_values;
-			}
-		}
-
-		if (cvp != NULL) {
-			cvp->cookie_desired = ctd.tcpct_cookie_desired;
-
-			if (ctd.tcpct_used > 0) {
-				memcpy(cvp->s_data_payload, ctd.tcpct_value,
-				       ctd.tcpct_used);
-				cvp->s_data_desired = ctd.tcpct_used;
-				cvp->s_data_constant = 1; /* true */
-			} else {
-				/* No constant payload data. */
-				cvp->s_data_desired = ctd.tcpct_s_data_desired;
-				cvp->s_data_constant = 0; /* false */
-			}
-
-			tp->cookie_values = cvp;
-		}
-		release_sock(sk);
-		return err;
-	}
 	default:
 		/* fallthru */
 		break;
@@ -2554,11 +2453,10 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 	case TCP_THIN_DUPACK:
 		if (val < 0 || val > 1)
 			err = -EINVAL;
-		else {
+		else
 			tp->thin_dupack = val;
 			if (tp->thin_dupack)
 				tcp_disable_early_retrans(tp);
-		}
 		break;
 
 	case TCP_REPAIR:
@@ -2732,6 +2630,12 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 			err = fastopen_init_queue(sk, val);
 		else
 			err = -EINVAL;
+		break;
+	case TCP_TIMESTAMP:
+		if (!tp->repair)
+			err = -EPERM;
+		else
+			tp->tsoffset = val - tcp_time_stamp;
 		break;
 	default:
 		err = -ENOPROTOOPT;
@@ -2916,41 +2820,6 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 			return -EFAULT;
 		return 0;
 
-	case TCP_COOKIE_TRANSACTIONS: {
-		struct tcp_cookie_transactions ctd;
-		struct tcp_cookie_values *cvp = tp->cookie_values;
-
-		if (get_user(len, optlen))
-			return -EFAULT;
-		if (len < sizeof(ctd))
-			return -EINVAL;
-
-		memset(&ctd, 0, sizeof(ctd));
-		ctd.tcpct_flags = (tp->rx_opt.cookie_in_always ?
-				   TCP_COOKIE_IN_ALWAYS : 0)
-				| (tp->rx_opt.cookie_out_never ?
-				   TCP_COOKIE_OUT_NEVER : 0);
-
-		if (cvp != NULL) {
-			ctd.tcpct_flags |= (cvp->s_data_in ?
-					    TCP_S_DATA_IN : 0)
-					 | (cvp->s_data_out ?
-					    TCP_S_DATA_OUT : 0);
-
-			ctd.tcpct_cookie_desired = cvp->cookie_desired;
-			ctd.tcpct_s_data_desired = cvp->s_data_desired;
-
-			memcpy(&ctd.tcpct_value[0], &cvp->cookie_pair[0],
-			       cvp->cookie_pair_size);
-			ctd.tcpct_used = cvp->cookie_pair_size;
-		}
-
-		if (put_user(sizeof(ctd), optlen))
-			return -EFAULT;
-		if (copy_to_user(optval, &ctd, sizeof(ctd)))
-			return -EFAULT;
-		return 0;
-	}
 	case TCP_THIN_LINEAR_TIMEOUTS:
 		val = tp->thin_lto;
 		break;
@@ -2980,6 +2849,9 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 
 	case TCP_USER_TIMEOUT:
 		val = jiffies_to_msecs(icsk->icsk_user_timeout);
+		break;
+	case TCP_TIMESTAMP:
+		val = tcp_time_stamp + tp->tsoffset;
 		break;
 	default:
 		return -ENOPROTOOPT;
@@ -3026,6 +2898,9 @@ struct sk_buff *tcp_tso_segment(struct sk_buff *skb,
 	__be32 delta;
 	unsigned int oldlen;
 	unsigned int mss;
+	struct sk_buff *gso_skb = skb;
+	__sum16 newcheck;
+	bool ooo_okay, copy_destructor;
 
 	if (!pskb_may_pull(skb, sizeof(*th)))
 		goto out;
@@ -3054,6 +2929,8 @@ struct sk_buff *tcp_tso_segment(struct sk_buff *skb,
 			       SKB_GSO_DODGY |
 			       SKB_GSO_TCP_ECN |
 			       SKB_GSO_TCPV6 |
+			       SKB_GSO_GRE |
+			       SKB_GSO_UDP_TUNNEL |
 			       0) ||
 			     !(type & (SKB_GSO_TCPV4 | SKB_GSO_TCPV6))))
 			goto out;
@@ -3064,9 +2941,17 @@ struct sk_buff *tcp_tso_segment(struct sk_buff *skb,
 		goto out;
 	}
 
+	copy_destructor = gso_skb->destructor == tcp_wfree;
+	ooo_okay = gso_skb->ooo_okay;
+	/* All segments but the first should have ooo_okay cleared */
+	skb->ooo_okay = 0;
+
 	segs = skb_segment(skb, features);
 	if (IS_ERR(segs))
 		goto out;
+
+	/* Only first segment might have ooo_okay set */
+	segs->ooo_okay = ooo_okay;
 
 	delta = htonl(oldlen + (thlen + mss));
 
@@ -3074,23 +2959,47 @@ struct sk_buff *tcp_tso_segment(struct sk_buff *skb,
 	th = tcp_hdr(skb);
 	seq = ntohl(th->seq);
 
+	newcheck = ~csum_fold((__force __wsum)((__force u32)th->check +
+					       (__force u32)delta));
+
 	do {
 		th->fin = th->psh = 0;
+		th->check = newcheck;
 
-		th->check = ~csum_fold((__force __wsum)((__force u32)th->check +
-				       (__force u32)delta));
 		if (skb->ip_summed != CHECKSUM_PARTIAL)
 			th->check =
 			     csum_fold(csum_partial(skb_transport_header(skb),
 						    thlen, skb->csum));
 
 		seq += mss;
+		if (copy_destructor) {
+			skb->destructor = gso_skb->destructor;
+			skb->sk = gso_skb->sk;
+			/* {tcp|sock}_wfree() use exact truesize accounting :
+			 * sum(skb->truesize) MUST be exactly be gso_skb->truesize
+			 * So we account mss bytes of 'true size' for each segment.
+			 * The last segment will contain the remaining.
+			 */
+			skb->truesize = mss;
+			gso_skb->truesize -= mss;
+		}
 		skb = skb->next;
 		th = tcp_hdr(skb);
 
 		th->seq = htonl(seq);
 		th->cwr = 0;
 	} while (skb->next);
+
+	/* Following permits TCP Small Queues to work well with GSO :
+	 * The callback to TCP stack will be called at the time last frag
+	 * is freed at TX completion, and not right now when gso_skb
+	 * is freed by GSO engine
+	 */
+	if (copy_destructor) {
+		swap(gso_skb->sk, skb->sk);
+		swap(gso_skb->destructor, skb->destructor);
+		swap(gso_skb->truesize, skb->truesize);
+	}
 
 	delta = htonl(oldlen + (skb->tail - skb->transport_header) +
 		      skb->data_len);
@@ -3265,7 +3174,7 @@ __tcp_alloc_md5sig_pool(struct sock *sk)
 		struct crypto_hash *hash;
 
 		hash = crypto_alloc_hash("md5", 0, CRYPTO_ALG_ASYNC);
-		if (!hash || IS_ERR(hash))
+		if (IS_ERR_OR_NULL(hash))
 			goto out_free;
 
 		per_cpu_ptr(pool, cpu)->md5_desc.tfm = hash;
@@ -3421,134 +3330,6 @@ EXPORT_SYMBOL(tcp_md5_hash_key);
 
 #endif
 
-/* Each Responder maintains up to two secret values concurrently for
- * efficient secret rollover.  Each secret value has 4 states:
- *
- * Generating.  (tcp_secret_generating != tcp_secret_primary)
- *    Generates new Responder-Cookies, but not yet used for primary
- *    verification.  This is a short-term state, typically lasting only
- *    one round trip time (RTT).
- *
- * Primary.  (tcp_secret_generating == tcp_secret_primary)
- *    Used both for generation and primary verification.
- *
- * Retiring.  (tcp_secret_retiring != tcp_secret_secondary)
- *    Used for verification, until the first failure that can be
- *    verified by the newer Generating secret.  At that time, this
- *    cookie's state is changed to Secondary, and the Generating
- *    cookie's state is changed to Primary.  This is a short-term state,
- *    typically lasting only one round trip time (RTT).
- *
- * Secondary.  (tcp_secret_retiring == tcp_secret_secondary)
- *    Used for secondary verification, after primary verification
- *    failures.  This state lasts no more than twice the Maximum Segment
- *    Lifetime (2MSL).  Then, the secret is discarded.
- */
-struct tcp_cookie_secret {
-	/* The secret is divided into two parts.  The digest part is the
-	 * equivalent of previously hashing a secret and saving the state,
-	 * and serves as an initialization vector (IV).  The message part
-	 * serves as the trailing secret.
-	 */
-	u32				secrets[COOKIE_WORKSPACE_WORDS];
-	unsigned long			expires;
-};
-
-#define TCP_SECRET_1MSL (HZ * TCP_PAWS_MSL)
-#define TCP_SECRET_2MSL (HZ * TCP_PAWS_MSL * 2)
-#define TCP_SECRET_LIFE (HZ * 600)
-
-static struct tcp_cookie_secret tcp_secret_one;
-static struct tcp_cookie_secret tcp_secret_two;
-
-/* Essentially a circular list, without dynamic allocation. */
-static struct tcp_cookie_secret *tcp_secret_generating;
-static struct tcp_cookie_secret *tcp_secret_primary;
-static struct tcp_cookie_secret *tcp_secret_retiring;
-static struct tcp_cookie_secret *tcp_secret_secondary;
-
-static DEFINE_SPINLOCK(tcp_secret_locker);
-
-/* Select a pseudo-random word in the cookie workspace.
- */
-static inline u32 tcp_cookie_work(const u32 *ws, const int n)
-{
-	return ws[COOKIE_DIGEST_WORDS + ((COOKIE_MESSAGE_WORDS-1) & ws[n])];
-}
-
-/* Fill bakery[COOKIE_WORKSPACE_WORDS] with generator, updating as needed.
- * Called in softirq context.
- * Returns: 0 for success.
- */
-int tcp_cookie_generator(u32 *bakery)
-{
-	unsigned long jiffy = jiffies;
-
-	if (unlikely(time_after_eq(jiffy, tcp_secret_generating->expires))) {
-		spin_lock_bh(&tcp_secret_locker);
-		if (!time_after_eq(jiffy, tcp_secret_generating->expires)) {
-			/* refreshed by another */
-			memcpy(bakery,
-			       &tcp_secret_generating->secrets[0],
-			       COOKIE_WORKSPACE_WORDS);
-		} else {
-			/* still needs refreshing */
-			get_random_bytes(bakery, COOKIE_WORKSPACE_WORDS);
-
-			/* The first time, paranoia assumes that the
-			 * randomization function isn't as strong.  But,
-			 * this secret initialization is delayed until
-			 * the last possible moment (packet arrival).
-			 * Although that time is observable, it is
-			 * unpredictably variable.  Mash in the most
-			 * volatile clock bits available, and expire the
-			 * secret extra quickly.
-			 */
-			if (unlikely(tcp_secret_primary->expires ==
-				     tcp_secret_secondary->expires)) {
-				struct timespec tv;
-
-				getnstimeofday(&tv);
-				bakery[COOKIE_DIGEST_WORDS+0] ^=
-					(u32)tv.tv_nsec;
-
-				tcp_secret_secondary->expires = jiffy
-					+ TCP_SECRET_1MSL
-					+ (0x0f & tcp_cookie_work(bakery, 0));
-			} else {
-				tcp_secret_secondary->expires = jiffy
-					+ TCP_SECRET_LIFE
-					+ (0xff & tcp_cookie_work(bakery, 1));
-				tcp_secret_primary->expires = jiffy
-					+ TCP_SECRET_2MSL
-					+ (0x1f & tcp_cookie_work(bakery, 2));
-			}
-			memcpy(&tcp_secret_secondary->secrets[0],
-			       bakery, COOKIE_WORKSPACE_WORDS);
-
-			rcu_assign_pointer(tcp_secret_generating,
-					   tcp_secret_secondary);
-			rcu_assign_pointer(tcp_secret_retiring,
-					   tcp_secret_primary);
-			/*
-			 * Neither call_rcu() nor synchronize_rcu() needed.
-			 * Retiring data is not freed.  It is replaced after
-			 * further (locked) pointer updates, and a quiet time
-			 * (minimum 1MSL, maximum LIFE - 2MSL).
-			 */
-		}
-		spin_unlock_bh(&tcp_secret_locker);
-	} else {
-		rcu_read_lock_bh();
-		memcpy(bakery,
-		       &rcu_dereference(tcp_secret_generating)->secrets[0],
-		       COOKIE_WORKSPACE_WORDS);
-		rcu_read_unlock_bh();
-	}
-	return 0;
-}
-EXPORT_SYMBOL(tcp_cookie_generator);
-
 void tcp_done(struct sock *sk)
 {
 	struct request_sock *req = tcp_sk(sk)->fastopen_rsk;
@@ -3603,7 +3384,6 @@ void __init tcp_init(void)
 	unsigned long limit;
 	int max_rshare, max_wshare, cnt;
 	unsigned int i;
-	unsigned long jiffy = jiffies;
 
 	BUILD_BUG_ON(sizeof(struct tcp_skb_cb) > sizeof(skb->cb));
 
@@ -3679,13 +3459,109 @@ void __init tcp_init(void)
 
 	tcp_register_congestion_control(&tcp_reno);
 
-	memset(&tcp_secret_one.secrets[0], 0, sizeof(tcp_secret_one.secrets));
-	memset(&tcp_secret_two.secrets[0], 0, sizeof(tcp_secret_two.secrets));
-	tcp_secret_one.expires = jiffy; /* past due */
-	tcp_secret_two.expires = jiffy; /* past due */
-	tcp_secret_generating = &tcp_secret_one;
-	tcp_secret_primary = &tcp_secret_one;
-	tcp_secret_retiring = &tcp_secret_two;
-	tcp_secret_secondary = &tcp_secret_two;
 	tcp_tasklet_init();
+}
+
+static int tcp_is_local(struct net *net, __be32 addr) {
+	struct rtable *rt;
+	struct flowi4 fl4 = { .daddr = addr };
+	rt = ip_route_output_key(net, &fl4);
+	if (IS_ERR_OR_NULL(rt))
+		return 0;
+	return rt->dst.dev && (rt->dst.dev->flags & IFF_LOOPBACK);
+}
+
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+static int tcp_is_local6(struct net *net, struct in6_addr *addr) {
+	struct rt6_info *rt6 = rt6_lookup(net, addr, addr, 0, 0);
+	return rt6 && rt6->dst.dev && (rt6->dst.dev->flags & IFF_LOOPBACK);
+}
+#endif
+
+/*
+ * tcp_nuke_addr - destroy all sockets on the given local address
+ * if local address is the unspecified address (0.0.0.0 or ::), destroy all
+ * sockets with local addresses that are not configured.
+ */
+int tcp_nuke_addr(struct net *net, struct sockaddr *addr)
+{
+	int family = addr->sa_family;
+	unsigned int bucket;
+
+	struct in_addr *in;
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+	struct in6_addr *in6 = NULL;
+#endif
+	if (family == AF_INET) {
+		in = &((struct sockaddr_in *)addr)->sin_addr;
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+	} else if (family == AF_INET6) {
+		in6 = &((struct sockaddr_in6 *)addr)->sin6_addr;
+#endif
+	} else {
+		return -EAFNOSUPPORT;
+	}
+
+	for (bucket = 0; bucket < tcp_hashinfo.ehash_mask; bucket++) {
+		struct hlist_nulls_node *node;
+		struct sock *sk;
+		spinlock_t *lock = inet_ehash_lockp(&tcp_hashinfo, bucket);
+
+restart:
+		spin_lock_bh(lock);
+		sk_nulls_for_each(sk, node, &tcp_hashinfo.ehash[bucket].chain) {
+			struct inet_sock *inet = inet_sk(sk);
+
+			if (sysctl_ip_dynaddr && sk->sk_state == TCP_SYN_SENT)
+				continue;
+			if (sock_flag(sk, SOCK_DEAD))
+				continue;
+
+			if (family == AF_INET) {
+				__be32 s4 = inet->inet_rcv_saddr;
+				if (s4 == LOOPBACK4_IPV6)
+					continue;
+
+				if (in->s_addr != s4 &&
+				    !(in->s_addr == INADDR_ANY &&
+				      !tcp_is_local(net, s4)))
+					continue;
+			}
+
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+			if (family == AF_INET6) {
+				struct in6_addr *s6;
+				if (!inet->pinet6)
+					continue;
+
+				s6 = &inet->pinet6->rcv_saddr;
+				if (ipv6_addr_type(s6) == IPV6_ADDR_MAPPED)
+					continue;
+
+				if (!ipv6_addr_equal(in6, s6) &&
+				    !(ipv6_addr_equal(in6, &in6addr_any) &&
+				      !tcp_is_local6(net, s6)))
+				continue;
+			}
+#endif
+
+			sock_hold(sk);
+			spin_unlock_bh(lock);
+
+			local_bh_disable();
+			bh_lock_sock(sk);
+			sk->sk_err = ETIMEDOUT;
+			sk->sk_error_report(sk);
+
+			tcp_done(sk);
+			bh_unlock_sock(sk);
+			local_bh_enable();
+			sock_put(sk);
+
+			goto restart;
+		}
+		spin_unlock_bh(lock);
+	}
+
+	return 0;
 }

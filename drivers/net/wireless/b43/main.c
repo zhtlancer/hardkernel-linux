@@ -1189,10 +1189,15 @@ static void b43_bcma_phy_reset(struct b43_wldev *dev)
 
 static void b43_bcma_wireless_core_reset(struct b43_wldev *dev, bool gmode)
 {
+	u32 req = B43_BCMA_CLKCTLST_80211_PLL_REQ |
+		  B43_BCMA_CLKCTLST_PHY_PLL_REQ;
+	u32 status = B43_BCMA_CLKCTLST_80211_PLL_ST |
+		     B43_BCMA_CLKCTLST_PHY_PLL_ST;
+
 	b43_device_enable(dev, B43_BCMA_IOCTL_PHY_CLKEN);
 	bcma_core_set_clockmode(dev->dev->bdev, BCMA_CLKMODE_FAST);
 	b43_bcma_phy_reset(dev);
-	bcma_core_pll_ctl(dev->dev->bdev, 0x300, 0x3000000, true);
+	bcma_core_pll_ctl(dev->dev->bdev, req, status, true);
 }
 #endif
 
@@ -1305,17 +1310,19 @@ static u32 b43_jssi_read(struct b43_wldev *dev)
 {
 	u32 val = 0;
 
-	val = b43_shm_read16(dev, B43_SHM_SHARED, 0x08A);
+	val = b43_shm_read16(dev, B43_SHM_SHARED, B43_SHM_SH_JSSI1);
 	val <<= 16;
-	val |= b43_shm_read16(dev, B43_SHM_SHARED, 0x088);
+	val |= b43_shm_read16(dev, B43_SHM_SHARED, B43_SHM_SH_JSSI0);
 
 	return val;
 }
 
 static void b43_jssi_write(struct b43_wldev *dev, u32 jssi)
 {
-	b43_shm_write16(dev, B43_SHM_SHARED, 0x088, (jssi & 0x0000FFFF));
-	b43_shm_write16(dev, B43_SHM_SHARED, 0x08A, (jssi & 0xFFFF0000) >> 16);
+	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_JSSI0,
+			(jssi & 0x0000FFFF));
+	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_JSSI1,
+			(jssi & 0xFFFF0000) >> 16);
 }
 
 static void b43_generate_noise_sample(struct b43_wldev *dev)
@@ -1618,7 +1625,7 @@ static void b43_upload_beacon0(struct b43_wldev *dev)
 
 	if (wl->beacon0_uploaded)
 		return;
-	b43_write_beacon_template(dev, 0x68, 0x18);
+	b43_write_beacon_template(dev, B43_SHM_SH_BT_BASE0, B43_SHM_SH_BTL0);
 	wl->beacon0_uploaded = true;
 }
 
@@ -1628,7 +1635,7 @@ static void b43_upload_beacon1(struct b43_wldev *dev)
 
 	if (wl->beacon1_uploaded)
 		return;
-	b43_write_beacon_template(dev, 0x468, 0x1A);
+	b43_write_beacon_template(dev, B43_SHM_SH_BT_BASE1, B43_SHM_SH_BTL1);
 	wl->beacon1_uploaded = true;
 }
 
@@ -2061,7 +2068,6 @@ void b43_do_release_fw(struct b43_firmware_file *fw)
 
 static void b43_release_firmware(struct b43_wldev *dev)
 {
-	complete(&dev->fw_load_complete);
 	b43_do_release_fw(&dev->fw.ucode);
 	b43_do_release_fw(&dev->fw.pcm);
 	b43_do_release_fw(&dev->fw.initvals);
@@ -2087,7 +2093,7 @@ static void b43_fw_cb(const struct firmware *firmware, void *context)
 	struct b43_request_fw_context *ctx = context;
 
 	ctx->blob = firmware;
-	complete(&ctx->dev->fw_load_complete);
+	complete(&ctx->fw_load_complete);
 }
 
 int b43_do_request_fw(struct b43_request_fw_context *ctx,
@@ -2134,7 +2140,7 @@ int b43_do_request_fw(struct b43_request_fw_context *ctx,
 	}
 	if (async) {
 		/* do this part asynchronously */
-		init_completion(&ctx->dev->fw_load_complete);
+		init_completion(&ctx->fw_load_complete);
 		err = request_firmware_nowait(THIS_MODULE, 1, ctx->fwname,
 					      ctx->dev->dev->dev, GFP_KERNEL,
 					      ctx, b43_fw_cb);
@@ -2142,11 +2148,12 @@ int b43_do_request_fw(struct b43_request_fw_context *ctx,
 			pr_err("Unable to load firmware\n");
 			return err;
 		}
-		wait_for_completion(&ctx->dev->fw_load_complete);
+		/* stall here until fw ready */
+		wait_for_completion(&ctx->fw_load_complete);
 		if (ctx->blob)
 			goto fw_ready;
 	/* On some ARM systems, the async request will fail, but the next sync
-	 * request works. For this reason, we fall through here
+	 * request works. For this reason, we dall through here
 	 */
 	}
 	err = request_firmware(&ctx->blob, ctx->fwname,
@@ -2415,7 +2422,6 @@ error:
 
 static int b43_one_core_attach(struct b43_bus_dev *dev, struct b43_wl *wl);
 static void b43_one_core_detach(struct b43_bus_dev *dev);
-static int b43_rng_init(struct b43_wl *wl);
 
 static void b43_request_firmware(struct work_struct *work)
 {
@@ -2467,10 +2473,6 @@ start_ieee80211:
 		goto err_one_core_detach;
 	wl->hw_registred = true;
 	b43_leds_register(wl->current_dev);
-
-	/* Register HW RNG driver */
-	b43_rng_init(wl);
-
 	goto out;
 
 err_one_core_detach:
@@ -2773,9 +2775,7 @@ static int b43_gpio_init(struct b43_wldev *dev)
 	switch (dev->dev->bus_type) {
 #ifdef CONFIG_B43_BCMA
 	case B43_BUS_BCMA:
-		bcma_cc_write32(&dev->dev->bdev->bus->drv_cc, BCMA_CC_GPIOCTL,
-				(bcma_cc_read32(&dev->dev->bdev->bus->drv_cc,
-					BCMA_CC_GPIOCTL) & ~mask) | set);
+		bcma_chipco_gpio_control(&dev->dev->bdev->bus->drv_cc, mask, set);
 		break;
 #endif
 #ifdef CONFIG_B43_SSB
@@ -2800,8 +2800,7 @@ static void b43_gpio_cleanup(struct b43_wldev *dev)
 	switch (dev->dev->bus_type) {
 #ifdef CONFIG_B43_BCMA
 	case B43_BUS_BCMA:
-		bcma_cc_write32(&dev->dev->bdev->bus->drv_cc, BCMA_CC_GPIOCTL,
-				0);
+		bcma_chipco_gpio_control(&dev->dev->bdev->bus->drv_cc, ~0, 0);
 		break;
 #endif
 #ifdef CONFIG_B43_SSB
@@ -3109,7 +3108,7 @@ static int b43_chip_init(struct b43_wldev *dev)
 
 	/* Probe Response Timeout value */
 	/* FIXME: Default to 0, has to be set by ioctl probably... :-/ */
-	b43_shm_write16(dev, B43_SHM_SHARED, 0x0074, 0x0000);
+	b43_shm_write16(dev, B43_SHM_SHARED, B43_SHM_SH_PRMAXTIME, 0);
 
 	/* Initially set the wireless operation mode. */
 	b43_adjust_opmode(dev);
@@ -3846,7 +3845,7 @@ static int b43_op_config(struct ieee80211_hw *hw, u32 changed)
 	dev = wl->current_dev;
 
 	/* Switch the band (if necessary). This might change the active core. */
-	err = b43_switch_band(wl, conf->channel);
+	err = b43_switch_band(wl, conf->chandef.chan);
 	if (err)
 		goto out_unlock_mutex;
 
@@ -3876,8 +3875,8 @@ static int b43_op_config(struct ieee80211_hw *hw, u32 changed)
 
 	/* Switch to the requested channel.
 	 * The firmware takes care of races with the TX handler. */
-	if (conf->channel->hw_value != phy->channel)
-		b43_switch_channel(dev, conf->channel->hw_value);
+	if (conf->chandef.chan->hw_value != phy->channel)
+		b43_switch_channel(dev, conf->chandef.chan->hw_value);
 
 	dev->wl->radiotap_enabled = !!(conf->flags & IEEE80211_CONF_MONITOR);
 
@@ -4635,6 +4634,9 @@ static void b43_wireless_core_exit(struct b43_wldev *dev)
 	if (!dev || b43_status(dev) != B43_STAT_INITIALIZED)
 		return;
 
+	/* Unregister HW RNG driver */
+	b43_rng_exit(dev->wl);
+
 	b43_set_status(dev, B43_STAT_UNINIT);
 
 	/* Stop the microcode PSM. */
@@ -4776,6 +4778,9 @@ static int b43_wireless_core_init(struct b43_wldev *dev)
 	ieee80211_wake_queues(dev->wl->hw);
 
 	b43_set_status(dev, B43_STAT_INITIALIZED);
+
+	/* Register HW RNG driver */
+	b43_rng_init(dev->wl);
 
 out:
 	return err;
@@ -4994,7 +4999,7 @@ static int b43_op_get_survey(struct ieee80211_hw *hw, int idx,
 	if (idx != 0)
 		return -ENOENT;
 
-	survey->channel = conf->channel;
+	survey->channel = conf->chandef.chan;
 	survey->filled = SURVEY_INFO_NOISE_DBM;
 	survey->noise = dev->stats.link_noise;
 
@@ -5437,9 +5442,6 @@ static void b43_bcma_remove(struct bcma_device *core)
 
 	b43_one_core_detach(wldev->dev);
 
-	/* Unregister HW RNG driver */
-	b43_rng_exit(wl);
-
 	b43_leds_unregister(wl);
 
 	ieee80211_free_hw(wl->hw);
@@ -5516,9 +5518,6 @@ static void b43_ssb_remove(struct ssb_device *sdev)
 	}
 
 	b43_one_core_detach(dev);
-
-	/* Unregister HW RNG driver */
-	b43_rng_exit(wl);
 
 	if (list_empty(&wl->devlist)) {
 		b43_leds_unregister(wl);

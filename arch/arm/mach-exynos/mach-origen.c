@@ -26,10 +26,9 @@
 #include <linux/platform_data/i2c-s3c2410.h>
 #include <linux/platform_data/s3c-hsotg.h>
 #include <linux/platform_data/usb-ehci-s5p.h>
-#include <linux/platform_data/usb-exynos.h>
+#include <linux/platform_data/usb-ohci-exynos.h>
 
 #include <asm/mach/arch.h>
-#include <asm/hardware/gic.h>
 #include <asm/mach-types.h>
 
 #include <video/platform_lcd.h>
@@ -47,6 +46,7 @@
 #include <plat/hdmi.h>
 
 #include <mach/map.h>
+#include <mach/irqs.h>
 
 #include <drm/exynos_drm.h>
 #include "common.h"
@@ -705,7 +705,6 @@ static struct platform_device *origen_devices[] __initdata = {
 	&s5p_device_fimd0,
 	&s5p_device_g2d,
 	&s5p_device_hdmi,
-	&s5p_device_cec,
 	&s5p_device_i2c_hdmiphy,
 	&s5p_device_jpeg,
 	&s5p_device_mfc,
@@ -756,8 +755,9 @@ static void s5p_tv_setup(void)
 static void __init origen_map_io(void)
 {
 	exynos_init_io(NULL, 0);
-	s3c24xx_init_clocks(clk_xusbxti.rate);
 	s3c24xx_init_uarts(origen_uartcfgs, ARRAY_SIZE(origen_uartcfgs));
+	xxti_f = 0;
+	xusbxti_f = 24000000;
 }
 
 static void __init origen_power_init(void)
@@ -815,10 +815,9 @@ MACHINE_START(ORIGEN, "ORIGEN")
 	.smp		= smp_ops(exynos_smp_ops),
 	.init_irq	= exynos4_init_irq,
 	.map_io		= origen_map_io,
-	.handle_irq	= gic_handle_irq,
 	.init_machine	= origen_machine_init,
 	.init_late	= exynos_init_late,
-	.timer		= &exynos4_timer,
+	.init_time	= exynos_init_time,
 	.reserve	= &origen_reserve,
 	.restart	= exynos4_restart,
 MACHINE_END

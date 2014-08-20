@@ -242,7 +242,7 @@ static const char *next_name(int xtype, const char *name)
  *
  * Returns: refcounted profile, or NULL on failure (MAYBE NULL)
  */
-struct aa_profile *x_table_lookup(struct aa_profile *profile, u32 xindex)
+static struct aa_profile *x_table_lookup(struct aa_profile *profile, u32 xindex)
 {
 	struct aa_profile *new_profile = NULL;
 	struct aa_namespace *ns = profile->ns;
@@ -349,8 +349,8 @@ int apparmor_bprm_set_creds(struct linux_binprm *bprm)
 	unsigned int state;
 	struct file_perms perms = {};
 	struct path_cond cond = {
-		bprm->file->f_path.dentry->d_inode->i_uid,
-		bprm->file->f_path.dentry->d_inode->i_mode
+		file_inode(bprm->file)->i_uid,
+		file_inode(bprm->file)->i_mode
 	};
 	const char *name = NULL, *target = NULL, *info = NULL;
 	int error = cap_bprm_set_creds(bprm);
@@ -359,10 +359,6 @@ int apparmor_bprm_set_creds(struct linux_binprm *bprm)
 
 	if (bprm->cred_prepared)
 		return 0;
-
-	/* XXX: no_new_privs is not usable with AppArmor yet */
-	if (bprm->unsafe & LSM_UNSAFE_NO_NEW_PRIVS)
-		return -EPERM;
 
 	cxt = bprm->cred->security;
 	BUG_ON(!cxt);

@@ -83,11 +83,8 @@ extern struct platform_device s5p_device_fimc3;
 extern struct platform_device s5p_device_fimc_md;
 extern struct platform_device s5p_device_jpeg;
 extern struct platform_device s5p_device_g2d;
-extern struct platform_device mali_gpu_device;
-
 extern struct platform_device s5p_device_fimd0;
 extern struct platform_device s5p_device_hdmi;
-extern struct platform_device s5p_device_cec;
 extern struct platform_device s5p_device_i2c_hdmiphy;
 extern struct platform_device s5p_device_mfc;
 extern struct platform_device s5p_device_mfc_l;
@@ -126,7 +123,6 @@ extern struct platform_device s5pv210_device_spdif;
 
 extern struct platform_device exynos4_device_ac97;
 extern struct platform_device exynos4_device_ahci;
-extern struct platform_device exynos_device_dwmci;
 extern struct platform_device exynos4_device_i2s0;
 extern struct platform_device exynos4_device_i2s1;
 extern struct platform_device exynos4_device_i2s2;
@@ -138,10 +134,6 @@ extern struct platform_device exynos4_device_spdif;
 
 extern struct platform_device samsung_asoc_idma;
 extern struct platform_device samsung_device_keypad;
-
-#ifdef CONFIG_USB_EXYNOS_SWITCH
-extern struct platform_device s5p_device_usbswitch;
-#endif
 
 /* s3c2440 specific devices */
 

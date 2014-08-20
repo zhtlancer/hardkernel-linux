@@ -65,15 +65,9 @@ config VIDEOBUF2_CORE
 config VIDEOBUF2_MEMOPS
 	tristate
 
-config VIDEOBUF2_FB
-	tristate
-	depends on VIDEOBUF2_CORE
-	select FB_CFB_FILLRECT
-	select FB_CFB_COPYAREA
-	select FB_CFB_IMAGEBLIT
-
 config VIDEOBUF2_DMA_CONTIG
 	tristate
+	depends on HAS_DMA
 	select VIDEOBUF2_CORE
 	select VIDEOBUF2_MEMOPS
 	select DMA_SHARED_BUFFER
@@ -89,3 +83,22 @@ config VIDEOBUF2_DMA_SG
 	#depends on HAS_DMA
 	select VIDEOBUF2_CORE
 	select VIDEOBUF2_MEMOPS
+
+config  VIDEOBUF2_ION
+	bool "Video buffer 2 by Android ION"
+	depends on ION_EXYNOS
+	select VIDEOBUF2_CORE
+	select VIDEOBUF2_MEMOPS
+	help
+	  Internal memory management for Video Buffer 2 by ION
+
+config VIDEO_V4L2_INT_DEVICE
+	tristate "V4L2 int device (DEPRECATED)"
+	depends on VIDEO_V4L2
+	---help---
+	  An early framework for a hardware-independent interface for
+	  image sensors and bridges etc. Currently used by omap24xxcam and
+	  tcm825x drivers that should be converted to V4L2 subdev.
+
+	  Do not use for new developments.
+

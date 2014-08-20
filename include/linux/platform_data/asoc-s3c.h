@@ -30,20 +30,18 @@ struct samsung_i2s {
 #define QUIRK_PRI_6CHAN		(1 << 0)
 /* If the I2S block has a Stereo Overlay Channel */
 #define QUIRK_SEC_DAI		(1 << 1)
+/* If the I2S block has a Stereo internal DMA */
+#define QUIRK_IDMA		(1 << 2)
 /*
  * If the I2S block has no internal prescalar or MUX (I2SMOD[10] bit)
  * The Machine driver must provide suitably set clock to the I2S block.
  */
-#define QUIRK_NO_MUXPSR		(1 << 2)
-#define QUIRK_NEED_RSTCLR	(1 << 3)
+#define QUIRK_NO_MUXPSR		(1 << 3)
+#define QUIRK_NEED_RSTCLR	(1 << 4)
+#define QUIRK_SUPPORTS_TDM	(1 << 5)
+#define QUIRK_SUPPORTS_LOW_RFS	(1 << 6)
 	/* Quirks of the I2S controller */
 	u32 quirks;
-
-	/*
-	 * Array of clock names that can be used to generate I2S signals.
-	 * Also corresponds to clocks of I2SMOD[10]
-	 */
-	const char **src_clk;
 	dma_addr_t idma_addr;
 };
 

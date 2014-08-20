@@ -29,6 +29,8 @@
 #include "xenbus_probe.h"
 
 
+static struct workqueue_struct *xenbus_frontend_wq;
+
 /* device/<type>/<id> => <type>-<id> */
 static int frontend_bus_id(char bus_id[XEN_BUS_ID_SIZE], const char *nodename)
 {
@@ -89,9 +91,40 @@ static void backend_changed(struct xenbus_watch *watch,
 	xenbus_otherend_changed(watch, vec, len, 1);
 }
 
+static void xenbus_frontend_delayed_resume(struct work_struct *w)
+{
+	struct xenbus_device *xdev = container_of(w, struct xenbus_device, work);
+
+	xenbus_dev_resume(&xdev->dev);
+}
+
+static int xenbus_frontend_dev_resume(struct device *dev)
+{
+	/*
+	 * If xenstored is running in this domain, we cannot access the backend
+	 * state at the moment, so we need to defer xenbus_dev_resume
+	 */
+	if (xen_store_domain_type == XS_LOCAL) {
+		struct xenbus_device *xdev = to_xenbus_device(dev);
+
+		if (!xenbus_frontend_wq) {
+			pr_err("%s: no workqueue to process delayed resume\n",
+			       xdev->nodename);
+			return -EFAULT;
+		}
+
+		INIT_WORK(&xdev->work, xenbus_frontend_delayed_resume);
+		queue_work(xenbus_frontend_wq, &xdev->work);
+
+		return 0;
+	}
+
+	return xenbus_dev_resume(dev);
+}
+
 static const struct dev_pm_ops xenbus_pm_ops = {
 	.suspend	= xenbus_dev_suspend,
-	.resume		= xenbus_dev_resume,
+	.resume		= xenbus_frontend_dev_resume,
 	.freeze		= xenbus_dev_suspend,
 	.thaw		= xenbus_dev_cancel,
 	.restore	= xenbus_dev_resume,
@@ -440,6 +473,8 @@ static int __init xenbus_probe_frontend_init(void)
 
 	register_xenstore_notifier(&xenstore_notifier);
 
+	xenbus_frontend_wq = create_workqueue("xenbus_frontend");
+
 	return 0;
 }
 subsys_initcall(xenbus_probe_frontend_init);
@@ -447,7 +482,7 @@ subsys_initcall(xenbus_probe_frontend_init);
 #ifndef MODULE
 static int __init boot_wait_for_devices(void)
 {
-	if (!xen_has_pv_devices())
+	if (xen_hvm_domain() && !xen_platform_pci_unplug)
 		return -ENODEV;
 
 	ready_to_wait_for_devices = 1;

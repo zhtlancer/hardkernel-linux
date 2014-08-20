@@ -199,10 +199,14 @@ static int intel_crt_mode_valid(struct drm_connector *connector,
 	return MODE_OK;
 }
 
-static bool intel_crt_mode_fixup(struct drm_encoder *encoder,
-				 const struct drm_display_mode *mode,
-				 struct drm_display_mode *adjusted_mode)
+static bool intel_crt_compute_config(struct intel_encoder *encoder,
+				     struct intel_crtc_config *pipe_config)
 {
+	struct drm_device *dev = encoder->base.dev;
+
+	if (HAS_PCH_SPLIT(dev))
+		pipe_config->has_pch_encoder = true;
+
 	return true;
 }
 
@@ -260,27 +264,27 @@ static bool intel_ironlake_crt_detect_hotplug(struct drm_connector *connector)
 
 		crt->force_hotplug_required = 0;
 
-		save_adpa = adpa = I915_READ(PCH_ADPA);
+		save_adpa = adpa = I915_READ(crt->adpa_reg);
 		DRM_DEBUG_KMS("trigger hotplug detect cycle: adpa=0x%x\n", adpa);
 
 		adpa |= ADPA_CRT_HOTPLUG_FORCE_TRIGGER;
 		if (turn_off_dac)
 			adpa &= ~ADPA_DAC_ENABLE;
 
-		I915_WRITE(PCH_ADPA, adpa);
+		I915_WRITE(crt->adpa_reg, adpa);
 
-		if (wait_for((I915_READ(PCH_ADPA) & ADPA_CRT_HOTPLUG_FORCE_TRIGGER) == 0,
+		if (wait_for((I915_READ(crt->adpa_reg) & ADPA_CRT_HOTPLUG_FORCE_TRIGGER) == 0,
 			     1000))
 			DRM_DEBUG_KMS("timed out waiting for FORCE_TRIGGER");
 
 		if (turn_off_dac) {
-			I915_WRITE(PCH_ADPA, save_adpa);
-			POSTING_READ(PCH_ADPA);
+			I915_WRITE(crt->adpa_reg, save_adpa);
+			POSTING_READ(crt->adpa_reg);
 		}
 	}
 
 	/* Check the status to see if both blue and green are on now */
-	adpa = I915_READ(PCH_ADPA);
+	adpa = I915_READ(crt->adpa_reg);
 	if ((adpa & ADPA_CRT_HOTPLUG_MONITOR_MASK) != 0)
 		ret = true;
 	else
@@ -293,26 +297,27 @@ static bool intel_ironlake_crt_detect_hotplug(struct drm_connector *connector)
 static bool valleyview_crt_detect_hotplug(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
+	struct intel_crt *crt = intel_attached_crt(connector);
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	u32 adpa;
 	bool ret;
 	u32 save_adpa;
 
-	save_adpa = adpa = I915_READ(ADPA);
+	save_adpa = adpa = I915_READ(crt->adpa_reg);
 	DRM_DEBUG_KMS("trigger hotplug detect cycle: adpa=0x%x\n", adpa);
 
 	adpa |= ADPA_CRT_HOTPLUG_FORCE_TRIGGER;
 
-	I915_WRITE(ADPA, adpa);
+	I915_WRITE(crt->adpa_reg, adpa);
 
-	if (wait_for((I915_READ(ADPA) & ADPA_CRT_HOTPLUG_FORCE_TRIGGER) == 0,
+	if (wait_for((I915_READ(crt->adpa_reg) & ADPA_CRT_HOTPLUG_FORCE_TRIGGER) == 0,
 		     1000)) {
 		DRM_DEBUG_KMS("timed out waiting for FORCE_TRIGGER");
-		I915_WRITE(ADPA, save_adpa);
+		I915_WRITE(crt->adpa_reg, save_adpa);
 	}
 
 	/* Check the status to see if both blue and green are on now */
-	adpa = I915_READ(ADPA);
+	adpa = I915_READ(crt->adpa_reg);
 	if ((adpa & ADPA_CRT_HOTPLUG_MONITOR_MASK) != 0)
 		ret = true;
 	else
@@ -658,11 +663,11 @@ static void intel_crt_reset(struct drm_connector *connector)
 	if (HAS_PCH_SPLIT(dev)) {
 		u32 adpa;
 
-		adpa = I915_READ(PCH_ADPA);
+		adpa = I915_READ(crt->adpa_reg);
 		adpa &= ~ADPA_CRT_HOTPLUG_MASK;
 		adpa |= ADPA_HOTPLUG_BITS;
-		I915_WRITE(PCH_ADPA, adpa);
-		POSTING_READ(PCH_ADPA);
+		I915_WRITE(crt->adpa_reg, adpa);
+		POSTING_READ(crt->adpa_reg);
 
 		DRM_DEBUG_KMS("pch crt adpa set to 0x%x\n", adpa);
 		crt->force_hotplug_required = 1;
@@ -675,9 +680,7 @@ static void intel_crt_reset(struct drm_connector *connector)
  */
 
 static const struct drm_encoder_helper_funcs crt_encoder_funcs = {
-	.mode_fixup = intel_crt_mode_fixup,
 	.mode_set = intel_crt_mode_set,
-	.disable = intel_encoder_noop,
 };
 
 static const struct drm_connector_funcs intel_crt_connector_funcs = {
@@ -712,14 +715,6 @@ static const struct dmi_system_id intel_no_crt[] = {
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "ACER"),
 			DMI_MATCH(DMI_PRODUCT_NAME, "ZGB"),
-		},
-	},
-	{
-		.callback = intel_no_crt_dmi_callback,
-		.ident = "DELL XPS 8700",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
-			DMI_MATCH(DMI_PRODUCT_NAME, "XPS 8700"),
 		},
 	},
 	{ }
@@ -776,8 +771,11 @@ void intel_crt_init(struct drm_device *dev)
 	else
 		crt->adpa_reg = ADPA;
 
+	crt->base.compute_config = intel_crt_compute_config;
 	crt->base.disable = intel_disable_crt;
 	crt->base.enable = intel_enable_crt;
+	if (I915_HAS_HOTPLUG(dev))
+		crt->base.hpd_pin = HPD_CRT;
 	if (HAS_DDI(dev))
 		crt->base.get_hw_state = intel_ddi_get_hw_state;
 	else
@@ -789,17 +787,13 @@ void intel_crt_init(struct drm_device *dev)
 
 	drm_sysfs_connector_add(connector);
 
-	if (I915_HAS_HOTPLUG(dev))
-		connector->polled = DRM_CONNECTOR_POLL_HPD;
-	else
-		connector->polled = DRM_CONNECTOR_POLL_CONNECT;
+	if (!I915_HAS_HOTPLUG(dev))
+		intel_connector->polled = DRM_CONNECTOR_POLL_CONNECT;
 
 	/*
 	 * Configure the automatic hotplug detection stuff
 	 */
 	crt->force_hotplug_required = 0;
-
-	dev_priv->hotplug_supported_mask |= CRT_HOTPLUG_INT_STATUS;
 
 	/*
 	 * TODO: find a proper way to discover whether we need to set the the

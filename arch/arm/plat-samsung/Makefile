@@ -12,8 +12,7 @@ obj-				:=
 # Objects we always build independent of SoC choice
 
 obj-y				+= init.o cpu.o
-obj-$(CONFIG_ARCH_USES_GETTIMEOFFSET)   += time.o
-obj-$(CONFIG_S5P_HRT) 		+= s5p-time.o
+obj-$(CONFIG_SAMSUNG_HRT) 	+= samsung-time.o
 
 obj-$(CONFIG_SAMSUNG_CLOCK)	+= clock.o
 obj-$(CONFIG_SAMSUNG_CLOCK)	+= pwm-clock.o
@@ -60,3 +59,7 @@ obj-$(CONFIG_SAMSUNG_WAKEMASK)	+= wakeup-mask.o
 
 obj-$(CONFIG_S5P_PM)		+= s5p-pm.o s5p-irq-pm.o
 obj-$(CONFIG_S5P_SLEEP)		+= s5p-sleep.o
+
+# Core support
+
+obj-$(CONFIG_SAMSUNG_CORE_TEST)	+= core_test.o

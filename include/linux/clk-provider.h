@@ -28,6 +28,10 @@
 #define CLK_IS_BASIC		BIT(5) /* Basic clk, can't do a to_clk_foo() */
 #define CLK_GET_RATE_NOCACHE	BIT(6) /* do not use the cached clk rate */
 
+#ifdef CONFIG_SOC_EXYNOS5422
+#define CLK_DO_NOT_UPDATE_CHILD BIT(19) /* do not recalculate child */
+#endif
+
 struct clk_hw;
 
 /**
@@ -44,6 +48,14 @@ struct clk_hw;
  * @unprepare:	Release the clock from its prepared state. This will typically
  * 		undo any work done in the @prepare callback. Called with
  * 		prepare_lock held.
+ *
+ * @is_prepared: Queries the hardware to determine if the clock is prepared.
+ *		This function is allowed to sleep. Optional, if this op is not
+ *		set then the prepare count will be used.
+ *
+ * @unprepare_unused: Unprepare the clock atomically.  Only called from
+ *		clk_disable_unused for prepare clocks with special needs.
+ *		Called with prepare mutex held. This function may sleep.
  *
  * @enable:	Enable the clock atomically. This must not return until the
  * 		clock is generating a valid clock signal, usable by consumer
@@ -108,6 +120,8 @@ struct clk_hw;
 struct clk_ops {
 	int		(*prepare)(struct clk_hw *hw);
 	void		(*unprepare)(struct clk_hw *hw);
+	int		(*is_prepared)(struct clk_hw *hw);
+	void		(*unprepare_unused)(struct clk_hw *hw);
 	int		(*enable)(struct clk_hw *hw);
 	void		(*disable)(struct clk_hw *hw);
 	int		(*is_enabled)(struct clk_hw *hw);
@@ -239,9 +253,14 @@ struct clk_div_table {
  * CLK_DIVIDER_ONE_BASED - by default the divisor is the value read from the
  * 	register plus one.  If CLK_DIVIDER_ONE_BASED is set then the divider is
  * 	the raw value read from the register, with the value of zero considered
- * 	invalid
+ *	invalid, unless CLK_DIVIDER_ALLOW_ZERO is set.
  * CLK_DIVIDER_POWER_OF_TWO - clock divisor is 2 raised to the value read from
  * 	the hardware register
+ * CLK_DIVIDER_ALLOW_ZERO - Allow zero divisors.  For dividers which have
+ *	CLK_DIVIDER_ONE_BASED set, it is possible to end up with a zero divisor.
+ *	Some hardware implementations gracefully handle this case and allow a
+ *	zero divisor by not modifying their input clock
+ *	(divide by one / bypass).
  */
 struct clk_divider {
 	struct clk_hw	hw;
@@ -255,6 +274,7 @@ struct clk_divider {
 
 #define CLK_DIVIDER_ONE_BASED		BIT(0)
 #define CLK_DIVIDER_POWER_OF_TWO	BIT(1)
+#define CLK_DIVIDER_ALLOW_ZERO		BIT(2)
 
 extern const struct clk_ops clk_divider_ops;
 struct clk *clk_register_divider(struct device *dev, const char *name,
@@ -274,7 +294,7 @@ struct clk *clk_register_divider_table(struct device *dev, const char *name,
  * @reg:	register controlling multiplexer
  * @shift:	shift to multiplexer bit field
  * @width:	width of mutliplexer bit field
- * @num_clks:	number of parent clocks
+ * @flags:	hardware-specific flags
  * @lock:	register lock
  *
  * Clock with multiple selectable parents.  Implements .get_parent, .set_parent
@@ -287,20 +307,48 @@ struct clk *clk_register_divider_table(struct device *dev, const char *name,
 struct clk_mux {
 	struct clk_hw	hw;
 	void __iomem	*reg;
+	u32		*table;
+	u32		mask;
 	u8		shift;
-	u8		width;
 	u8		flags;
 	spinlock_t	*lock;
+	#if defined(CONFIG_SOC_EXYNOS5430_REV_1)
+	void __iomem	*stat_reg;
+	u8		stat_shift;
+	u8		stat_width;
+	#endif
 };
 
 #define CLK_MUX_INDEX_ONE		BIT(0)
 #define CLK_MUX_INDEX_BIT		BIT(1)
 
 extern const struct clk_ops clk_mux_ops;
+
+#if defined(CONFIG_SOC_EXYNOS5430_REV_1)
+struct clk *clk_register_mux(struct device *dev, const char *name,
+		const char **parent_names, u8 num_parents, unsigned long flags,
+		void __iomem *reg, u8 shift, u8 width,
+		u8 clk_mux_flags, spinlock_t *lock,
+		void __iomem *stat_reg, u8 stat_shift, u8 stat_width);
+
+struct clk *clk_register_mux_table(struct device *dev, const char *name,
+		const char **parent_names, u8 num_parents, unsigned long flags,
+		void __iomem *reg, u8 shift, u32 mask,
+		u8 clk_mux_flags, u32 *table, spinlock_t *lock,
+		void __iomem *stat_reg, u8 stat_shift, u8 stat_width);
+#else
 struct clk *clk_register_mux(struct device *dev, const char *name,
 		const char **parent_names, u8 num_parents, unsigned long flags,
 		void __iomem *reg, u8 shift, u8 width,
 		u8 clk_mux_flags, spinlock_t *lock);
+
+struct clk *clk_register_mux_table(struct device *dev, const char *name,
+		const char **parent_names, u8 num_parents, unsigned long flags,
+		void __iomem *reg, u8 shift, u32 mask,
+		u8 clk_mux_flags, u32 *table, spinlock_t *lock);
+#endif
+
+void of_fixed_factor_clk_setup(struct device_node *node);
 
 /**
  * struct clk_fixed_factor - fixed multiplier and divider clock
@@ -324,6 +372,37 @@ extern struct clk_ops clk_fixed_factor_ops;
 struct clk *clk_register_fixed_factor(struct device *dev, const char *name,
 		const char *parent_name, unsigned long flags,
 		unsigned int mult, unsigned int div);
+
+/***
+ * struct clk_composite - aggregate clock of mux, divider and gate clocks
+ *
+ * @hw:		handle between common and hardware-specific interfaces
+ * @mux_hw:	handle between composite and hardware-specific mux clock
+ * @rate_hw:	handle between composite and hardware-specific rate clock
+ * @gate_hw:	handle between composite and hardware-specific gate clock
+ * @mux_ops:	clock ops for mux
+ * @rate_ops:	clock ops for rate
+ * @gate_ops:	clock ops for gate
+ */
+struct clk_composite {
+	struct clk_hw	hw;
+	struct clk_ops	ops;
+
+	struct clk_hw	*mux_hw;
+	struct clk_hw	*rate_hw;
+	struct clk_hw	*gate_hw;
+
+	const struct clk_ops	*mux_ops;
+	const struct clk_ops	*rate_ops;
+	const struct clk_ops	*gate_ops;
+};
+
+struct clk *clk_register_composite(struct device *dev, const char *name,
+		const char **parent_names, int num_parents,
+		struct clk_hw *mux_hw, const struct clk_ops *mux_ops,
+		struct clk_hw *rate_hw, const struct clk_ops *rate_ops,
+		struct clk_hw *gate_hw, const struct clk_ops *gate_ops,
+		unsigned long flags);
 
 /**
  * clk_register - allocate a new clock, register it and return an opaque cookie
@@ -351,6 +430,7 @@ unsigned int __clk_get_enable_count(struct clk *clk);
 unsigned int __clk_get_prepare_count(struct clk *clk);
 unsigned long __clk_get_rate(struct clk *clk);
 unsigned long __clk_get_flags(struct clk *clk);
+bool __clk_is_prepared(struct clk *clk);
 bool __clk_is_enabled(struct clk *clk);
 struct clk *__clk_lookup(const char *name);
 
@@ -379,7 +459,13 @@ struct clk_onecell_data {
 };
 struct clk *of_clk_src_onecell_get(struct of_phandle_args *clkspec, void *data);
 const char *of_clk_get_parent_name(struct device_node *np, int index);
+
 void of_clk_init(const struct of_device_id *matches);
+
+#define CLK_OF_DECLARE(name, compat, fn)			\
+	static const struct of_device_id __clk_of_table_##name	\
+		__used __section(__clk_of_table)		\
+		= { .compatible = compat, .data = fn };
 
 #endif /* CONFIG_COMMON_CLK */
 #endif /* CLK_PROVIDER_H */

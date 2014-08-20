@@ -912,7 +912,6 @@ static int dummy_udc_start(struct usb_gadget *g,
 	dum->devstatus = 0;
 
 	dum->driver = driver;
-	dum->gadget.dev.driver = &driver->driver;
 	dev_dbg(udc_dev(dum), "binding gadget driver '%s'\n",
 			driver->driver.name);
 	return 0;
@@ -924,11 +923,9 @@ static int dummy_udc_stop(struct usb_gadget *g,
 	struct dummy_hcd	*dum_hcd = gadget_to_dummy_hcd(g);
 	struct dummy		*dum = dum_hcd->dum;
 
-	if (driver)
-		dev_dbg(udc_dev(dum), "unregister gadget driver '%s'\n",
-				driver->driver.name);
+	dev_dbg(udc_dev(dum), "unregister gadget driver '%s'\n",
+			driver->driver.name);
 
-	dum->gadget.dev.driver = NULL;
 	dum->driver = NULL;
 
 	return 0;
@@ -938,11 +935,6 @@ static int dummy_udc_stop(struct usb_gadget *g,
 
 /* The gadget structure is stored inside the hcd structure and will be
  * released along with it. */
-static void dummy_gadget_release(struct device *dev)
-{
-	return;
-}
-
 static void init_dummy_udc_hw(struct dummy *dum)
 {
 	int i;
@@ -985,15 +977,7 @@ static int dummy_udc_probe(struct platform_device *pdev)
 	dum->gadget.ops = &dummy_ops;
 	dum->gadget.max_speed = USB_SPEED_SUPER;
 
-	dev_set_name(&dum->gadget.dev, "gadget");
 	dum->gadget.dev.parent = &pdev->dev;
-	dum->gadget.dev.release = dummy_gadget_release;
-	rc = device_register(&dum->gadget.dev);
-	if (rc < 0) {
-		put_device(&dum->gadget.dev);
-		return rc;
-	}
-
 	init_dummy_udc_hw(dum);
 
 	rc = usb_add_gadget_udc(&pdev->dev, &dum->gadget);
@@ -1009,7 +993,6 @@ static int dummy_udc_probe(struct platform_device *pdev)
 err_dev:
 	usb_del_gadget_udc(&dum->gadget);
 err_udc:
-	device_unregister(&dum->gadget.dev);
 	return rc;
 }
 
@@ -1017,10 +1000,8 @@ static int dummy_udc_remove(struct platform_device *pdev)
 {
 	struct dummy	*dum = platform_get_drvdata(pdev);
 
-	platform_set_drvdata(pdev, NULL);
-	device_remove_file(&dum->gadget.dev, &dev_attr_function);
-	device_unregister(&dum->gadget.dev);
 	usb_del_gadget_udc(&dum->gadget);
+	device_remove_file(&dum->gadget.dev, &dev_attr_function);
 	return 0;
 }
 
@@ -1924,7 +1905,7 @@ done:
 }
 
 /* usb 3.0 root hub device descriptor */
-struct {
+static struct {
 	struct usb_bos_descriptor bos;
 	struct usb_ss_cap_descriptor ss_cap;
 } __packed usb3_bos_desc = {
@@ -2679,8 +2660,10 @@ static int __init init(void)
 	}
 	for (i = 0; i < mod_data.num; i++) {
 		dum[i] = kzalloc(sizeof(struct dummy), GFP_KERNEL);
-		if (!dum[i])
+		if (!dum[i]) {
+			retval = -ENOMEM;
 			goto err_add_pdata;
+		}
 		retval = platform_device_add_data(the_hcd_pdev[i], &dum[i],
 				sizeof(void *));
 		if (retval)

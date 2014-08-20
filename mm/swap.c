@@ -30,7 +30,7 @@
 #include <linux/backing-dev.h>
 #include <linux/memcontrol.h>
 #include <linux/gfp.h>
-#include <linux/hugetlb.h>
+#include <linux/uio.h>
 
 #include "internal.h"
 
@@ -78,19 +78,6 @@ static void __put_compound_page(struct page *page)
 
 static void put_compound_page(struct page *page)
 {
-	/*
-	 * hugetlbfs pages cannot be split from under us.  If this is a
-	 * hugetlbfs page, check refcount on head page and release the page if
-	 * the refcount becomes zero.
-	 */
-	if (PageHuge(page)) {
-		page = compound_head(page);
-		if (put_page_testzero(page))
-			__put_compound_page(page);
-
-		return;
-	}
-
 	if (unlikely(PageTail(page))) {
 		/* __split_huge_page_refcount can run under us */
 		struct page *page_head = compound_trans_head(page);
@@ -194,51 +181,38 @@ bool __get_page_tail(struct page *page)
 	 * proper PT lock that already serializes against
 	 * split_huge_page().
 	 */
+	unsigned long flags;
 	bool got = false;
-	struct page *page_head;
+	struct page *page_head = compound_trans_head(page);
 
-	/*
-	 * If this is a hugetlbfs page it cannot be split under us.  Simply
-	 * increment refcount for the head page.
-	 */
-	if (PageHuge(page)) {
-		page_head = compound_head(page);
-		atomic_inc(&page_head->_count);
-		got = true;
-	} else {
-		unsigned long flags;
+	if (likely(page != page_head && get_page_unless_zero(page_head))) {
 
-		page_head = compound_trans_head(page);
-		if (likely(page != page_head &&
-					get_page_unless_zero(page_head))) {
-
-			/* Ref to put_compound_page() comment. */
-			if (PageSlab(page_head)) {
-				if (likely(PageTail(page))) {
-					__get_page_tail_foll(page, false);
-					return true;
-				} else {
-					put_page(page_head);
-					return false;
-				}
-			}
-
-			/*
-			 * page_head wasn't a dangling pointer but it
-			 * may not be a head page anymore by the time
-			 * we obtain the lock. That is ok as long as it
-			 * can't be freed from under us.
-			 */
-			flags = compound_lock_irqsave(page_head);
-			/* here __split_huge_page_refcount won't run anymore */
+		/* Ref to put_compound_page() comment. */
+		if (PageSlab(page_head)) {
 			if (likely(PageTail(page))) {
 				__get_page_tail_foll(page, false);
-				got = true;
-			}
-			compound_unlock_irqrestore(page_head, flags);
-			if (unlikely(!got))
+				return true;
+			} else {
 				put_page(page_head);
+				return false;
+			}
 		}
+
+		/*
+		 * page_head wasn't a dangling pointer but it
+		 * may not be a head page anymore by the time
+		 * we obtain the lock. That is ok as long as it
+		 * can't be freed from under us.
+		 */
+		flags = compound_lock_irqsave(page_head);
+		/* here __split_huge_page_refcount won't run anymore */
+		if (likely(PageTail(page))) {
+			__get_page_tail_foll(page, false);
+			got = true;
+		}
+		compound_unlock_irqrestore(page_head, flags);
+		if (unlikely(!got))
+			put_page(page_head);
 	}
 	return got;
 }
@@ -764,7 +738,7 @@ EXPORT_SYMBOL(__pagevec_release);
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 /* used by __split_huge_page_refcount() */
 void lru_add_page_tail(struct page *page, struct page *page_tail,
-		       struct lruvec *lruvec)
+		       struct lruvec *lruvec, struct list_head *list)
 {
 	int uninitialized_var(active);
 	enum lru_list lru;
@@ -776,7 +750,8 @@ void lru_add_page_tail(struct page *page, struct page *page_tail,
 	VM_BUG_ON(NR_CPUS != 1 &&
 		  !spin_is_locked(&lruvec_zone(lruvec)->lru_lock));
 
-	SetPageLRU(page_tail);
+	if (!list)
+		SetPageLRU(page_tail);
 
 	if (page_evictable(page_tail)) {
 		if (PageActive(page)) {
@@ -794,7 +769,11 @@ void lru_add_page_tail(struct page *page, struct page *page_tail,
 
 	if (likely(PageLRU(page)))
 		list_add_tail(&page_tail->lru, &page->lru);
-	else {
+	else if (list) {
+		/* page reclaim is reclaiming a huge page */
+		get_page(page_tail);
+		list_add_tail(&page_tail->lru, list);
+	} else {
 		struct list_head *list_head;
 		/*
 		 * Head page has not yet been counted, as an hpage,
@@ -882,9 +861,14 @@ EXPORT_SYMBOL(pagevec_lookup_tag);
 void __init swap_setup(void)
 {
 	unsigned long megs = totalram_pages >> (20 - PAGE_SHIFT);
-
 #ifdef CONFIG_SWAP
-	bdi_init(swapper_space.backing_dev_info);
+	int i;
+
+	bdi_init(swapper_spaces[0].backing_dev_info);
+	for (i = 0; i < MAX_SWAPFILES; i++) {
+		spin_lock_init(&swapper_spaces[i].tree_lock);
+		INIT_LIST_HEAD(&swapper_spaces[i].i_mmap_nonlinear);
+	}
 #endif
 
 	/* Use a smaller cluster for small-memory machines */

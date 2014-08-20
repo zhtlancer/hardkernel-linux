@@ -17,9 +17,9 @@
 
 #include <media/v4l2-ioctl.h>
 #include <linux/videodev2.h>
-#include <media/videobuf2-fb.h>
 #include <linux/mm.h>
 #include <linux/module.h>
+#include <linux/platform_device.h>
 #include <linux/timer.h>
 #include <media/videobuf2-dma-contig.h>
 
@@ -96,7 +96,7 @@ int mxr_acquire_video(struct mxr_device *mdev,
 		/* trying to register next output */
 		if (sd == NULL)
 			continue;
-		out = kzalloc(sizeof *out, GFP_KERNEL);
+		out = kzalloc(sizeof(*out), GFP_KERNEL);
 		if (out == NULL) {
 			mxr_err(mdev, "no memory for '%s'\n",
 				conf->output_name);
@@ -128,7 +128,7 @@ fail_output:
 	/* kfree is NULL-safe */
 	for (i = 0; i < mdev->output_cnt; ++i)
 		kfree(mdev->output[i]);
-	memset(mdev->output, 0, sizeof mdev->output);
+	memset(mdev->output, 0, sizeof(mdev->output));
 
 fail_vb2_allocator:
 	/* freeing allocator context */
@@ -161,8 +161,8 @@ static int mxr_querycap(struct file *file, void *priv,
 
 	mxr_dbg(layer->mdev, "%s:%d\n", __func__, __LINE__);
 
-	strlcpy(cap->driver, MXR_DRIVER_NAME, sizeof cap->driver);
-	strlcpy(cap->card, layer->vfd.name, sizeof cap->card);
+	strlcpy(cap->driver, MXR_DRIVER_NAME, sizeof(cap->driver));
+	strlcpy(cap->card, layer->vfd.name, sizeof(cap->card));
 	sprintf(cap->bus_info, "%d", layer->idx);
 	cap->device_caps = V4L2_CAP_STREAMING | V4L2_CAP_VIDEO_OUTPUT_MPLANE;
 	cap->capabilities = cap->device_caps | V4L2_CAP_DEVICE_CAPS;
@@ -193,7 +193,7 @@ static void mxr_layer_default_geo(struct mxr_layer *layer)
 	struct mxr_device *mdev = layer->mdev;
 	struct v4l2_mbus_framefmt mbus_fmt;
 
-	memset(&layer->geo, 0, sizeof layer->geo);
+	memset(&layer->geo, 0, sizeof(layer->geo));
 
 	mxr_get_mbus_fmt(mdev, &mbus_fmt);
 
@@ -307,8 +307,6 @@ static int mxr_g_fmt(struct file *file, void *priv,
 	pix->pixelformat = layer->fmt->fourcc;
 	pix->colorspace = layer->fmt->colorspace;
 	mxr_mplane_fill(pix->plane_fmt, layer->fmt, pix->width, pix->height);
-
-	f->fmt.pix_mp.plane_fmt[0].sizeimage = f->fmt.pix.width * f->fmt.pix.height * 2;
 
 	return 0;
 }
@@ -428,7 +426,7 @@ static int mxr_s_selection(struct file *file, void *fh,
 	struct mxr_geometry tmp;
 	struct v4l2_rect res;
 
-	memset(&res, 0, sizeof res);
+	memset(&res, 0, sizeof(res));
 
 	mxr_dbg(layer->mdev, "%s: rect: %dx%d@%d,%d\n", __func__,
 		s->r.width, s->r.height, s->r.left, s->r.top);
@@ -467,7 +465,7 @@ static int mxr_s_selection(struct file *file, void *fh,
 	/* apply change and update geometry if needed */
 	if (target) {
 		/* backup current geometry if setup fails */
-		memcpy(&tmp, geo, sizeof tmp);
+		memcpy(&tmp, geo, sizeof(tmp));
 
 		/* apply requested selection */
 		target->x_offset = s->r.left;
@@ -499,12 +497,12 @@ static int mxr_s_selection(struct file *file, void *fh,
 fail:
 	/* restore old geometry, which is not touched if target is NULL */
 	if (target)
-		memcpy(geo, &tmp, sizeof tmp);
+		memcpy(geo, &tmp, sizeof(tmp));
 	return -ERANGE;
 }
 
-static int mxr_enum_dv_presets(struct file *file, void *fh,
-	struct v4l2_dv_enum_preset *preset)
+static int mxr_enum_dv_timings(struct file *file, void *fh,
+	struct v4l2_enum_dv_timings *timings)
 {
 	struct mxr_layer *layer = video_drvdata(file);
 	struct mxr_device *mdev = layer->mdev;
@@ -512,14 +510,14 @@ static int mxr_enum_dv_presets(struct file *file, void *fh,
 
 	/* lock protects from changing sd_out */
 	mutex_lock(&mdev->mutex);
-	ret = v4l2_subdev_call(to_outsd(mdev), video, enum_dv_presets, preset);
+	ret = v4l2_subdev_call(to_outsd(mdev), video, enum_dv_timings, timings);
 	mutex_unlock(&mdev->mutex);
 
 	return ret ? -EINVAL : 0;
 }
 
-static int mxr_s_dv_preset(struct file *file, void *fh,
-	struct v4l2_dv_preset *preset)
+static int mxr_s_dv_timings(struct file *file, void *fh,
+	struct v4l2_dv_timings *timings)
 {
 	struct mxr_layer *layer = video_drvdata(file);
 	struct mxr_device *mdev = layer->mdev;
@@ -528,7 +526,7 @@ static int mxr_s_dv_preset(struct file *file, void *fh,
 	/* lock protects from changing sd_out */
 	mutex_lock(&mdev->mutex);
 
-	/* preset change cannot be done while there is an entity
+	/* timings change cannot be done while there is an entity
 	 * dependant on output configuration
 	 */
 	if (mdev->n_output > 0) {
@@ -536,7 +534,7 @@ static int mxr_s_dv_preset(struct file *file, void *fh,
 		return -EBUSY;
 	}
 
-	ret = v4l2_subdev_call(to_outsd(mdev), video, s_dv_preset, preset);
+	ret = v4l2_subdev_call(to_outsd(mdev), video, s_dv_timings, timings);
 
 	mutex_unlock(&mdev->mutex);
 
@@ -546,8 +544,8 @@ static int mxr_s_dv_preset(struct file *file, void *fh,
 	return ret ? -EINVAL : 0;
 }
 
-static int mxr_g_dv_preset(struct file *file, void *fh,
-	struct v4l2_dv_preset *preset)
+static int mxr_g_dv_timings(struct file *file, void *fh,
+	struct v4l2_dv_timings *timings)
 {
 	struct mxr_layer *layer = video_drvdata(file);
 	struct mxr_device *mdev = layer->mdev;
@@ -555,13 +553,28 @@ static int mxr_g_dv_preset(struct file *file, void *fh,
 
 	/* lock protects from changing sd_out */
 	mutex_lock(&mdev->mutex);
-	ret = v4l2_subdev_call(to_outsd(mdev), video, g_dv_preset, preset);
+	ret = v4l2_subdev_call(to_outsd(mdev), video, g_dv_timings, timings);
 	mutex_unlock(&mdev->mutex);
 
 	return ret ? -EINVAL : 0;
 }
 
-static int mxr_s_std(struct file *file, void *fh, v4l2_std_id *norm)
+static int mxr_dv_timings_cap(struct file *file, void *fh,
+	struct v4l2_dv_timings_cap *cap)
+{
+	struct mxr_layer *layer = video_drvdata(file);
+	struct mxr_device *mdev = layer->mdev;
+	int ret;
+
+	/* lock protects from changing sd_out */
+	mutex_lock(&mdev->mutex);
+	ret = v4l2_subdev_call(to_outsd(mdev), video, dv_timings_cap, cap);
+	mutex_unlock(&mdev->mutex);
+
+	return ret ? -EINVAL : 0;
+}
+
+static int mxr_s_std(struct file *file, void *fh, v4l2_std_id norm)
 {
 	struct mxr_layer *layer = video_drvdata(file);
 	struct mxr_device *mdev = layer->mdev;
@@ -578,7 +591,7 @@ static int mxr_s_std(struct file *file, void *fh, v4l2_std_id *norm)
 		return -EBUSY;
 	}
 
-	ret = v4l2_subdev_call(to_outsd(mdev), video, s_std_output, *norm);
+	ret = v4l2_subdev_call(to_outsd(mdev), video, s_std_output, norm);
 
 	mutex_unlock(&mdev->mutex);
 
@@ -618,8 +631,8 @@ static int mxr_enum_output(struct file *file, void *fh, struct v4l2_output *a)
 	/* try to obtain supported tv norms */
 	v4l2_subdev_call(sd, video, g_tvnorms_output, &a->std);
 	a->capabilities = 0;
-	if (sd->ops->video && sd->ops->video->s_dv_preset)
-		a->capabilities |= V4L2_OUT_CAP_PRESETS;
+	if (sd->ops->video && sd->ops->video->s_dv_timings)
+		a->capabilities |= V4L2_OUT_CAP_DV_TIMINGS;
 	if (sd->ops->video && sd->ops->video->s_std_output)
 		a->capabilities |= V4L2_OUT_CAP_STD;
 	a->type = V4L2_OUTPUT_TYPE_ANALOG;
@@ -740,10 +753,11 @@ static const struct v4l2_ioctl_ops mxr_ioctl_ops = {
 	/* Streaming control */
 	.vidioc_streamon = mxr_streamon,
 	.vidioc_streamoff = mxr_streamoff,
-	/* Preset functions */
-	.vidioc_enum_dv_presets = mxr_enum_dv_presets,
-	.vidioc_s_dv_preset = mxr_s_dv_preset,
-	.vidioc_g_dv_preset = mxr_g_dv_preset,
+	/* DV Timings functions */
+	.vidioc_enum_dv_timings = mxr_enum_dv_timings,
+	.vidioc_s_dv_timings = mxr_s_dv_timings,
+	.vidioc_g_dv_timings = mxr_g_dv_timings,
+	.vidioc_dv_timings_cap = mxr_dv_timings_cap,
 	/* analog TV standard functions */
 	.vidioc_s_std = mxr_s_std,
 	.vidioc_g_std = mxr_g_std,
@@ -1045,18 +1059,11 @@ int mxr_base_layer_register(struct mxr_layer *layer)
 	else
 		mxr_info(mdev, "registered layer %s as /dev/video%d\n",
 			layer->vfd.name, layer->vfd.num);
-
-	layer->fb = vb2_fb_register(&layer->vb_queue, &layer->vfd);
-	if (PTR_ERR(layer->fb))
-		layer->fb = NULL;
-
 	return ret;
 }
 
 void mxr_base_layer_unregister(struct mxr_layer *layer)
 {
-	if (layer->fb)
-		vb2_fb_unregister(layer->fb);
 	video_unregister_device(&layer->vfd);
 }
 
@@ -1081,7 +1088,7 @@ struct mxr_layer *mxr_base_layer_create(struct mxr_device *mdev,
 {
 	struct mxr_layer *layer;
 
-	layer = kzalloc(sizeof *layer, GFP_KERNEL);
+	layer = kzalloc(sizeof(*layer), GFP_KERNEL);
 	if (layer == NULL) {
 		mxr_err(mdev, "not enough memory for layer.\n");
 		goto fail;

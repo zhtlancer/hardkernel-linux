@@ -329,8 +329,7 @@ static int mcfqspi_transfer_one_message(struct spi_master *master,
 		mcfqspi_cs_select(mcfqspi, spi->chip_select, cs_high);
 
 		mcfqspi_wr_qir(mcfqspi, MCFQSPI_QIR_SPIFE);
-		if ((t->bits_per_word ? t->bits_per_word :
-					spi->bits_per_word) == 8)
+		if (t->bits_per_word == 8)
 			mcfqspi_transfer_msg8(mcfqspi, t->len, t->tx_buf,
 					t->rx_buf);
 		else
@@ -566,8 +565,7 @@ static int mcfqspi_resume(struct device *dev)
 #ifdef CONFIG_PM_RUNTIME
 static int mcfqspi_runtime_suspend(struct device *dev)
 {
-	struct spi_master *master = dev_get_drvdata(dev);
-	struct mcfqspi *mcfqspi = spi_master_get_devdata(master);
+	struct mcfqspi *mcfqspi = platform_get_drvdata(to_platform_device(dev));
 
 	clk_disable(mcfqspi->clk);
 
@@ -576,8 +574,7 @@ static int mcfqspi_runtime_suspend(struct device *dev)
 
 static int mcfqspi_runtime_resume(struct device *dev)
 {
-	struct spi_master *master = dev_get_drvdata(dev);
-	struct mcfqspi *mcfqspi = spi_master_get_devdata(master);
+	struct mcfqspi *mcfqspi = platform_get_drvdata(to_platform_device(dev));
 
 	clk_enable(mcfqspi->clk);
 

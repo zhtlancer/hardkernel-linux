@@ -1013,7 +1013,7 @@ cntrlEnd:
 	}
 
 	case IOCTL_BCM_GET_CURRENT_STATUS: {
-		LINK_STATE link_state;
+		struct bcm_link_state link_state;
 
 		/* Copy Ioctl Buffer structure */
 		if (copy_from_user(&IoBuffer, argp, sizeof(struct bcm_ioctl_buffer))) {
@@ -1148,8 +1148,8 @@ cntrlEnd:
 
 		if (((ULONG)pBulkBuffer->Register & 0x0F000000) != 0x0F000000 ||
 			((ULONG)pBulkBuffer->Register & 0x3)) {
-			kfree(pvBuffer);
 			BCM_DEBUG_PRINT (Adapter, DBG_TYPE_PRINTK, 0, 0, "WRM Done On invalid Address : %x Access Denied.\n", (int)pBulkBuffer->Register);
+			kfree(pvBuffer);
 			Status = -EINVAL;
 			break;
 		}
@@ -1229,13 +1229,13 @@ cntrlEnd:
 	case IOCTL_BCM_SET_DEBUG:
 #ifdef DEBUG
 	{
-		USER_BCM_DBG_STATE sUserDebugState;
+		struct bcm_user_debug_state sUserDebugState;
 
 		BCM_DEBUG_PRINT(Adapter, DBG_TYPE_OTHERS, OSAL_DBG, DBG_LVL_ALL, "In SET_DEBUG ioctl\n");
 		if (copy_from_user(&IoBuffer, argp, sizeof(struct bcm_ioctl_buffer)))
 			return -EFAULT;
 
-		if (copy_from_user(&sUserDebugState, IoBuffer.InputBuffer, sizeof(USER_BCM_DBG_STATE)))
+		if (copy_from_user(&sUserDebugState, IoBuffer.InputBuffer, sizeof(struct bcm_user_debug_state)))
 			return -EFAULT;
 
 		BCM_DEBUG_PRINT (Adapter, DBG_TYPE_PRINTK, 0, 0, "IOCTL_BCM_SET_DEBUG: OnOff=%d Type = 0x%x ",
@@ -1783,16 +1783,16 @@ cntrlEnd:
 		}
 
 		if (IsFlash2x(Adapter) == TRUE) {
-			if (IoBuffer.OutputLength < sizeof(FLASH2X_CS_INFO))
+			if (IoBuffer.OutputLength < sizeof(struct bcm_flash2x_cs_info))
 				return -EINVAL;
 
-			if (copy_to_user(IoBuffer.OutputBuffer, Adapter->psFlash2xCSInfo, sizeof(FLASH2X_CS_INFO)))
+			if (copy_to_user(IoBuffer.OutputBuffer, Adapter->psFlash2xCSInfo, sizeof(struct bcm_flash2x_cs_info)))
 				return -EFAULT;
 		} else {
-			if (IoBuffer.OutputLength < sizeof(FLASH_CS_INFO))
+			if (IoBuffer.OutputLength < sizeof(struct bcm_flash_cs_info))
 				return -EINVAL;
 
-			if (copy_to_user(IoBuffer.OutputBuffer, Adapter->psFlashCSInfo, sizeof(FLASH_CS_INFO)))
+			if (copy_to_user(IoBuffer.OutputBuffer, Adapter->psFlashCSInfo, sizeof(struct bcm_flash_cs_info)))
 				return -EFAULT;
 		}
 	}
@@ -1960,7 +1960,6 @@ cntrlEnd:
 
 		BCM_DEBUG_PRINT(Adapter, DBG_TYPE_OTHERS, OSAL_DBG, DBG_LVL_ALL, "Called IOCTL_BCM_GET_DEVICE_DRIVER_INFO\n");
 
-		memset(&DevInfo, 0, sizeof(DevInfo));
 		DevInfo.MaxRDMBufferSize = BUFFER_4K;
 		DevInfo.u32DSDStartOffset = EEPROM_CALPARAM_START;
 		DevInfo.u32RxAlignmentCorrection = 0;

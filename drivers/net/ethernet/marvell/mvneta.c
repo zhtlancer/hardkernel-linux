@@ -12,7 +12,6 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/version.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/platform_device.h>
@@ -120,7 +119,7 @@
 #define      MVNETA_GMAC_MAX_RX_SIZE_MASK        0x7ffc
 #define      MVNETA_GMAC0_PORT_ENABLE            BIT(0)
 #define MVNETA_GMAC_CTRL_2                       0x2c08
-#define      MVNETA_GMAC2_PCS_ENABLE             BIT(3)
+#define      MVNETA_GMAC2_PSC_ENABLE             BIT(3)
 #define      MVNETA_GMAC2_PORT_RGMII             BIT(4)
 #define      MVNETA_GMAC2_PORT_RESET             BIT(6)
 #define MVNETA_GMAC_STATUS                       0x2c10
@@ -137,9 +136,7 @@
 #define      MVNETA_GMAC_FORCE_LINK_PASS         BIT(1)
 #define      MVNETA_GMAC_CONFIG_MII_SPEED        BIT(5)
 #define      MVNETA_GMAC_CONFIG_GMII_SPEED       BIT(6)
-#define      MVNETA_GMAC_AN_SPEED_EN             BIT(7)
 #define      MVNETA_GMAC_CONFIG_FULL_DUPLEX      BIT(12)
-#define      MVNETA_GMAC_AN_DUPLEX_EN            BIT(13)
 #define MVNETA_MIB_COUNTERS_BASE                 0x3080
 #define      MVNETA_MIB_LATE_COLLISION           0x7c
 #define MVNETA_DA_FILT_SPEC_MCAST                0x3400
@@ -656,7 +653,7 @@ static void mvneta_port_sgmii_config(struct mvneta_port *pp)
 	u32 val;
 
 	val = mvreg_read(pp, MVNETA_GMAC_CTRL_2);
-	val |= MVNETA_GMAC2_PCS_ENABLE;
+	val |= MVNETA_GMAC2_PSC_ENABLE;
 	mvreg_write(pp, MVNETA_GMAC_CTRL_2, val);
 }
 
@@ -913,13 +910,6 @@ static void mvneta_defaults_set(struct mvneta_port *pp)
 
 	/* Assign port SDMA configuration */
 	mvreg_write(pp, MVNETA_SDMA_CONFIG, val);
-
-	/* Disable PHY polling in hardware, since we're using the
-	 * kernel phylib to do this.
-	 */
-	val = mvreg_read(pp, MVNETA_UNIT_CONTROL);
-	val &= ~MVNETA_PHY_POLLING_ENABLE;
-	mvreg_write(pp, MVNETA_UNIT_CONTROL, val);
 
 	mvneta_set_ucast_table(pp, -1);
 	mvneta_set_special_mcast_table(pp, -1);
@@ -1979,13 +1969,8 @@ static int mvneta_rxq_init(struct mvneta_port *pp,
 	rxq->descs = dma_alloc_coherent(pp->dev->dev.parent,
 					rxq->size * MVNETA_DESC_ALIGNED_SIZE,
 					&rxq->descs_phys, GFP_KERNEL);
-	if (rxq->descs == NULL) {
-		netdev_err(pp->dev,
-			   "rxq=%d: Can't allocate %d bytes for %d RX descr\n",
-			   rxq->id, rxq->size * MVNETA_DESC_ALIGNED_SIZE,
-			   rxq->size);
+	if (rxq->descs == NULL)
 		return -ENOMEM;
-	}
 
 	BUG_ON(rxq->descs !=
 	       PTR_ALIGN(rxq->descs, MVNETA_CPU_D_CACHE_LINE_SIZE));
@@ -2039,13 +2024,8 @@ static int mvneta_txq_init(struct mvneta_port *pp,
 	txq->descs = dma_alloc_coherent(pp->dev->dev.parent,
 					txq->size * MVNETA_DESC_ALIGNED_SIZE,
 					&txq->descs_phys, GFP_KERNEL);
-	if (txq->descs == NULL) {
-		netdev_err(pp->dev,
-			   "txQ=%d: Can't allocate %d bytes for %d TX descr\n",
-			   txq->id, txq->size * MVNETA_DESC_ALIGNED_SIZE,
-			   txq->size);
+	if (txq->descs == NULL)
 		return -ENOMEM;
-	}
 
 	/* Make sure descriptor address is cache line size aligned  */
 	BUG_ON(txq->descs !=
@@ -2308,9 +2288,7 @@ static void mvneta_adjust_link(struct net_device *ndev)
 			val = mvreg_read(pp, MVNETA_GMAC_AUTONEG_CONFIG);
 			val &= ~(MVNETA_GMAC_CONFIG_MII_SPEED |
 				 MVNETA_GMAC_CONFIG_GMII_SPEED |
-				 MVNETA_GMAC_CONFIG_FULL_DUPLEX |
-				 MVNETA_GMAC_AN_SPEED_EN |
-				 MVNETA_GMAC_AN_DUPLEX_EN);
+				 MVNETA_GMAC_CONFIG_FULL_DUPLEX);
 
 			if (phydev->duplex)
 				val |= MVNETA_GMAC_CONFIG_FULL_DUPLEX;
@@ -2783,15 +2761,16 @@ static int mvneta_probe(struct platform_device *pdev)
 
 	netif_napi_add(dev, &pp->napi, mvneta_poll, pp->weight);
 
+	dev->features = NETIF_F_SG | NETIF_F_IP_CSUM;
+	dev->hw_features |= NETIF_F_SG | NETIF_F_IP_CSUM;
+	dev->vlan_features |= NETIF_F_SG | NETIF_F_IP_CSUM;
+	dev->priv_flags |= IFF_UNICAST_FLT;
+
 	err = register_netdev(dev);
 	if (err < 0) {
 		dev_err(&pdev->dev, "failed to register\n");
 		goto err_deinit;
 	}
-
-	dev->features = NETIF_F_SG | NETIF_F_IP_CSUM;
-	dev->hw_features = NETIF_F_SG | NETIF_F_IP_CSUM;
-	dev->priv_flags |= IFF_UNICAST_FLT;
 
 	netdev_info(dev, "mac: %pM\n", dev->dev_addr);
 

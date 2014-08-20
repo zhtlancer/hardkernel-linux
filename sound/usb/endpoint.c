@@ -128,7 +128,7 @@ static const char *usb_error_string(int err)
  * Determine whether an endpoint is driven by an implicit feedback
  * data endpoint source.
  */
-int snd_usb_endpoint_implict_feedback_sink(struct snd_usb_endpoint *ep)
+int snd_usb_endpoint_implicit_feedback_sink(struct snd_usb_endpoint *ep)
 {
 	return  ep->sync_master &&
 		ep->sync_master->type == SND_USB_ENDPOINT_TYPE_DATA &&
@@ -363,7 +363,7 @@ static void snd_complete_urb(struct urb *urb)
 		if (unlikely(!test_bit(EP_FLAG_RUNNING, &ep->flags)))
 			goto exit_clear;
 
-		if (snd_usb_endpoint_implict_feedback_sink(ep)) {
+		if (snd_usb_endpoint_implicit_feedback_sink(ep)) {
 			unsigned long flags;
 
 			spin_lock_irqsave(&ep->lock, flags);
@@ -415,14 +415,12 @@ struct snd_usb_endpoint *snd_usb_add_endpoint(struct snd_usb_audio *chip,
 					      struct usb_host_interface *alts,
 					      int ep_num, int direction, int type)
 {
-	struct list_head *p;
 	struct snd_usb_endpoint *ep;
 	int is_playback = direction == SNDRV_PCM_STREAM_PLAYBACK;
 
 	mutex_lock(&chip->mutex);
 
-	list_for_each(p, &chip->ep_list) {
-		ep = list_entry(p, struct snd_usb_endpoint, list);
+	list_for_each_entry(ep, &chip->ep_list, list) {
 		if (ep->ep_num == ep_num &&
 		    ep->iface == alts->desc.bInterfaceNumber &&
 		    ep->alt_idx == alts->desc.bAlternateSetting) {
@@ -469,10 +467,6 @@ struct snd_usb_endpoint *snd_usb_add_endpoint(struct snd_usb_audio *chip,
 			ep->syncinterval = 3;
 
 		ep->syncmaxsize = le16_to_cpu(get_endpoint(alts, 1)->wMaxPacketSize);
-
-		if (chip->usb_id == USB_ID(0x0644, 0x8038) /* TEAC UD-H01 */ &&
-		    ep->syncmaxsize == 4)
-			ep->udh01_fb_quirk = 1;
 	}
 
 	list_add_tail(&ep->list, &chip->ep_list);
@@ -584,6 +578,15 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep,
 	int is_playback = usb_pipeout(ep->pipe);
 	int frame_bits = snd_pcm_format_physical_width(pcm_format) * channels;
 
+	if (pcm_format == SNDRV_PCM_FORMAT_DSD_U16_LE && fmt->dsd_dop) {
+		/*
+		 * When operating in DSD DOP mode, the size of a sample frame
+		 * in hardware differs from the actual physical format width
+		 * because we need to make room for the DOP markers.
+		 */
+		frame_bits += channels << 3;
+	}
+
 	ep->datainterval = fmt->datainterval;
 	ep->stride = frame_bits >> 3;
 	ep->silence_value = pcm_format == SNDRV_PCM_FORMAT_U8 ? 0x80 : 0;
@@ -610,7 +613,7 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep,
 	else
 		packs_per_ms = 1;
 
-	if (is_playback && !snd_usb_endpoint_implict_feedback_sink(ep)) {
+	if (is_playback && !snd_usb_endpoint_implicit_feedback_sink(ep)) {
 		urb_packs = max(ep->chip->nrpacks, 1);
 		urb_packs = min(urb_packs, (unsigned int) MAX_PACKS);
 	} else {
@@ -619,11 +622,11 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep,
 
 	urb_packs *= packs_per_ms;
 
-	if (sync_ep && !snd_usb_endpoint_implict_feedback_sink(ep))
+	if (sync_ep && !snd_usb_endpoint_implicit_feedback_sink(ep))
 		urb_packs = min(urb_packs, 1U << sync_ep->syncinterval);
 
 	/* decide how many packets to be used */
-	if (is_playback && !snd_usb_endpoint_implict_feedback_sink(ep)) {
+	if (is_playback && !snd_usb_endpoint_implicit_feedback_sink(ep)) {
 		unsigned int minsize, maxpacks;
 		/* determine how small a packet can be */
 		minsize = (ep->freqn >> (16 - ep->datainterval))
@@ -849,7 +852,7 @@ int snd_usb_endpoint_start(struct snd_usb_endpoint *ep, bool can_sleep)
 
 	set_bit(EP_FLAG_RUNNING, &ep->flags);
 
-	if (snd_usb_endpoint_implict_feedback_sink(ep)) {
+	if (snd_usb_endpoint_implicit_feedback_sink(ep)) {
 		for (i = 0; i < ep->nurbs; i++) {
 			struct snd_urb_ctx *ctx = ep->urb + i;
 			list_add_tail(&ctx->ready_list, &ep->ready_playback_urbs);
@@ -950,30 +953,19 @@ int snd_usb_endpoint_deactivate(struct snd_usb_endpoint *ep)
 }
 
 /**
- * snd_usb_endpoint_release: Tear down an snd_usb_endpoint
- *
- * @ep: the endpoint to release
- *
- * This function does not care for the endpoint's use count but will tear
- * down all the streaming URBs immediately.
- */
-void snd_usb_endpoint_release(struct snd_usb_endpoint *ep)
-{
-	release_urbs(ep, 1);
-}
-
-/**
  * snd_usb_endpoint_free: Free the resources of an snd_usb_endpoint
  *
  * @ep: the list header of the endpoint to free
  *
- * This free all resources of the given ep.
+ * This function does not care for the endpoint's use count but will tear
+ * down all the streaming URBs immediately and free all resources.
  */
 void snd_usb_endpoint_free(struct list_head *head)
 {
 	struct snd_usb_endpoint *ep;
 
 	ep = list_entry(head, struct snd_usb_endpoint, list);
+	release_urbs(ep, 1);
 	kfree(ep);
 }
 
@@ -1003,7 +995,7 @@ void snd_usb_handle_sync_urb(struct snd_usb_endpoint *ep,
 	 * and add it to the list of pending urbs. queue_pending_output_urbs()
 	 * will take care of them later.
 	 */
-	if (snd_usb_endpoint_implict_feedback_sink(ep) &&
+	if (snd_usb_endpoint_implicit_feedback_sink(ep) &&
 	    ep->use_count != 0) {
 
 		/* implicit feedback case */
@@ -1083,16 +1075,7 @@ void snd_usb_handle_sync_urb(struct snd_usb_endpoint *ep,
 	if (f == 0)
 		return;
 
-	if (unlikely(sender->udh01_fb_quirk)) {
-		/*
-		 * The TEAC UD-H01 firmware sometimes changes the feedback value
-		 * by +/- 0x1.0000.
-		 */
-		if (f < ep->freqn - 0x8000)
-			f += 0x10000;
-		else if (f > ep->freqn + 0x8000)
-			f -= 0x10000;
-	} else if (unlikely(ep->freqshift == INT_MIN)) {
+	if (unlikely(ep->freqshift == INT_MIN)) {
 		/*
 		 * The first time we see a feedback value, determine its format
 		 * by shifting it left or right until it matches the nominal

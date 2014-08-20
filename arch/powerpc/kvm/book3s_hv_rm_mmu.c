@@ -97,17 +97,6 @@ void kvmppc_add_revmap_chain(struct kvm *kvm, struct revmap_entry *rev,
 }
 EXPORT_SYMBOL_GPL(kvmppc_add_revmap_chain);
 
-/*
- * Note modification of an HPTE; set the HPTE modified bit
- * if anyone is interested.
- */
-static inline void note_hpte_modification(struct kvm *kvm,
-					  struct revmap_entry *rev)
-{
-	if (atomic_read(&kvm->arch.hpte_mod_interest))
-		rev->guest_rpte |= HPTE_GR_MODIFIED;
-}
-
 /* Remove this HPTE from the chain for a real page */
 static void remove_revmap_chain(struct kvm *kvm, long pte_index,
 				struct revmap_entry *rev,
@@ -735,10 +724,6 @@ static int slb_base_page_shift[4] = {
 	20,	/* 1M, unsupported */
 };
 
-/* When called from virtmode, this func should be protected by
- * preempt_disable(), otherwise, the holding of HPTE_V_HVLOCK
- * can trigger deadlock issue.
- */
 long kvmppc_hv_find_lock_hpte(struct kvm *kvm, gva_t eaddr, unsigned long slb_v,
 			      unsigned long valid)
 {

@@ -20,6 +20,7 @@
 #include <linux/err.h>
 #include <linux/of.h>
 #include <linux/mailbox.h>
+#include <linux/platform_device.h>
 
 #define HB_CPUFREQ_CHANGE_NOTE	0x80000001
 #define HB_CPUFREQ_IPC_LEN	7
@@ -27,13 +28,7 @@
 
 static int hb_voltage_change(unsigned int freq)
 {
-	int i;
-	u32 msg[HB_CPUFREQ_IPC_LEN];
-
-	msg[0] = HB_CPUFREQ_CHANGE_NOTE;
-	msg[1] = freq / 1000000;
-	for (i = 2; i < HB_CPUFREQ_IPC_LEN; i++)
-		msg[i] = 0;
+	u32 msg[HB_CPUFREQ_IPC_LEN] = {HB_CPUFREQ_CHANGE_NOTE, freq / 1000000};
 
 	return pl320_ipc_transmit(msg);
 }
@@ -65,6 +60,7 @@ static struct notifier_block hb_cpufreq_clk_nb = {
 
 static int hb_cpufreq_driver_init(void)
 {
+	struct platform_device_info devinfo = { .name = "cpufreq-cpu0", };
 	struct device *cpu_dev;
 	struct clk *cpu_clk;
 	struct device_node *np;
@@ -103,6 +99,9 @@ static int hb_cpufreq_driver_init(void)
 		pr_err("failed to register clk notifier: %d\n", ret);
 		goto out_put_node;
 	}
+
+	/* Instantiate cpufreq-cpu0 */
+	platform_device_register_full(&devinfo);
 
 out_put_node:
 	of_node_put(np);

@@ -24,11 +24,9 @@
 #include <linux/uaccess.h>
 #include <linux/interrupt.h>
 #include <linux/pm_runtime.h>
+#include <linux/platform_data/video_s3c.h>
 
 #include <video/samsung_fimd.h>
-#include <mach/map.h>
-#include <plat/fb.h>
-
 
 /* This driver will export a number of framebuffer interfaces depending
  * on the configuration passed in via the platform data. Each fb instance
@@ -222,7 +220,6 @@ struct s3c_fb {
 	unsigned long		 irq_flags;
 	struct s3c_fb_vsync	 vsync_info;
 };
-
 
 /**
  * s3c_fb_validate_win_bpp - validate the bits-per-pixel for this mode.
@@ -1034,7 +1031,6 @@ static int s3c_fb_ioctl(struct fb_info *info, unsigned int cmd,
 
 		ret = s3c_fb_wait_for_vsync(sfb, crtc);
 		break;
-
 	default:
 		ret = -ENOTTY;
 	}
@@ -1329,17 +1325,10 @@ static void s3c_fb_set_rgb_timing(struct s3c_fb *sfb)
 	       VIDTCON1_HSPW(vmode->hsync_len - 1);
 	writel(data, regs + sfb->variant.vidtcon + 4);
 
-#if defined(CONFIG_LCD_LP101WH1)
-	data = VIDTCON2_LINEVAL(vmode->yres - 1) |
-	       VIDTCON2_HOZVAL(vmode->xres - 1 + 6) |
-	       VIDTCON2_LINEVAL_E(vmode->yres - 1) |
-	       VIDTCON2_HOZVAL_E(vmode->xres - 1);
-#else
 	data = VIDTCON2_LINEVAL(vmode->yres - 1) |
 	       VIDTCON2_HOZVAL(vmode->xres - 1) |
 	       VIDTCON2_LINEVAL_E(vmode->yres - 1) |
 	       VIDTCON2_HOZVAL_E(vmode->xres - 1);
-#endif
 	writel(data, regs + sfb->variant.vidtcon + 8);
 }
 
@@ -1431,10 +1420,9 @@ static int s3c_fb_probe(struct platform_device *pdev)
 	pm_runtime_enable(sfb->dev);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	sfb->regs = devm_request_and_ioremap(dev, res);
-	if (!sfb->regs) {
-		dev_err(dev, "failed to map registers\n");
-		ret = -ENXIO;
+	sfb->regs = devm_ioremap_resource(dev, res);
+	if (IS_ERR(sfb->regs)) {
+		ret = PTR_ERR(sfb->regs);
 		goto err_lcd_clk;
 	}
 

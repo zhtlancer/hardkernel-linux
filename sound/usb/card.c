@@ -82,6 +82,7 @@ static int pid[SNDRV_CARDS] = { [0 ... (SNDRV_CARDS-1)] = -1 };
 static int nrpacks = 8;		/* max. number of packets per urb */
 static int device_setup[SNDRV_CARDS]; /* device parameter for this card */
 static bool ignore_ctl_error;
+static bool autoclock = true;
 
 module_param_array(index, int, NULL, 0444);
 MODULE_PARM_DESC(index, "Index value for the USB audio adapter.");
@@ -100,6 +101,8 @@ MODULE_PARM_DESC(device_setup, "Specific device setup (if needed).");
 module_param(ignore_ctl_error, bool, 0444);
 MODULE_PARM_DESC(ignore_ctl_error,
 		 "Ignore errors from USB controller for mixer interfaces.");
+module_param(autoclock, bool, 0444);
+MODULE_PARM_DESC(autoclock, "Enable auto-clock selection for UAC2 devices (default: yes).");
 
 /*
  * we keep the snd_usb_audio_t instances by ourselves for merging
@@ -262,6 +265,21 @@ static int snd_usb_create_streams(struct snd_usb_audio *chip, int ctrlif)
 			usb_ifnum_to_if(dev, ctrlif)->intf_assoc;
 
 		if (!assoc) {
+			/*
+			 * Firmware writers cannot count to three.  So to find
+			 * the IAD on the NuForce UDH-100, also check the next
+			 * interface.
+			 */
+			struct usb_interface *iface =
+				usb_ifnum_to_if(dev, ctrlif + 1);
+			if (iface &&
+			    iface->intf_assoc &&
+			    iface->intf_assoc->bFunctionClass == USB_CLASS_AUDIO &&
+			    iface->intf_assoc->bFunctionProtocol == UAC_VERSION_2)
+				assoc = iface->intf_assoc;
+		}
+
+		if (!assoc) {
 			snd_printk(KERN_ERR "Audio class v2 interfaces need an interface association\n");
 			return -EINVAL;
 		}
@@ -289,11 +307,6 @@ static int snd_usb_create_streams(struct snd_usb_audio *chip, int ctrlif)
 
 static int snd_usb_audio_free(struct snd_usb_audio *chip)
 {
-	struct list_head *p, *n;
-
-	list_for_each_safe(p, n, &chip->ep_list)
-		snd_usb_endpoint_free(p);
-
 	mutex_destroy(&chip->mutex);
 	kfree(chip);
 	return 0;
@@ -362,6 +375,7 @@ static int snd_usb_audio_create(struct usb_device *dev, int idx,
 	chip->card = card;
 	chip->setup = device_setup[idx];
 	chip->nrpacks = nrpacks;
+	chip->autoclock = autoclock;
 	chip->probing = 1;
 
 	chip->usb_id = USB_ID(le16_to_cpu(dev->descriptor.idVendor),
@@ -569,7 +583,7 @@ static void snd_usb_audio_disconnect(struct usb_device *dev,
 				     struct snd_usb_audio *chip)
 {
 	struct snd_card *card;
-	struct list_head *p;
+	struct list_head *p, *n;
 
 	if (chip == (void *)-1L)
 		return;
@@ -582,16 +596,14 @@ static void snd_usb_audio_disconnect(struct usb_device *dev,
 	mutex_lock(&register_mutex);
 	chip->num_interfaces--;
 	if (chip->num_interfaces <= 0) {
-		struct snd_usb_endpoint *ep;
-
 		snd_card_disconnect(card);
 		/* release the pcm resources */
 		list_for_each(p, &chip->pcm_list) {
 			snd_usb_stream_disconnect(p);
 		}
 		/* release the endpoint resources */
-		list_for_each_entry(ep, &chip->ep_list, list) {
-			snd_usb_endpoint_release(ep);
+		list_for_each_safe(p, n, &chip->ep_list) {
+			snd_usb_endpoint_free(p);
 		}
 		/* release the midi resources */
 		list_for_each(p, &chip->midi_list) {
@@ -657,7 +669,6 @@ void snd_usb_autosuspend(struct snd_usb_audio *chip)
 static int usb_audio_suspend(struct usb_interface *intf, pm_message_t message)
 {
 	struct snd_usb_audio *chip = usb_get_intfdata(intf);
-	struct list_head *p;
 	struct snd_usb_stream *as;
 	struct usb_mixer_interface *mixer;
 
@@ -667,13 +678,12 @@ static int usb_audio_suspend(struct usb_interface *intf, pm_message_t message)
 	if (!PMSG_IS_AUTO(message)) {
 		snd_power_change_state(chip->card, SNDRV_CTL_POWER_D3hot);
 		if (!chip->num_suspended_intf++) {
-			list_for_each(p, &chip->pcm_list) {
-				as = list_entry(p, struct snd_usb_stream, list);
+			list_for_each_entry(as, &chip->pcm_list, list) {
 				snd_pcm_suspend_all(as->pcm);
 				as->substream[0].need_setup_ep =
 					as->substream[1].need_setup_ep = true;
 			}
- 		}
+		}
 	} else {
 		/*
 		 * otherwise we keep the rest of the system in the dark
@@ -728,8 +738,7 @@ static struct usb_device_id usb_audio_ids [] = {
       .bInterfaceSubClass = USB_SUBCLASS_AUDIOCONTROL },
     { }						/* Terminating entry */
 };
-
-MODULE_DEVICE_TABLE (usb, usb_audio_ids);
+MODULE_DEVICE_TABLE(usb, usb_audio_ids);
 
 /*
  * entry point for linux usb interface

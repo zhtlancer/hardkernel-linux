@@ -55,6 +55,7 @@ int mlx4_en_create_cq(struct mlx4_en_priv *priv,
 
 	cq->ring = ring;
 	cq->is_tx = mode;
+	spin_lock_init(&cq->lock);
 
 	err = mlx4_alloc_hwq_res(mdev->dev, &cq->wqres,
 				cq->buf_size, 2 * PAGE_SIZE);
@@ -76,6 +77,7 @@ int mlx4_en_activate_cq(struct mlx4_en_priv *priv, struct mlx4_en_cq *cq,
 	struct mlx4_en_dev *mdev = priv->mdev;
 	int err = 0;
 	char name[25];
+	int timestamp_en = 0;
 	struct cpu_rmap *rmap =
 #ifdef CONFIG_RFS_ACCEL
 		priv->dev->rx_cpu_rmap;
@@ -122,8 +124,13 @@ int mlx4_en_activate_cq(struct mlx4_en_priv *priv, struct mlx4_en_cq *cq,
 	if (!cq->is_tx)
 		cq->size = priv->rx_ring[cq->ring].actual_size;
 
-	err = mlx4_cq_alloc(mdev->dev, cq->size, &cq->wqres.mtt, &mdev->priv_uar,
-			    cq->wqres.db.dma, &cq->mcq, cq->vector, 0);
+	if ((cq->is_tx && priv->hwtstamp_config.tx_type) ||
+	    (!cq->is_tx && priv->hwtstamp_config.rx_filter))
+		timestamp_en = 1;
+
+	err = mlx4_cq_alloc(mdev->dev, cq->size, &cq->wqres.mtt,
+			    &mdev->priv_uar, cq->wqres.db.dma, &cq->mcq,
+			    cq->vector, 0, timestamp_en);
 	if (err)
 		return err;
 

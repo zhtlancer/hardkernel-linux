@@ -32,6 +32,7 @@ enum calibration_type {
 enum soc_type {
 	SOC_ARCH_EXYNOS4210 = 1,
 	SOC_ARCH_EXYNOS,
+	SOC_ARCH_EXYNOS5430,
 };
 /**
  * struct freq_clip_table
@@ -45,14 +46,22 @@ enum soc_type {
  */
 struct freq_clip_table {
 	unsigned int freq_clip_max;
+#ifdef CONFIG_ARM_EXYNOS_MP_CPUFREQ
+	unsigned int freq_clip_max_kfc;
+#endif
 	unsigned int temp_level;
 	const struct cpumask *mask_val;
+#ifdef CONFIG_ARM_EXYNOS_MP_CPUFREQ
+	const struct cpumask *mask_val_kfc;
+#endif
 };
 
 /**
  * struct exynos_tmu_platform_data
  * @threshold: basic temperature for generating interrupt
  *	       25 <= threshold <= 125 [unit: degree Celsius]
+ * @threshold_falling: differntial value for setting threshold
+ *		       of temperature falling interrupt.
  * @trigger_levels: array for each interrupt levels
  *	[unit: degree Celsius]
  *	0: temperature for trigger_level0 interrupt
@@ -97,11 +106,18 @@ struct freq_clip_table {
  */
 struct exynos_tmu_platform_data {
 	u8 threshold;
-	u8 trigger_levels[4];
+	u8 threshold_falling;
+	u8 trigger_levels[8];
 	bool trigger_level0_en;
 	bool trigger_level1_en;
 	bool trigger_level2_en;
 	bool trigger_level3_en;
+	bool trigger_level4_en;
+	bool trigger_level5_en;
+	bool trigger_level6_en;
+	bool trigger_level7_en;
+
+	char clk_name[2][100];
 
 	u8 gain;
 	u8 reference_voltage;
@@ -110,7 +126,9 @@ struct exynos_tmu_platform_data {
 
 	enum calibration_type cal_type;
 	enum soc_type type;
-	struct freq_clip_table freq_tab[4];
+	struct freq_clip_table freq_tab[8];
+	int size[THERMAL_TRIP_CRITICAL + 1];
 	unsigned int freq_tab_count;
+	unsigned int clock_count;
 };
 #endif /* _LINUX_EXYNOS_THERMAL_H */

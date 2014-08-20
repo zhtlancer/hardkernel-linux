@@ -131,7 +131,7 @@ static const struct regulator_desc arizona_ldo1_hc = {
 	.min_uV = 900000,
 	.uV_step = 50000,
 	.n_voltages = 8,
-	.enable_time = 500,
+	.enable_time = 1500,
 
 	.owner = THIS_MODULE,
 };
@@ -153,9 +153,11 @@ static const struct regulator_desc arizona_ldo1 = {
 
 	.vsel_reg = ARIZONA_LDO1_CONTROL_1,
 	.vsel_mask = ARIZONA_LDO1_VSEL_MASK,
+	.bypass_reg = ARIZONA_LDO1_CONTROL_1,
+	.bypass_mask = ARIZONA_LDO1_BYPASS,
 	.min_uV = 900000,
-	.uV_step = 25000,
-	.n_voltages = 13,
+	.uV_step = 50000,
+	.n_voltages = 7,
 	.enable_time = 500,
 
 	.owner = THIS_MODULE,

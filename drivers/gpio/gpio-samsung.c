@@ -38,7 +38,6 @@
 #include <plat/gpio-core.h>
 #include <plat/gpio-cfg.h>
 #include <plat/gpio-cfg-helpers.h>
-#include <plat/gpio-fns.h>
 #include <plat/pm.h>
 
 int samsung_gpio_setpull_updown(struct samsung_gpio_chip *chip,
@@ -1123,8 +1122,12 @@ int samsung_gpiolib_to_irq(struct gpio_chip *chip, unsigned int offset)
 #ifdef CONFIG_PLAT_S3C24XX
 static int s3c24xx_gpiolib_fbank_to_irq(struct gpio_chip *chip, unsigned offset)
 {
-	if (offset < 4)
-		return IRQ_EINT0 + offset;
+	if (offset < 4) {
+		if (soc_is_s3c2412())
+			return IRQ_EINT0_2412 + offset;
+		else
+			return IRQ_EINT0 + offset;
+	}
 
 	if (offset < 8)
 		return IRQ_EINT4 + offset - 4;
@@ -2723,7 +2726,8 @@ static struct samsung_gpio_chip exynos5_gpios_4[] = {
 #endif
 
 
-#if defined(CONFIG_ARCH_EXYNOS) && defined(CONFIG_OF)
+#if (defined(CONFIG_SOC_EXYNOS4210) || defined(CONFIG_SOC_EXYNOS5250))
+#ifdef CONFIG_OF
 static int exynos_gpio_xlate(struct gpio_chip *gc,
 			const struct of_phandle_args *gpiospec, u32 *flags)
 {
@@ -2778,17 +2782,18 @@ static __init void exynos_gpiolib_attach_ofnode(struct samsung_gpio_chip *chip,
 	gc->of_gpio_n_cells = 4;
 	gc->of_xlate = exynos_gpio_xlate;
 }
-#elif defined(CONFIG_ARCH_EXYNOS)
+#elif /* CONFIG_OF */
 static __init void exynos_gpiolib_attach_ofnode(struct samsung_gpio_chip *chip,
 						u64 base, u64 offset)
 {
 	return;
 }
-#endif /* defined(CONFIG_ARCH_EXYNOS) && defined(CONFIG_OF) */
+#endif /* CONFIG_OF */
+#endif /* defined(CONFIG_SOC_EXYNOS4210) || defined(CONFIG_SOC_EXYNOS5250)) */
 
 static __init void exynos4_gpiolib_init(void)
 {
-#ifdef CONFIG_ARCH_EXYNOS4
+#ifdef CONFIG_CPU_EXYNOS4210
 	struct samsung_gpio_chip *chip;
 	int i, nr_chips;
 	void __iomem *gpio_base1, *gpio_base2, *gpio_base3;
@@ -2877,7 +2882,7 @@ err_ioremap2:
 	iounmap(gpio_base1);
 err_ioremap1:
 	return;
-#endif	/* CONFIG_ARCH_EXYNOS4 */
+#endif	/* CONFIG_CPU_EXYNOS4210 */
 }
 
 static __init void exynos5_gpiolib_init(void)
@@ -3023,9 +3028,14 @@ static __init int samsung_gpiolib_init(void)
 	*/
 	struct device_node *pctrl_np;
 	static const struct of_device_id exynos_pinctrl_ids[] = {
-		{ .compatible = "samsung,pinctrl-exynos4210", },
-		{ .compatible = "samsung,pinctrl-exynos4x12", },
-		{ .compatible = "samsung,pinctrl-exynos5440", },
+		{ .compatible = "samsung,exynos4210-pinctrl", },
+		{ .compatible = "samsung,exynos4x12-pinctrl", },
+		{ .compatible = "samsung,exynos5250-pinctrl", },
+		{ .compatible = "samsung,exynos5422-pinctrl", },
+		{ .compatible = "samsung,exynos5430-evt0-pinctrl", },
+		{ .compatible = "samsung,exynos5430-pinctrl", },
+		{ .compatible = "samsung,exynos5440-pinctrl", },
+		{ }
 	};
 	for_each_matching_node(pctrl_np, exynos_pinctrl_ids)
 		if (pctrl_np && of_device_is_available(pctrl_np))
@@ -3098,8 +3108,6 @@ static __init int samsung_gpiolib_init(void)
 		exynos4_gpiolib_init();
 	} else if (soc_is_exynos5250()) {
 		exynos5_gpiolib_init();
-	} else if (soc_is_exynos4212() || soc_is_exynos4412()) {
-		exynos4_gpiolib_init();
 	} else {
 		WARN(1, "Unknown SoC in gpio-samsung, no GPIOs added\n");
 		return -ENODEV;

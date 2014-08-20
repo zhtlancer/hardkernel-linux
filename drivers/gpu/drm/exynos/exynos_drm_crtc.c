@@ -27,13 +27,6 @@ enum exynos_crtc_mode {
 	CRTC_MODE_BLANK,	/* The private plane of crtc is blank */
 };
 
-enum exynos_crtc_underscan {
-	CRTC_UNDERSCAN_AUTO,	/* automatic underscan. unimplmented same as off */
-	CRTC_UNDERSCAN_OFF,	/* underscan disabled */
-	CRTC_UNDERSCAN_ON,	/* underscan scaled mode. unimplemented because of hardware capabilities */
-	CRTC_UNDERSCAN_CROP,	/* underscan on implemented as cropped */
-};
-
 /*
  * Exynos specific crtc structure.
  *
@@ -48,9 +41,6 @@ enum exynos_crtc_underscan {
  *	this pipe value.
  * @dpms: store the crtc dpms value
  * @mode: store the crtc mode value
- * @underscan: The CRTC underscan type
- * @underscan_hborder: The underscan horizontal border
- * @underscan_vborder: The underscan vertical border
  */
 struct exynos_drm_crtc {
 	struct drm_crtc			drm_crtc;
@@ -58,9 +48,6 @@ struct exynos_drm_crtc {
 	unsigned int			pipe;
 	unsigned int			dpms;
 	enum exynos_crtc_mode		mode;
-	enum exynos_crtc_underscan	underscan;
-	uint64_t			underscan_hborder;
-	uint64_t			underscan_vborder;
 	wait_queue_head_t		pending_flip_queue;
 	atomic_t			pending_flip;
 };
@@ -125,8 +112,6 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	struct drm_plane *plane = exynos_crtc->plane;
 	unsigned int crtc_w;
 	unsigned int crtc_h;
-	unsigned int crtc_uh = 0;
-	unsigned int crtc_uv = 0;
 	int pipe = exynos_crtc->pipe;
 	int ret;
 
@@ -141,14 +126,8 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	crtc_w = crtc->fb->width - x;
 	crtc_h = crtc->fb->height - y;
 
-	if (exynos_crtc->underscan == CRTC_UNDERSCAN_CROP) {
-		crtc_uh = exynos_crtc->underscan_hborder;
-		crtc_uv = exynos_crtc->underscan_vborder;
-	}
-
-	ret = exynos_plane_mode_set(plane, crtc, crtc->fb,
-		crtc_uh, crtc_uv, crtc_w, crtc_h,
-		x, y, crtc_w, crtc_h);
+	ret = exynos_plane_mode_set(plane, crtc, crtc->fb, 0, 0, crtc_w, crtc_h,
+				    x, y, crtc_w, crtc_h);
 	if (ret)
 		return ret;
 
@@ -167,8 +146,6 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	struct drm_plane *plane = exynos_crtc->plane;
 	unsigned int crtc_w;
 	unsigned int crtc_h;
-	unsigned int crtc_uh = 0;
-	unsigned int crtc_uv = 0;
 	int ret;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
@@ -182,14 +159,8 @@ static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 	crtc_w = crtc->fb->width - x;
 	crtc_h = crtc->fb->height - y;
 
-	if (exynos_crtc->underscan == CRTC_UNDERSCAN_CROP) {
-		crtc_uh = exynos_crtc->underscan_hborder;
-		crtc_uv = exynos_crtc->underscan_vborder;
-	}
-
-	ret = exynos_plane_mode_set(plane, crtc, crtc->fb,
-		crtc_uh, crtc_uv, crtc_w, crtc_h,
-		x, y, crtc_w, crtc_h);
+	ret = exynos_plane_mode_set(plane, crtc, crtc->fb, 0, 0, crtc_w, crtc_h,
+				    x, y, crtc_w, crtc_h);
 	if (ret)
 		return ret;
 
@@ -237,17 +208,10 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	/* if the CRTC is off, just save the new framebuffer address for use if
-	 * we get turned on again later, and report to userspace that the flip
-	 * completed. */
+	/* when the page flip is requested, crtc's dpms should be on */
 	if (exynos_crtc->dpms > DRM_MODE_DPMS_ON) {
-		crtc->fb = fb;
-		if (event) {
-			spin_lock_irq(&dev->event_lock);
-			drm_send_vblank_event(dev, -1, event);
-			spin_unlock_irq(&dev->event_lock);
-		}
-		return 0;
+		DRM_ERROR("failed page flip request.\n");
+		return -EINVAL;
 	}
 
 	mutex_lock(&dev->struct_mutex);
@@ -335,23 +299,6 @@ static int exynos_drm_crtc_set_property(struct drm_crtc *crtc,
 		}
 
 		return 0;
-	} else if (property == dev_priv->crtc_underscan_property) {
-		enum exynos_crtc_underscan underscan = val;
-
-		if (underscan == exynos_crtc->underscan)
-			return 0;
-
-		exynos_crtc->underscan = underscan;
-
-		return 0;
-	} else if (property == dev_priv->crtc_underscan_hborder_property) {
-		exynos_crtc->underscan_hborder = val;
-
-		return 0;
-	} else if (property == dev_priv->crtc_underscan_vborder_property) {
-		exynos_crtc->underscan_vborder = val;
-
-		return 0;
 	}
 
 	return -EINVAL;
@@ -390,59 +337,6 @@ static void exynos_drm_crtc_attach_mode_property(struct drm_crtc *crtc)
 	drm_object_attach_property(&crtc->base, prop, 0);
 }
 
-static const struct drm_prop_enum_list underscan_names[] = {
-	{ CRTC_UNDERSCAN_AUTO, "auto" },
-	{ CRTC_UNDERSCAN_OFF, "off" },
-	{ CRTC_UNDERSCAN_CROP, "crop" },
-};
-
-static void exynos_drm_crtc_attach_underscan_property(struct drm_crtc *crtc)
-{
-	struct drm_device *dev = crtc->dev;
-	struct exynos_drm_private *dev_priv = dev->dev_private;
-	struct drm_property *prop;
-
-	DRM_DEBUG_KMS("%s\n", __func__);
-
-	prop = dev_priv->crtc_underscan_property;
-	if (!prop) {
-		prop = drm_property_create_enum(dev, 0, "underscan",
-			underscan_names, ARRAY_SIZE(underscan_names));
-		if (!prop)
-			return;
-
-		dev_priv->crtc_underscan_property = prop;
-	}
-
-	drm_object_attach_property(&crtc->base, prop, 0);
-
-
-	prop = dev_priv->crtc_underscan_hborder_property;
-	if (!prop) {
-		prop = drm_property_create_range(dev, 0, "underscan hborder",
-			0, 128);
-		if (!prop)
-			return;
-
-		dev_priv->crtc_underscan_hborder_property = prop;
-        }
-
-	drm_object_attach_property(&crtc->base, prop, 0);
-
-
-	prop = dev_priv->crtc_underscan_vborder_property;
-	if (!prop) {
-		prop = drm_property_create_range(dev, 0, "underscan vborder",
-			0, 128);
-		if (!prop)
-			return;
-
-		dev_priv->crtc_underscan_vborder_property = prop;
-        }
-
-	drm_object_attach_property(&crtc->base, prop, 0);
-}
-
 int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr)
 {
 	struct exynos_drm_crtc *exynos_crtc;
@@ -475,8 +369,6 @@ int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr)
 	drm_crtc_helper_add(crtc, &exynos_crtc_helper_funcs);
 
 	exynos_drm_crtc_attach_mode_property(crtc);
-
-	exynos_drm_crtc_attach_underscan_property(crtc);
 
 	return 0;
 }
@@ -517,7 +409,6 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *dev, int crtc)
 {
 	struct exynos_drm_private *dev_priv = dev->dev_private;
 	struct drm_pending_vblank_event *e, *t;
-	struct timeval now;
 	struct drm_crtc *drm_crtc = dev_priv->crtc[crtc];
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(drm_crtc);
 	unsigned long flags;

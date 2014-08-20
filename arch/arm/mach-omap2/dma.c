@@ -28,6 +28,7 @@
 #include <linux/init.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
+#include <linux/of.h>
 #include <linux/omap-dma.h>
 
 #include "soc.h"
@@ -248,7 +249,7 @@ static int __init omap2_system_dma_init_dev(struct omap_hwmod *oh, void *unused)
 
 	p->errata		= configure_dma_errata();
 
-	pdev = omap_device_build(name, 0, oh, p, sizeof(*p), NULL, 0, 0);
+	pdev = omap_device_build(name, 0, oh, p, sizeof(*p));
 	kfree(p);
 	if (IS_ERR(pdev)) {
 		pr_err("%s: Can't build omap_device for %s:%s.\n",
@@ -302,6 +303,9 @@ static int __init omap2_system_dma_init(void)
 	res = omap_hwmod_for_each_by_class("dma",
 			omap2_system_dma_init_dev, NULL);
 	if (res)
+		return res;
+
+	if (of_have_populated_dt())
 		return res;
 
 	pdev = platform_device_register_full(&omap_dma_dev_info);

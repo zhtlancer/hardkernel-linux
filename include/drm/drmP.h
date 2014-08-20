@@ -85,6 +85,9 @@ struct module;
 struct drm_file;
 struct drm_device;
 
+struct device_node;
+struct videomode;
+
 #include <drm/drm_os_linux.h>
 #include <drm/drm_hashtab.h>
 #include <drm/drm_mm.h>
@@ -313,6 +316,7 @@ struct drm_ioctl_desc {
 	int flags;
 	drm_ioctl_t *func;
 	unsigned int cmd_drv;
+	const char *name;
 };
 
 /**
@@ -321,7 +325,7 @@ struct drm_ioctl_desc {
  */
 
 #define DRM_IOCTL_DEF_DRV(ioctl, _func, _flags)			\
-	[DRM_IOCTL_NR(DRM_##ioctl)] = {.cmd = DRM_##ioctl, .func = _func, .flags = _flags, .cmd_drv = DRM_IOCTL_##ioctl}
+	[DRM_IOCTL_NR(DRM_##ioctl)] = {.cmd = DRM_##ioctl, .func = _func, .flags = _flags, .cmd_drv = DRM_IOCTL_##ioctl, .name = #ioctl}
 
 struct drm_magic_entry {
 	struct list_head head;
@@ -446,7 +450,15 @@ struct drm_file {
 	int is_master; /* this file private is a master for a minor */
 	struct drm_master *master; /* master this node is currently associated with
 				      N.B. not always minor->master */
+
+	/**
+	 * fbs - List of framebuffers associated with this file.
+	 *
+	 * Protected by fbs_lock. Note that the fbs list holds a reference on
+	 * the fb object to prevent it from untimely disappearing.
+	 */
 	struct list_head fbs;
+	struct mutex fbs_lock;
 
 	wait_queue_head_t event_wait;
 	struct list_head event_list;
@@ -1011,7 +1023,7 @@ struct drm_info_list {
 struct drm_info_node {
 	struct list_head list;
 	struct drm_minor *minor;
-	struct drm_info_list *info_ent;
+	const struct drm_info_list *info_ent;
 	struct dentry *dent;
 };
 
@@ -1284,6 +1296,11 @@ static inline int drm_device_is_unplugged(struct drm_device *dev)
 	return ret;
 }
 
+static inline bool drm_modeset_is_locked(struct drm_device *dev)
+{
+	return mutex_is_locked(&dev->mode_config.mutex);
+}
+
 /******************************************************************/
 /** \name Internal function definitions */
 /*@{*/
@@ -1464,6 +1481,12 @@ extern struct drm_display_mode *
 drm_mode_create_from_cmdline_mode(struct drm_device *dev,
 				  struct drm_cmdline_mode *cmd);
 
+extern int drm_display_mode_from_videomode(const struct videomode *vm,
+					   struct drm_display_mode *dmode);
+extern int of_get_drm_display_mode(struct device_node *np,
+				   struct drm_display_mode *dmode,
+				   int index);
+
 /* Modesetting support */
 extern void drm_vblank_pre_modeset(struct drm_device *dev, int crtc);
 extern void drm_vblank_post_modeset(struct drm_device *dev, int crtc);
@@ -1524,8 +1547,7 @@ extern struct idr drm_minors_idr;
 extern struct drm_local_map *drm_getsarea(struct drm_device *dev);
 
 				/* Proc support (drm_proc.h) */
-extern int drm_proc_init(struct drm_minor *minor, int minor_id,
-			 struct proc_dir_entry *root);
+extern int drm_proc_init(struct drm_minor *minor, struct proc_dir_entry *root);
 extern int drm_proc_cleanup(struct drm_minor *minor, struct proc_dir_entry *root);
 
 				/* Debugfs support */

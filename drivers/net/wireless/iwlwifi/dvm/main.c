@@ -1,6 +1,6 @@
 /******************************************************************************
  *
- * Copyright(c) 2003 - 2012 Intel Corporation. All rights reserved.
+ * Copyright(c) 2003 - 2013 Intel Corporation. All rights reserved.
  *
  * Portions of this file are derived from the ipw3945 project, as well
  * as portions of the ieee80211 subsystem header files.
@@ -252,17 +252,13 @@ static void iwl_bg_bt_runtime_config(struct work_struct *work)
 	struct iwl_priv *priv =
 		container_of(work, struct iwl_priv, bt_runtime_config);
 
-	mutex_lock(&priv->mutex);
 	if (test_bit(STATUS_EXIT_PENDING, &priv->status))
-		goto out;
+		return;
 
 	/* dont send host command if rf-kill is on */
 	if (!iwl_is_ready_rf(priv))
-		goto out;
-
+		return;
 	iwlagn_send_advance_bt_config(priv);
-out:
-	mutex_unlock(&priv->mutex);
 }
 
 static void iwl_bg_bt_full_concurrency(struct work_struct *work)
@@ -357,11 +353,8 @@ static void iwl_print_cont_event_trace(struct iwl_priv *priv, u32 base,
 		ptr = base + (4 * sizeof(u32)) + (start_idx * 3 * sizeof(u32));
 
 	/* Make sure device is powered up for SRAM reads */
-	spin_lock_irqsave(&priv->trans->reg_lock, reg_flags);
-	if (unlikely(!iwl_grab_nic_access(priv->trans))) {
-		spin_unlock_irqrestore(&priv->trans->reg_lock, reg_flags);
+	if (!iwl_trans_grab_nic_access(priv->trans, false, &reg_flags))
 		return;
-	}
 
 	/* Set starting address; reads will auto-increment */
 	iwl_write32(priv->trans, HBUS_TARG_MEM_RADDR, ptr);
@@ -392,8 +385,7 @@ static void iwl_print_cont_event_trace(struct iwl_priv *priv, u32 base,
 		}
 	}
 	/* Allow device to power down */
-	iwl_release_nic_access(priv->trans);
-	spin_unlock_irqrestore(&priv->trans->reg_lock, reg_flags);
+	iwl_trans_release_nic_access(priv->trans, &reg_flags);
 }
 
 static void iwl_continuous_event_trace(struct iwl_priv *priv)
@@ -412,7 +404,8 @@ static void iwl_continuous_event_trace(struct iwl_priv *priv)
 
 	base = priv->device_pointers.log_event_table;
 	if (iwlagn_hw_valid_rtc_data_addr(base)) {
-		iwl_read_targ_mem_bytes(priv->trans, base, &read, sizeof(read));
+		iwl_trans_read_mem_bytes(priv->trans, base,
+					 &read, sizeof(read));
 		capacity = read.capacity;
 		mode = read.mode;
 		num_wraps = read.wrap_counter;
@@ -765,7 +758,7 @@ int iwl_alive_start(struct iwl_priv *priv)
 					 BT_COEX_PRIO_TBL_EVT_INIT_CALIB2);
 		if (ret)
 			return ret;
-	} else {
+	} else if (priv->cfg->bt_params) {
 		/*
 		 * default is 2-wire BT coexexistence support
 		 */
@@ -1631,7 +1624,7 @@ static void iwl_dump_nic_error_log(struct iwl_priv *priv)
 	}
 
 	/*TODO: Update dbgfs with ISR error stats obtained below */
-	iwl_read_targ_mem_bytes(trans, base, &table, sizeof(table));
+	iwl_trans_read_mem_bytes(trans, base, &table, sizeof(table));
 
 	if (ERROR_START_OFFSET <= table.valid * ERROR_ELEM_SIZE) {
 		IWL_ERR(trans, "Start IWL Error Log Dump:\n");
@@ -1720,9 +1713,8 @@ static int iwl_print_event_log(struct iwl_priv *priv, u32 start_idx,
 	ptr = base + EVENT_START_OFFSET + (start_idx * event_size);
 
 	/* Make sure device is powered up for SRAM reads */
-	spin_lock_irqsave(&trans->reg_lock, reg_flags);
-	if (unlikely(!iwl_grab_nic_access(trans)))
-		goto out_unlock;
+	if (!iwl_trans_grab_nic_access(trans, false, &reg_flags))
+		return pos;
 
 	/* Set starting address; reads will auto-increment */
 	iwl_write32(trans, HBUS_TARG_MEM_RADDR, ptr);
@@ -1760,9 +1752,7 @@ static int iwl_print_event_log(struct iwl_priv *priv, u32 start_idx,
 	}
 
 	/* Allow device to power down */
-	iwl_release_nic_access(trans);
-out_unlock:
-	spin_unlock_irqrestore(&trans->reg_lock, reg_flags);
+	iwl_trans_release_nic_access(trans, &reg_flags);
 	return pos;
 }
 
@@ -1805,7 +1795,7 @@ static int iwl_print_last_event_logs(struct iwl_priv *priv, u32 capacity,
 #define DEFAULT_DUMP_EVENT_LOG_ENTRIES (20)
 
 int iwl_dump_nic_event_log(struct iwl_priv *priv, bool full_log,
-			    char **buf, bool display)
+			    char **buf)
 {
 	u32 base;       /* SRAM byte address of event log header */
 	u32 capacity;   /* event log capacity in # entries */
@@ -1839,10 +1829,10 @@ int iwl_dump_nic_event_log(struct iwl_priv *priv, bool full_log,
 	}
 
 	/* event log header */
-	capacity = iwl_read_targ_mem(trans, base);
-	mode = iwl_read_targ_mem(trans, base + (1 * sizeof(u32)));
-	num_wraps = iwl_read_targ_mem(trans, base + (2 * sizeof(u32)));
-	next_entry = iwl_read_targ_mem(trans, base + (3 * sizeof(u32)));
+	capacity = iwl_trans_read_mem32(trans, base);
+	mode = iwl_trans_read_mem32(trans, base + (1 * sizeof(u32)));
+	num_wraps = iwl_trans_read_mem32(trans, base + (2 * sizeof(u32)));
+	next_entry = iwl_trans_read_mem32(trans, base + (3 * sizeof(u32)));
 
 	if (capacity > logsize) {
 		IWL_ERR(priv, "Log capacity %d is bogus, limit to %d "
@@ -1876,7 +1866,7 @@ int iwl_dump_nic_event_log(struct iwl_priv *priv, bool full_log,
 		size);
 
 #ifdef CONFIG_IWLWIFI_DEBUG
-	if (display) {
+	if (buf) {
 		if (full_log)
 			bufsz = capacity * 48;
 		else
@@ -1972,7 +1962,7 @@ static void iwl_nic_error(struct iwl_op_mode *op_mode)
 		priv->fw->fw_version);
 
 	iwl_dump_nic_error_log(priv);
-	iwl_dump_nic_event_log(priv, false, NULL, false);
+	iwl_dump_nic_event_log(priv, false, NULL);
 
 	iwlagn_fw_error(priv, false);
 }
@@ -1994,13 +1984,13 @@ static void iwl_nic_config(struct iwl_op_mode *op_mode)
 	struct iwl_priv *priv = IWL_OP_MODE_GET_DVM(op_mode);
 
 	/* SKU Control */
-	iwl_set_bits_mask(priv->trans, CSR_HW_IF_CONFIG_REG,
-			  CSR_HW_IF_CONFIG_REG_MSK_MAC_DASH |
-			  CSR_HW_IF_CONFIG_REG_MSK_MAC_STEP,
-			  (CSR_HW_REV_STEP(priv->trans->hw_rev) <<
-				CSR_HW_IF_CONFIG_REG_POS_MAC_STEP) |
-			  (CSR_HW_REV_DASH(priv->trans->hw_rev) <<
-				CSR_HW_IF_CONFIG_REG_POS_MAC_DASH));
+	iwl_trans_set_bits_mask(priv->trans, CSR_HW_IF_CONFIG_REG,
+				CSR_HW_IF_CONFIG_REG_MSK_MAC_DASH |
+				CSR_HW_IF_CONFIG_REG_MSK_MAC_STEP,
+				(CSR_HW_REV_STEP(priv->trans->hw_rev) <<
+					CSR_HW_IF_CONFIG_REG_POS_MAC_STEP) |
+				(CSR_HW_REV_DASH(priv->trans->hw_rev) <<
+					CSR_HW_IF_CONFIG_REG_POS_MAC_DASH));
 
 	/* write radio config values to register */
 	if (priv->nvm_data->radio_cfg_type <= EEPROM_RF_CONFIG_TYPE_MAX) {
@@ -2012,10 +2002,11 @@ static void iwl_nic_config(struct iwl_op_mode *op_mode)
 			priv->nvm_data->radio_cfg_dash <<
 				CSR_HW_IF_CONFIG_REG_POS_PHY_DASH;
 
-		iwl_set_bits_mask(priv->trans, CSR_HW_IF_CONFIG_REG,
-				  CSR_HW_IF_CONFIG_REG_MSK_PHY_TYPE |
-				  CSR_HW_IF_CONFIG_REG_MSK_PHY_STEP |
-				  CSR_HW_IF_CONFIG_REG_MSK_PHY_DASH, reg_val);
+		iwl_trans_set_bits_mask(priv->trans, CSR_HW_IF_CONFIG_REG,
+					CSR_HW_IF_CONFIG_REG_MSK_PHY_TYPE |
+					CSR_HW_IF_CONFIG_REG_MSK_PHY_STEP |
+					CSR_HW_IF_CONFIG_REG_MSK_PHY_DASH,
+					reg_val);
 
 		IWL_INFO(priv, "Radio type=0x%x-0x%x-0x%x\n",
 			 priv->nvm_data->radio_cfg_type,

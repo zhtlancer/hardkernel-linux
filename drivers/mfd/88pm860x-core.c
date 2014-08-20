@@ -1144,17 +1144,15 @@ static int pm860x_probe(struct i2c_client *client,
 			return -ENOMEM;
 		ret = pm860x_dt_init(node, &client->dev, pdata);
 		if (ret)
-			goto err;
+			return ret;
 	} else if (!pdata) {
 		pr_info("No platform data in %s!\n", __func__);
 		return -EINVAL;
 	}
 
 	chip = kzalloc(sizeof(struct pm860x_chip), GFP_KERNEL);
-	if (chip == NULL) {
-		ret = -ENOMEM;
-		goto err;
-	}
+	if (chip == NULL)
+		return -ENOMEM;
 
 	chip->id = verify_addr(client);
 	chip->regmap = regmap_init_i2c(client, &pm860x_regmap_config);
@@ -1181,18 +1179,12 @@ static int pm860x_probe(struct i2c_client *client,
 		chip->companion_addr = pdata->companion_addr;
 		chip->companion = i2c_new_dummy(chip->client->adapter,
 						chip->companion_addr);
-		if (!chip->companion) {
-			dev_err(&client->dev,
-				"Failed to allocate I2C companion device\n");
-			return -ENODEV;
-		}
 		chip->regmap_companion = regmap_init_i2c(chip->companion,
 							&pm860x_regmap_config);
 		if (IS_ERR(chip->regmap_companion)) {
 			ret = PTR_ERR(chip->regmap_companion);
 			dev_err(&chip->companion->dev,
 				"Failed to allocate register map: %d\n", ret);
-			i2c_unregister_device(chip->companion);
 			return ret;
 		}
 		i2c_set_clientdata(chip->companion, chip);
@@ -1200,10 +1192,6 @@ static int pm860x_probe(struct i2c_client *client,
 
 	pm860x_device_init(chip, pdata);
 	return 0;
-err:
-	if (node)
-		devm_kfree(&client->dev, pdata);
-	return ret;
 }
 
 static int pm860x_remove(struct i2c_client *client)

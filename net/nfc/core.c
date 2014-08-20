@@ -27,6 +27,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#include <linux/rfkill.h>
 #include <linux/nfc.h>
 
 #include <net/genetlink.h>
@@ -57,6 +58,11 @@ int nfc_dev_up(struct nfc_dev *dev)
 	pr_debug("dev_name=%s\n", dev_name(&dev->dev));
 
 	device_lock(&dev->dev);
+
+	if (dev->rfkill && rfkill_blocked(dev->rfkill)) {
+		rc = -ERFKILL;
+		goto error;
+	}
 
 	if (!device_is_registered(&dev->dev)) {
 		rc = -ENODEV;
@@ -117,6 +123,24 @@ error:
 	return rc;
 }
 
+static int nfc_rfkill_set_block(void *data, bool blocked)
+{
+	struct nfc_dev *dev = data;
+
+	pr_debug("%s blocked %d", dev_name(&dev->dev), blocked);
+
+	if (!blocked)
+		return 0;
+
+	nfc_dev_down(dev);
+
+	return 0;
+}
+
+static const struct rfkill_ops nfc_rfkill_ops = {
+	.set_block = nfc_rfkill_set_block,
+};
+
 /**
  * nfc_start_poll - start polling for nfc targets
  *
@@ -139,6 +163,11 @@ int nfc_start_poll(struct nfc_dev *dev, u32 im_protocols, u32 tm_protocols)
 	device_lock(&dev->dev);
 
 	if (!device_is_registered(&dev->dev)) {
+		rc = -ENODEV;
+		goto error;
+	}
+
+	if (!dev->dev_up) {
 		rc = -ENODEV;
 		goto error;
 	}
@@ -730,10 +759,10 @@ struct class nfc_class = {
 };
 EXPORT_SYMBOL(nfc_class);
 
-static int match_idx(struct device *d, void *data)
+static int match_idx(struct device *d, const void *data)
 {
 	struct nfc_dev *dev = to_nfc_dev(d);
-	unsigned int *idx = data;
+	const unsigned int *idx = data;
 
 	return dev->idx == *idx;
 }
@@ -757,6 +786,7 @@ struct nfc_dev *nfc_get_device(unsigned int idx)
  */
 struct nfc_dev *nfc_allocate_device(struct nfc_ops *ops,
 				    u32 supported_protocols,
+				    u32 supported_se,
 				    int tx_headroom, int tx_tailroom)
 {
 	struct nfc_dev *dev;
@@ -774,6 +804,8 @@ struct nfc_dev *nfc_allocate_device(struct nfc_ops *ops,
 
 	dev->ops = ops;
 	dev->supported_protocols = supported_protocols;
+	dev->supported_se = supported_se;
+	dev->active_se = NFC_SE_NONE;
 	dev->tx_headroom = tx_headroom;
 	dev->tx_tailroom = tx_tailroom;
 
@@ -832,6 +864,15 @@ int nfc_register_device(struct nfc_dev *dev)
 		pr_debug("The userspace won't be notified that the device %s was added\n",
 			 dev_name(&dev->dev));
 
+	dev->rfkill = rfkill_alloc(dev_name(&dev->dev), &dev->dev,
+				   RFKILL_TYPE_NFC, &nfc_rfkill_ops, dev);
+	if (dev->rfkill) {
+		if (rfkill_register(dev->rfkill) < 0) {
+			rfkill_destroy(dev->rfkill);
+			dev->rfkill = NULL;
+		}
+	}
+
 	return 0;
 }
 EXPORT_SYMBOL(nfc_register_device);
@@ -848,6 +889,11 @@ void nfc_unregister_device(struct nfc_dev *dev)
 	pr_debug("dev_name=%s\n", dev_name(&dev->dev));
 
 	id = dev->idx;
+
+	if (dev->rfkill) {
+		rfkill_unregister(dev->rfkill);
+		rfkill_destroy(dev->rfkill);
+	}
 
 	if (dev->ops->check_presence) {
 		device_lock(&dev->dev);

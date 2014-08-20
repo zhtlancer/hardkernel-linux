@@ -30,6 +30,11 @@
 #include <net/bluetooth/bluetooth.h>
 #include <linux/proc_fs.h>
 
+#ifndef CONFIG_BT_SOCK_DEBUG
+#undef  BT_DBG
+#define BT_DBG(D...)
+#endif
+
 #define VERSION "2.16"
 
 /* Bluetooth sockets */
@@ -92,30 +97,50 @@ int bt_sock_register(int proto, const struct net_proto_family *ops)
 }
 EXPORT_SYMBOL(bt_sock_register);
 
-int bt_sock_unregister(int proto)
+void bt_sock_unregister(int proto)
 {
-	int err = 0;
-
 	if (proto < 0 || proto >= BT_MAX_PROTO)
-		return -EINVAL;
+		return;
 
 	write_lock(&bt_proto_lock);
-
-	if (!bt_proto[proto])
-		err = -ENOENT;
-	else
-		bt_proto[proto] = NULL;
-
+	bt_proto[proto] = NULL;
 	write_unlock(&bt_proto_lock);
-
-	return err;
 }
 EXPORT_SYMBOL(bt_sock_unregister);
+
+#ifdef CONFIG_PARANOID_NETWORK
+static inline int current_has_bt_admin(void)
+{
+	return !current_euid();
+}
+
+static inline int current_has_bt(void)
+{
+	return current_has_bt_admin();
+}
+# else
+static inline int current_has_bt_admin(void)
+{
+	return 1;
+}
+
+static inline int current_has_bt(void)
+{
+	return 1;
+}
+#endif
 
 static int bt_sock_create(struct net *net, struct socket *sock, int proto,
 			  int kern)
 {
 	int err;
+
+	if (proto == BTPROTO_RFCOMM || proto == BTPROTO_SCO ||
+			proto == BTPROTO_L2CAP) {
+		if (!current_has_bt())
+			return -EPERM;
+	} else if (!current_has_bt_admin())
+		return -EPERM;
 
 	if (net != &init_net)
 		return -EAFNOSUPPORT;
@@ -230,6 +255,8 @@ int bt_sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 	if (flags & (MSG_OOB))
 		return -EOPNOTSUPP;
 
+	msg->msg_namelen = 0;
+
 	skb = skb_recv_datagram(sk, flags, noblock, &err);
 	if (!skb) {
 		if (sk->sk_shutdown & RCV_SHUTDOWN)
@@ -293,6 +320,8 @@ int bt_sock_stream_recvmsg(struct kiocb *iocb, struct socket *sock,
 
 	if (flags & MSG_OOB)
 		return -EOPNOTSUPP;
+
+	msg->msg_namelen = 0;
 
 	BT_DBG("sk %p size %zu", sk, size);
 
@@ -418,7 +447,8 @@ unsigned int bt_sock_poll(struct file *file, struct socket *sock,
 		return bt_accept_poll(sk);
 
 	if (sk->sk_err || !skb_queue_empty(&sk->sk_error_queue))
-		mask |= POLLERR;
+		mask |= POLLERR |
+			(sock_flag(sk, SOCK_SELECT_ERR_QUEUE) ? POLLPRI : 0);
 
 	if (sk->sk_shutdown & RCV_SHUTDOWN)
 		mask |= POLLRDHUP | POLLIN | POLLRDNORM;
@@ -613,7 +643,7 @@ static int bt_seq_open(struct inode *inode, struct file *file)
 	struct bt_sock_list *sk_list;
 	struct bt_seq_state *s;
 
-	sk_list = PDE(inode)->data;
+	sk_list = PDE_DATA(inode);
 	s = __seq_open_private(file, &bt_seq_ops,
 			       sizeof(struct bt_seq_state));
 	if (!s)
@@ -623,35 +653,30 @@ static int bt_seq_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-int bt_procfs_init(struct module* module, struct net *net, const char *name,
+static const struct file_operations bt_fops = {
+	.open = bt_seq_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release_private
+};
+
+int bt_procfs_init(struct net *net, const char *name,
 		   struct bt_sock_list* sk_list,
 		   int (* seq_show)(struct seq_file *, void *))
 {
-	struct proc_dir_entry * pde;
-
 	sk_list->custom_seq_show = seq_show;
 
-	sk_list->fops.owner     = module;
-	sk_list->fops.open      = bt_seq_open;
-	sk_list->fops.read      = seq_read;
-	sk_list->fops.llseek    = seq_lseek;
-	sk_list->fops.release   = seq_release_private;
-
-	pde = proc_net_fops_create(net, name, 0, &sk_list->fops);
-	if (!pde)
+	if (!proc_create_data(name, 0, net->proc_net, &bt_fops, sk_list))
 		return -ENOMEM;
-
-	pde->data = sk_list;
-
 	return 0;
 }
 
 void bt_procfs_cleanup(struct net *net, const char *name)
 {
-	proc_net_remove(net, name);
+	remove_proc_entry(name, net->proc_net);
 }
 #else
-int bt_procfs_init(struct module* module, struct net *net, const char *name,
+int bt_procfs_init(struct net *net, const char *name,
 		   struct bt_sock_list* sk_list,
 		   int (* seq_show)(struct seq_file *, void *))
 {

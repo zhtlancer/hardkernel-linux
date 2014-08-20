@@ -291,10 +291,6 @@ void sctp_outq_free(struct sctp_outq *q)
 {
 	/* Throw away leftover chunks. */
 	__sctp_outq_teardown(q);
-
-	/* If we were kmalloc()'d, free the memory.  */
-	if (q->malloced)
-		kfree(q);
 }
 
 /* Put a new chunk in an sctp_outq.  */
@@ -703,11 +699,10 @@ redo:
 /* Cork the outqueue so queued chunks are really queued. */
 int sctp_outq_uncork(struct sctp_outq *q)
 {
-	int error = 0;
 	if (q->cork)
 		q->cork = 0;
-	error = sctp_outq_flush(q, 0);
-	return error;
+
+	return sctp_outq_flush(q, 0);
 }
 
 
@@ -1696,10 +1691,8 @@ static void sctp_check_transmitted(struct sctp_outq *q,
 		 * address.
 		 */
 		if (!transport->flight_size) {
-			if (timer_pending(&transport->T3_rtx_timer) &&
-			    del_timer(&transport->T3_rtx_timer)) {
+			if (del_timer(&transport->T3_rtx_timer))
 				sctp_transport_put(transport);
-			}
 		} else if (restart_timer) {
 			if (!mod_timer(&transport->T3_rtx_timer,
 				       jiffies + transport->rto))

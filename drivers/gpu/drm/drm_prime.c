@@ -1,5 +1,5 @@
 /*
- * Copyright Â© 2012 Red Hat
+ * Copyright © 2012 Red Hat
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -190,8 +190,7 @@ struct dma_buf *drm_gem_prime_export(struct drm_device *dev,
 		if (ret)
 			return ERR_PTR(ret);
 	}
-	return dma_buf_export(obj, &drm_gem_prime_dmabuf_ops, obj->size,
-			      0600);
+	return dma_buf_export(obj, &drm_gem_prime_dmabuf_ops, obj->size, flags);
 }
 EXPORT_SYMBOL(drm_gem_prime_export);
 
@@ -271,7 +270,6 @@ struct drm_gem_object *drm_gem_prime_import(struct drm_device *dev,
 			 * refcount on gem itself instead of f_count of dmabuf.
 			 */
 			drm_gem_object_reference(obj);
-			dma_buf_put(dma_buf);
 			return obj;
 		}
 	}
@@ -279,6 +277,8 @@ struct drm_gem_object *drm_gem_prime_import(struct drm_device *dev,
 	attach = dma_buf_attach(dma_buf, dev->dev);
 	if (IS_ERR(attach))
 		return ERR_PTR(PTR_ERR(attach));
+
+	get_dma_buf(dma_buf);
 
 	sgt = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
 	if (IS_ERR_OR_NULL(sgt)) {
@@ -300,6 +300,8 @@ fail_unmap:
 	dma_buf_unmap_attachment(attach, sgt, DMA_BIDIRECTIONAL);
 fail_detach:
 	dma_buf_detach(dma_buf, attach);
+	dma_buf_put(dma_buf);
+
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL(drm_gem_prime_import);
@@ -342,6 +344,9 @@ int drm_gem_prime_fd_to_handle(struct drm_device *dev,
 		goto fail;
 
 	mutex_unlock(&file_priv->prime.lock);
+
+	dma_buf_put(dma_buf);
+
 	return 0;
 
 fail:
@@ -482,11 +487,8 @@ EXPORT_SYMBOL(drm_prime_init_file_private);
 
 void drm_prime_destroy_file_private(struct drm_prime_file_private *prime_fpriv)
 {
-	struct drm_prime_member *member, *safe;
-	list_for_each_entry_safe(member, safe, &prime_fpriv->head, entry) {
-		list_del(&member->entry);
-		kfree(member);
-	}
+	/* by now drm_gem_release should've made sure the list is empty */
+	WARN_ON(!list_empty(&prime_fpriv->head));
 }
 EXPORT_SYMBOL(drm_prime_destroy_file_private);
 

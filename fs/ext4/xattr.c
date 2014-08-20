@@ -122,17 +122,18 @@ static __le32 ext4_xattr_block_csum(struct inode *inode,
 				    struct ext4_xattr_header *hdr)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(inode->i_sb);
-	__u32 csum, old;
+	__u32 csum;
+	__le32 save_csum;
+	__le64 dsk_block_nr = cpu_to_le64(block_nr);
 
-	old = hdr->h_checksum;
+	save_csum = hdr->h_checksum;
 	hdr->h_checksum = 0;
-	block_nr = cpu_to_le64(block_nr);
-	csum = ext4_chksum(sbi, sbi->s_csum_seed, (__u8 *)&block_nr,
-			   sizeof(block_nr));
+	csum = ext4_chksum(sbi, sbi->s_csum_seed, (__u8 *)&dsk_block_nr,
+			   sizeof(dsk_block_nr));
 	csum = ext4_chksum(sbi, csum, (__u8 *)hdr,
 			   EXT4_BLOCK_SIZE(inode->i_sb));
 
-	hdr->h_checksum = old;
+	hdr->h_checksum = save_csum;
 	return cpu_to_le32(csum);
 }
 
@@ -516,8 +517,8 @@ static void ext4_xattr_update_super_block(handle_t *handle,
 }
 
 /*
- * Release the xattr block BH: If the reference count is > 1, decrement it;
- * otherwise free the block.
+ * Release the xattr block BH: If the reference count is > 1, decrement
+ * it; otherwise free the block.
  */
 static void
 ext4_xattr_release_block(handle_t *handle, struct inode *inode,
@@ -537,31 +538,16 @@ ext4_xattr_release_block(handle_t *handle, struct inode *inode,
 		if (ce)
 			mb_cache_entry_free(ce);
 		get_bh(bh);
-		unlock_buffer(bh);
 		ext4_free_blocks(handle, inode, bh, 0, 1,
 				 EXT4_FREE_BLOCKS_METADATA |
 				 EXT4_FREE_BLOCKS_FORGET);
+		unlock_buffer(bh);
 	} else {
 		le32_add_cpu(&BHDR(bh)->h_refcount, -1);
 		if (ce)
 			mb_cache_entry_release(ce);
-		/*
-		 * Beware of this ugliness: Releasing of xattr block references
-		 * from different inodes can race and so we have to protect
-		 * from a race where someone else frees the block (and releases
-		 * its journal_head) before we are done dirtying the buffer. In
-		 * nojournal mode this race is harmless and we actually cannot
-		 * call ext4_handle_dirty_xattr_block() with locked buffer as
-		 * that function can call sync_dirty_buffer() so for that case
-		 * we handle the dirtying after unlocking the buffer.
-		 */
-		if (ext4_handle_valid(handle))
-			error = ext4_handle_dirty_xattr_block(handle, inode,
-							      bh);
 		unlock_buffer(bh);
-		if (!ext4_handle_valid(handle))
-			error = ext4_handle_dirty_xattr_block(handle, inode,
-							      bh);
+		error = ext4_handle_dirty_xattr_block(handle, inode, bh);
 		if (IS_SYNC(inode))
 			ext4_handle_sync(handle);
 		dquot_free_block(inode, EXT4_C2B(EXT4_SB(inode->i_sb), 1));
@@ -902,7 +888,7 @@ inserted:
 				  (unsigned long long)block);
 
 			new_bh = sb_getblk(sb, block);
-			if (!new_bh) {
+			if (unlikely(!new_bh)) {
 				error = -ENOMEM;
 getblk_failed:
 				ext4_free_blocks(handle, inode, NULL, block, 1,
@@ -1181,17 +1167,10 @@ ext4_xattr_set(struct inode *inode, int name_index, const char *name,
 {
 	handle_t *handle;
 	int error, retries = 0;
-	int credits = EXT4_DATA_TRANS_BLOCKS(inode->i_sb);
+	int credits = ext4_jbd2_credits_xattr(inode);
 
 retry:
-	/*
-	 * In case of inline data, we may push out the data to a block,
-	 * So reserve the journal space first.
-	 */
-	if (ext4_has_inline_data(inode))
-		credits += ext4_writepage_trans_blocks(inode) + 1;
-
-	handle = ext4_journal_start(inode, credits);
+	handle = ext4_journal_start(inode, EXT4_HT_XATTR, credits);
 	if (IS_ERR(handle)) {
 		error = PTR_ERR(handle);
 	} else {
@@ -1371,9 +1350,6 @@ retry:
 				    s_min_extra_isize) {
 					tried_min_extra_isize++;
 					new_extra_isize = s_min_extra_isize;
-					kfree(is); is = NULL;
-					kfree(bs); bs = NULL;
-					brelse(bh);
 					goto retry;
 				}
 				error = -1;

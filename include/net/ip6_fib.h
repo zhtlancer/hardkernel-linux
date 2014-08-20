@@ -89,8 +89,6 @@ struct fib6_table;
 struct rt6_info {
 	struct dst_entry		dst;
 
-	struct neighbour		*n;
-
 	/*
 	 * Tail elements of dst_entry (__refcnt etc.)
 	 * and these elements (rarely used in hot path) are in
@@ -167,7 +165,6 @@ static inline struct inet6_dev *ip6_dst_idev(struct dst_entry *dst)
 static inline void rt6_clean_expires(struct rt6_info *rt)
 {
 	rt->rt6i_flags &= ~RTF_EXPIRES;
-	rt->dst.expires = 0;
 }
 
 static inline void rt6_set_expires(struct rt6_info *rt, unsigned long expires)

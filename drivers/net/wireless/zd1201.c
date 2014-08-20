@@ -98,11 +98,9 @@ static int zd1201_fw_upload(struct usb_device *dev, int apfw)
 		goto exit;
 
 	err = usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), 0x4,
-	    USB_DIR_IN | 0x40, 0, 0, buf, sizeof(ret), ZD1201_FW_TIMEOUT);
+	    USB_DIR_IN | 0x40, 0,0, &ret, sizeof(ret), ZD1201_FW_TIMEOUT);
 	if (err < 0)
 		goto exit;
-
-	memcpy(&ret, buf, sizeof(ret));
 
 	if (ret & 0x80) {
 		err = -EIO;
@@ -311,7 +309,6 @@ static void zd1201_usbrx(struct urb *urb)
 	if (data[urb->actual_length-1] == ZD1201_PACKET_RXDATA) {
 		int datalen = urb->actual_length-1;
 		unsigned short len, fc, seq;
-		struct hlist_node *node;
 
 		len = ntohs(*(__be16 *)&data[datalen-2]);
 		if (len>datalen)
@@ -364,7 +361,7 @@ static void zd1201_usbrx(struct urb *urb)
 				hlist_add_head(&frag->fnode, &zd->fraglist);
 				goto resubmit;
 			}
-			hlist_for_each_entry(frag, node, &zd->fraglist, fnode)
+			hlist_for_each_entry(frag, &zd->fraglist, fnode)
 				if (frag->seq == (seq&IEEE80211_SCTL_SEQ))
 					break;
 			if (!frag)
@@ -1833,14 +1830,14 @@ err_zd:
 static void zd1201_disconnect(struct usb_interface *interface)
 {
 	struct zd1201 *zd = usb_get_intfdata(interface);
-	struct hlist_node *node, *node2;
+	struct hlist_node *node2;
 	struct zd1201_frag *frag;
 
 	if (!zd)
 		return;
 	usb_set_intfdata(interface, NULL);
 
-	hlist_for_each_entry_safe(frag, node, node2, &zd->fraglist, fnode) {
+	hlist_for_each_entry_safe(frag, node2, &zd->fraglist, fnode) {
 		hlist_del_init(&frag->fnode);
 		kfree_skb(frag->skb);
 		kfree(frag);

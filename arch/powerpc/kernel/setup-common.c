@@ -455,17 +455,9 @@ void __init smp_setup_cpu_maps(void)
 		}
 
 		for (j = 0; j < nthreads && cpu < nr_cpu_ids; j++) {
-			bool avail;
-
 			DBG("    thread %d -> cpu %d (hard id %d)\n",
 			    j, cpu, intserv[j]);
-
-			avail = of_device_is_available(dn);
-			if (!avail)
-				avail = !of_property_match_string(dn,
-						"enable-method", "spin-table");
-
-			set_cpu_present(cpu, avail);
+			set_cpu_present(cpu, true);
 			set_hard_smp_processor_id(cpu, intserv[j]);
 			set_cpu_possible(cpu, true);
 			cpu++;
@@ -629,12 +621,6 @@ int check_legacy_ioport(unsigned long base_port)
 	case FDC_BASE: /* FDC1 */
 		np = of_find_node_by_type(NULL, "fdc");
 		break;
-#ifdef CONFIG_PPC_PREP
-	case _PIDXR:
-	case _PNPWRP:
-	case PNPBIOS_BASE:
-		/* implement me */
-#endif
 	default:
 		/* ipmi is supposed to fail here */
 		break;

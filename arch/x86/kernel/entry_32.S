@@ -554,6 +554,11 @@ ENTRY(iret_exc)
 
 	CFI_RESTORE_STATE
 ldt_ss:
+	larl PT_OLDSS(%esp), %eax
+	jnz restore_nocheck
+	testl $0x00400000, %eax		# returning to 32bit stack?
+	jnz restore_nocheck		# allright, normal return
+
 #ifdef CONFIG_PARAVIRT
 	/*
 	 * The kernel can't run on a non-flat stack if paravirt mode
@@ -693,51 +698,6 @@ END(syscall_badsys)
  * End of kprobes section
  */
 	.popsection
-
-/*
- * System calls that need a pt_regs pointer.
- */
-#define PTREGSCALL0(name) \
-ENTRY(ptregs_##name) ;  \
-	leal 4(%esp),%eax; \
-	jmp sys_##name; \
-ENDPROC(ptregs_##name)
-
-#define PTREGSCALL1(name) \
-ENTRY(ptregs_##name) ; \
-	leal 4(%esp),%edx; \
-	movl (PT_EBX+4)(%esp),%eax; \
-	jmp sys_##name; \
-ENDPROC(ptregs_##name)
-
-#define PTREGSCALL2(name) \
-ENTRY(ptregs_##name) ; \
-	leal 4(%esp),%ecx; \
-	movl (PT_ECX+4)(%esp),%edx; \
-	movl (PT_EBX+4)(%esp),%eax; \
-	jmp sys_##name; \
-ENDPROC(ptregs_##name)
-
-#define PTREGSCALL3(name) \
-ENTRY(ptregs_##name) ; \
-	CFI_STARTPROC; \
-	leal 4(%esp),%eax; \
-	pushl_cfi %eax; \
-	movl PT_EDX(%eax),%ecx; \
-	movl PT_ECX(%eax),%edx; \
-	movl PT_EBX(%eax),%eax; \
-	call sys_##name; \
-	addl $4,%esp; \
-	CFI_ADJUST_CFA_OFFSET -4; \
-	ret; \
-	CFI_ENDPROC; \
-ENDPROC(ptregs_##name)
-
-PTREGSCALL1(iopl)
-PTREGSCALL0(sigreturn)
-PTREGSCALL0(rt_sigreturn)
-PTREGSCALL2(vm86)
-PTREGSCALL1(vm86old)
 
 .macro FIXUP_ESPFIX_STACK
 /*
@@ -1086,10 +1046,17 @@ ENTRY(xen_failsafe_callback)
 	_ASM_EXTABLE(4b,9b)
 ENDPROC(xen_failsafe_callback)
 
-BUILD_INTERRUPT3(xen_hvm_callback_vector, XEN_HVM_EVTCHN_CALLBACK,
+BUILD_INTERRUPT3(xen_hvm_callback_vector, HYPERVISOR_CALLBACK_VECTOR,
 		xen_evtchn_do_upcall)
 
 #endif	/* CONFIG_XEN */
+
+#if IS_ENABLED(CONFIG_HYPERV)
+
+BUILD_INTERRUPT3(hyperv_callback_vector, HYPERVISOR_CALLBACK_VECTOR,
+	hyperv_vector_handler)
+
+#endif /* CONFIG_HYPERV */
 
 #ifdef CONFIG_FUNCTION_TRACER
 #ifdef CONFIG_DYNAMIC_FTRACE
@@ -1108,7 +1075,7 @@ ENTRY(ftrace_caller)
 	pushl $0	/* Pass NULL as regs pointer */
 	movl 4*4(%esp), %eax
 	movl 0x4(%ebp), %edx
-	movl function_trace_op, %ecx
+	leal function_trace_op, %ecx
 	subl $MCOUNT_INSN_SIZE, %eax
 
 .globl ftrace_call
@@ -1166,7 +1133,7 @@ ENTRY(ftrace_regs_caller)
 	movl 12*4(%esp), %eax	/* Load ip (1st parameter) */
 	subl $MCOUNT_INSN_SIZE, %eax	/* Adjust ip */
 	movl 0x4(%ebp), %edx	/* Load parent ip (2nd parameter) */
-	movl function_trace_op, %ecx /* Save ftrace_pos in 3rd parameter */
+	leal function_trace_op, %ecx /* Save ftrace_pos in 3rd parameter */
 	pushl %esp		/* Save pt_regs as 4th parameter */
 
 GLOBAL(ftrace_regs_call)

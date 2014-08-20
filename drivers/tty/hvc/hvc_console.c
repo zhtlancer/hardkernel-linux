@@ -31,7 +31,6 @@
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/major.h>
-#include <linux/atomic.h>
 #include <linux/sysrq.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
@@ -70,9 +69,6 @@ static struct task_struct *hvc_task;
 
 /* Picks up late kicks after list walk but before schedule() */
 static int hvc_kicked;
-
-/* hvc_init is triggered from hvc_alloc, i.e. only when actually used */
-static atomic_t hvc_needs_init __read_mostly = ATOMIC_INIT(-1);
 
 static int hvc_init(void);
 
@@ -190,7 +186,7 @@ static struct tty_driver *hvc_console_device(struct console *c, int *index)
 	return hvc_driver;
 }
 
-static int hvc_console_setup(struct console *co, char *options)
+static int __init hvc_console_setup(struct console *co, char *options)
 {	
 	if (co->index < 0 || co->index >= MAX_NR_HVC_CONSOLES)
 		return -ENODEV;
@@ -633,7 +629,7 @@ int hvc_poll(struct hvc_struct *hp)
 
 	/* Read data if any */
 	for (;;) {
-		int count = tty_buffer_request_room(tty, N_INBUF);
+		int count = tty_buffer_request_room(&hp->port, N_INBUF);
 
 		/* If flip is full, just reschedule a later read */
 		if (count == 0) {
@@ -676,7 +672,7 @@ int hvc_poll(struct hvc_struct *hp)
 				}
 			}
 #endif /* CONFIG_MAGIC_SYSRQ */
-			tty_insert_flip_char(tty, buf[i], 0);
+			tty_insert_flip_char(&hp->port, buf[i], 0);
 		}
 
 		read_total += n;
@@ -695,7 +691,7 @@ int hvc_poll(struct hvc_struct *hp)
 		   a minimum for performance. */
 		timeout = MIN_TIMEOUT;
 
-		tty_flip_buffer_push(tty);
+		tty_flip_buffer_push(&hp->port);
 	}
 	tty_kref_put(tty);
 
@@ -846,7 +842,7 @@ struct hvc_struct *hvc_alloc(uint32_t vtermno, int data,
 	int i;
 
 	/* We wait until a driver actually comes along */
-	if (atomic_inc_not_zero(&hvc_needs_init)) {
+	if (!hvc_driver) {
 		int err = hvc_init();
 		if (err)
 			return ERR_PTR(err);

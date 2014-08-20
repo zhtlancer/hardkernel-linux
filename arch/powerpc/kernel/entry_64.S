@@ -33,6 +33,7 @@
 #include <asm/irqflags.h>
 #include <asm/ftrace.h>
 #include <asm/hw_irq.h>
+#include <asm/context_tracking.h>
 
 /*
  * System calls.
@@ -62,8 +63,9 @@ system_call_common:
 	std	r12,_MSR(r1)
 	std	r0,GPR0(r1)
 	std	r10,GPR1(r1)
+	beq	2f			/* if from kernel mode */
 	ACCOUNT_CPU_USER_ENTRY(r10, r11)
-	std	r2,GPR2(r1)
+2:	std	r2,GPR2(r1)
 	std	r3,GPR3(r1)
 	mfcr	r2
 	std	r4,GPR4(r1)
@@ -94,7 +96,7 @@ system_call_common:
 	addi	r9,r1,STACK_FRAME_OVERHEAD
 	ld	r11,exception_marker@toc(r2)
 	std	r11,-16(r9)		/* "regshere" marker */
-#if defined(CONFIG_VIRT_CPU_ACCOUNTING) && defined(CONFIG_PPC_SPLPAR)
+#if defined(CONFIG_VIRT_CPU_ACCOUNTING_NATIVE) && defined(CONFIG_PPC_SPLPAR)
 BEGIN_FW_FTR_SECTION
 	beq	33f
 	/* if from user, see if there are any DTL entries to process */
@@ -110,7 +112,7 @@ BEGIN_FW_FTR_SECTION
 	addi	r9,r1,STACK_FRAME_OVERHEAD
 33:
 END_FW_FTR_SECTION_IFSET(FW_FEATURE_SPLPAR)
-#endif /* CONFIG_VIRT_CPU_ACCOUNTING && CONFIG_PPC_SPLPAR */
+#endif /* CONFIG_VIRT_CPU_ACCOUNTING_NATIVE && CONFIG_PPC_SPLPAR */
 
 	/*
 	 * A syscall should always be called with interrupts enabled
@@ -149,7 +151,7 @@ END_FW_FTR_SECTION_IFSET(FW_FEATURE_SPLPAR)
 	CURRENT_THREAD_INFO(r11, r1)
 	ld	r10,TI_FLAGS(r11)
 	andi.	r11,r10,_TIF_SYSCALL_T_OR_A
-	bne-	syscall_dotrace
+	bne	syscall_dotrace
 .Lsyscall_dotrace_cont:
 	cmpldi	0,r0,NR_syscalls
 	bge-	syscall_enosys
@@ -226,6 +228,7 @@ END_FTR_SECTION_IFCLR(CPU_FTR_STCX_CHECKS_ADDRESS)
 
 	beq-	1f
 	ACCOUNT_CPU_USER_EXIT(r11, r12)
+	HMT_MEDIUM_LOW_HAS_PPR
 	ld	r13,GPR13(r1)	/* only restore r13 if returning to usermode */
 1:	ld	r2,GPR2(r1)
 	ld	r1,GPR1(r1)
@@ -302,6 +305,7 @@ syscall_exit_work:
 	subi	r12,r12,TI_FLAGS
 
 4:	/* Anything else left to do? */
+	SET_DEFAULT_THREAD_PPR(r3, r10)		/* Set thread.ppr = 3 */
 	andi.	r0,r9,(_TIF_SYSCALL_T_OR_A|_TIF_SINGLESTEP)
 	beq	.ret_from_except_lite
 
@@ -373,8 +377,6 @@ _GLOBAL(ret_from_fork)
 _GLOBAL(ret_from_kernel_thread)
 	bl	.schedule_tail
 	REST_NVGPRS(r1)
-	li	r3,0
-	std	r3,0(r1)
 	ld	r14, 0(r14)
 	mtlr	r14
 	mr	r3,r15
@@ -445,6 +447,18 @@ END_FTR_SECTION_IFSET(CPU_FTR_DSCR)
 	std	r23,_CCR(r1)
 	std	r1,KSP(r3)	/* Set old stack pointer */
 
+#ifdef CONFIG_PPC_BOOK3S_64
+BEGIN_FTR_SECTION
+	/* Event based branch registers */
+	mfspr	r0, SPRN_BESCR
+	std	r0, THREAD_BESCR(r3)
+	mfspr	r0, SPRN_EBBHR
+	std	r0, THREAD_EBBHR(r3)
+	mfspr	r0, SPRN_EBBRR
+	std	r0, THREAD_EBBRR(r3)
+END_FTR_SECTION_IFSET(CPU_FTR_ARCH_207S)
+#endif
+
 #ifdef CONFIG_SMP
 	/* We need a sync somewhere here to make sure that if the
 	 * previous task gets rescheduled on another CPU, it sees all
@@ -463,6 +477,13 @@ END_FTR_SECTION_IFSET(CPU_FTR_DSCR)
 BEGIN_FTR_SECTION
 	ldarx	r6,0,r1
 END_FTR_SECTION_IFSET(CPU_FTR_STCX_CHECKS_ADDRESS)
+
+#ifdef CONFIG_PPC_BOOK3S
+/* Cancel all explict user streams as they will have no use after context
+ * switch and will stop the HW from creating streams itself
+ */
+	DCBT_STOP_ALL_STREAM_IDS(r6)
+#endif
 
 	addi	r6,r4,-THREAD	/* Convert THREAD to 'current' */
 	std	r6,PACACURRENT(r13)	/* Set new 'current' */
@@ -527,6 +548,21 @@ END_MMU_FTR_SECTION_IFSET(MMU_FTR_1T_SEGMENT)
 	mr	r1,r8		/* start using new stack pointer */
 	std	r7,PACAKSAVE(r13)
 
+#ifdef CONFIG_PPC_BOOK3S_64
+BEGIN_FTR_SECTION
+	/* Event based branch registers */
+	ld	r0, THREAD_BESCR(r4)
+	mtspr	SPRN_BESCR, r0
+	ld	r0, THREAD_EBBHR(r4)
+	mtspr	SPRN_EBBHR, r0
+	ld	r0, THREAD_EBBRR(r4)
+	mtspr	SPRN_EBBRR, r0
+
+	ld	r0,THREAD_TAR(r4)
+	mtspr	SPRN_TAR,r0
+END_FTR_SECTION_IFSET(CPU_FTR_ARCH_207S)
+#endif
+
 #ifdef CONFIG_ALTIVEC
 BEGIN_FTR_SECTION
 	ld	r0,THREAD_VRSAVE(r4)
@@ -539,9 +575,34 @@ BEGIN_FTR_SECTION
 	ld	r7,DSCR_DEFAULT@toc(2)
 	ld	r0,THREAD_DSCR(r4)
 	cmpwi	r6,0
+	li	r8, FSCR_DSCR
 	bne	1f
 	ld	r0,0(r7)
-1:	cmpd	r0,r25
+	b	3f
+1:
+  BEGIN_FTR_SECTION_NESTED(70)
+	mfspr	r6, SPRN_FSCR
+	or	r6, r6, r8
+	mtspr	SPRN_FSCR, r6
+    BEGIN_FTR_SECTION_NESTED(69)
+	mfspr	r6, SPRN_HFSCR
+	or	r6, r6, r8
+	mtspr	SPRN_HFSCR, r6
+    END_FTR_SECTION_NESTED(CPU_FTR_HVMODE, CPU_FTR_HVMODE, 69)
+	b	4f
+  END_FTR_SECTION_NESTED(CPU_FTR_ARCH_207S, CPU_FTR_ARCH_207S, 70)
+3:
+  BEGIN_FTR_SECTION_NESTED(70)
+	mfspr	r6, SPRN_FSCR
+	andc	r6, r6, r8
+	mtspr	SPRN_FSCR, r6
+    BEGIN_FTR_SECTION_NESTED(69)
+	mfspr	r6, SPRN_HFSCR
+	andc	r6, r6, r8
+	mtspr	SPRN_HFSCR, r6
+    END_FTR_SECTION_NESTED(CPU_FTR_HVMODE, CPU_FTR_HVMODE, 69)
+  END_FTR_SECTION_NESTED(CPU_FTR_ARCH_207S, CPU_FTR_ARCH_207S, 70)
+4:	cmpd	r0,r25
 	beq	2f
 	mtspr	SPRN_DSCR,r0
 2:
@@ -595,7 +656,7 @@ _GLOBAL(ret_from_except_lite)
 	andi.	r0,r4,_TIF_NEED_RESCHED
 	beq	1f
 	bl	.restore_interrupts
-	bl	.schedule
+	SCHEDULE_USER
 	b	.ret_from_except_lite
 
 1:	bl	.save_nvgprs
@@ -762,6 +823,10 @@ fast_exception_return:
 	andc	r4,r4,r0	 /* r0 contains MSR_RI here */
 	mtmsrd	r4,1
 
+#ifdef CONFIG_PPC_TRANSACTIONAL_MEM
+	/* TM debug */
+	std	r3, PACATMSCRATCH(r13) /* Stash returned-to MSR */
+#endif
 	/*
 	 * r13 is our per cpu area, only restore it if we are returning to
 	 * userspace the value stored in the stack frame may belong to
@@ -770,6 +835,7 @@ fast_exception_return:
 	andi.	r0,r3,MSR_PR
 	beq	1f
 	ACCOUNT_CPU_USER_EXIT(r2, r4)
+	RESTORE_PPR(r2, r4)
 	REST_GPR(13, r1)
 1:
 	mtspr	SPRN_SRR1,r3
@@ -849,13 +915,22 @@ restore_check_irq_replay:
 	addi	r3,r1,STACK_FRAME_OVERHEAD;
 	bl	.timer_interrupt
 	b	.ret_from_except
+#ifdef CONFIG_PPC_DOORBELL
+1:
 #ifdef CONFIG_PPC_BOOK3E
-1:	cmpwi	cr0,r3,0x280
+	cmpwi	cr0,r3,0x280
+#else
+	BEGIN_FTR_SECTION
+		cmpwi	cr0,r3,0xe80
+	FTR_SECTION_ELSE
+		cmpwi	cr0,r3,0xa00
+	ALT_FTR_SECTION_END_IFSET(CPU_FTR_HVMODE)
+#endif /* CONFIG_PPC_BOOK3E */
 	bne	1f
 	addi	r3,r1,STACK_FRAME_OVERHEAD;
 	bl	.doorbell_exception
 	b	.ret_from_except
-#endif /* CONFIG_PPC_BOOK3E */
+#endif /* CONFIG_PPC_DOORBELL */
 1:	b	.ret_from_except /* What else to do here ? */
  
 unrecov_restore:

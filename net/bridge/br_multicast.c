@@ -39,6 +39,8 @@ static inline int br_ip_equal(const struct br_ip *a, const struct br_ip *b)
 {
 	if (a->proto != b->proto)
 		return 0;
+	if (a->vid != b->vid)
+		return 0;
 	switch (a->proto) {
 	case htons(ETH_P_IP):
 		return a->u.ip4 == b->u.ip4;
@@ -50,16 +52,19 @@ static inline int br_ip_equal(const struct br_ip *a, const struct br_ip *b)
 	return 0;
 }
 
-static inline int __br_ip4_hash(struct net_bridge_mdb_htable *mdb, __be32 ip)
+static inline int __br_ip4_hash(struct net_bridge_mdb_htable *mdb, __be32 ip,
+				__u16 vid)
 {
-	return jhash_1word(mdb->secret, (__force u32)ip) & (mdb->max - 1);
+	return jhash_2words((__force u32)ip, vid, mdb->secret) & (mdb->max - 1);
 }
 
 #if IS_ENABLED(CONFIG_IPV6)
 static inline int __br_ip6_hash(struct net_bridge_mdb_htable *mdb,
-				const struct in6_addr *ip)
+				const struct in6_addr *ip,
+				__u16 vid)
 {
-	return jhash2((__force u32 *)ip->s6_addr32, 4, mdb->secret) & (mdb->max - 1);
+	return jhash_2words(ipv6_addr_hash(ip), vid,
+			    mdb->secret) & (mdb->max - 1);
 }
 #endif
 
@@ -68,10 +73,10 @@ static inline int br_ip_hash(struct net_bridge_mdb_htable *mdb,
 {
 	switch (ip->proto) {
 	case htons(ETH_P_IP):
-		return __br_ip4_hash(mdb, ip->u.ip4);
+		return __br_ip4_hash(mdb, ip->u.ip4, ip->vid);
 #if IS_ENABLED(CONFIG_IPV6)
 	case htons(ETH_P_IPV6):
-		return __br_ip6_hash(mdb, &ip->u.ip6);
+		return __br_ip6_hash(mdb, &ip->u.ip6, ip->vid);
 #endif
 	}
 	return 0;
@@ -81,9 +86,8 @@ static struct net_bridge_mdb_entry *__br_mdb_ip_get(
 	struct net_bridge_mdb_htable *mdb, struct br_ip *dst, int hash)
 {
 	struct net_bridge_mdb_entry *mp;
-	struct hlist_node *p;
 
-	hlist_for_each_entry_rcu(mp, p, &mdb->mhash[hash], hlist[mdb->ver]) {
+	hlist_for_each_entry_rcu(mp, &mdb->mhash[hash], hlist[mdb->ver]) {
 		if (br_ip_equal(&mp->addr, dst))
 			return mp;
 	}
@@ -101,31 +105,34 @@ struct net_bridge_mdb_entry *br_mdb_ip_get(struct net_bridge_mdb_htable *mdb,
 }
 
 static struct net_bridge_mdb_entry *br_mdb_ip4_get(
-	struct net_bridge_mdb_htable *mdb, __be32 dst)
+	struct net_bridge_mdb_htable *mdb, __be32 dst, __u16 vid)
 {
 	struct br_ip br_dst;
 
 	br_dst.u.ip4 = dst;
 	br_dst.proto = htons(ETH_P_IP);
+	br_dst.vid = vid;
 
 	return br_mdb_ip_get(mdb, &br_dst);
 }
 
 #if IS_ENABLED(CONFIG_IPV6)
 static struct net_bridge_mdb_entry *br_mdb_ip6_get(
-	struct net_bridge_mdb_htable *mdb, const struct in6_addr *dst)
+	struct net_bridge_mdb_htable *mdb, const struct in6_addr *dst,
+	__u16 vid)
 {
 	struct br_ip br_dst;
 
 	br_dst.u.ip6 = *dst;
 	br_dst.proto = htons(ETH_P_IPV6);
+	br_dst.vid = vid;
 
 	return br_mdb_ip_get(mdb, &br_dst);
 }
 #endif
 
 struct net_bridge_mdb_entry *br_mdb_get(struct net_bridge *br,
-					struct sk_buff *skb)
+					struct sk_buff *skb, u16 vid)
 {
 	struct net_bridge_mdb_htable *mdb = rcu_dereference(br->mdb);
 	struct br_ip ip;
@@ -137,6 +144,7 @@ struct net_bridge_mdb_entry *br_mdb_get(struct net_bridge *br,
 		return NULL;
 
 	ip.proto = skb->protocol;
+	ip.vid = vid;
 
 	switch (skb->protocol) {
 	case htons(ETH_P_IP):
@@ -170,13 +178,12 @@ static int br_mdb_copy(struct net_bridge_mdb_htable *new,
 		       int elasticity)
 {
 	struct net_bridge_mdb_entry *mp;
-	struct hlist_node *p;
 	int maxlen;
 	int len;
 	int i;
 
 	for (i = 0; i < old->max; i++)
-		hlist_for_each_entry(mp, p, &old->mhash[i], hlist[old->ver])
+		hlist_for_each_entry(mp, &old->mhash[i], hlist[old->ver])
 			hlist_add_head(&mp->hlist[new->ver],
 				       &new->mhash[br_ip_hash(new, &mp->addr)]);
 
@@ -186,7 +193,7 @@ static int br_mdb_copy(struct net_bridge_mdb_htable *new,
 	maxlen = 0;
 	for (i = 0; i < new->max; i++) {
 		len = 0;
-		hlist_for_each_entry(mp, p, &new->mhash[i], hlist[new->ver])
+		hlist_for_each_entry(mp, &new->mhash[i], hlist[new->ver])
 			len++;
 		if (len > maxlen)
 			maxlen = len;
@@ -503,14 +510,13 @@ static struct net_bridge_mdb_entry *br_multicast_get_group(
 {
 	struct net_bridge_mdb_htable *mdb;
 	struct net_bridge_mdb_entry *mp;
-	struct hlist_node *p;
 	unsigned int count = 0;
 	unsigned int max;
 	int elasticity;
 	int err;
 
 	mdb = rcu_dereference_protected(br->mdb, 1);
-	hlist_for_each_entry(mp, p, &mdb->mhash[hash], hlist[mdb->ver]) {
+	hlist_for_each_entry(mp, &mdb->mhash[hash], hlist[mdb->ver]) {
 		count++;
 		if (unlikely(br_ip_equal(group, &mp->addr)))
 			return mp;
@@ -695,7 +701,8 @@ err:
 
 static int br_ip4_multicast_add_group(struct net_bridge *br,
 				      struct net_bridge_port *port,
-				      __be32 group)
+				      __be32 group,
+				      __u16 vid)
 {
 	struct br_ip br_group;
 
@@ -704,6 +711,7 @@ static int br_ip4_multicast_add_group(struct net_bridge *br,
 
 	br_group.u.ip4 = group;
 	br_group.proto = htons(ETH_P_IP);
+	br_group.vid = vid;
 
 	return br_multicast_add_group(br, port, &br_group);
 }
@@ -711,7 +719,8 @@ static int br_ip4_multicast_add_group(struct net_bridge *br,
 #if IS_ENABLED(CONFIG_IPV6)
 static int br_ip6_multicast_add_group(struct net_bridge *br,
 				      struct net_bridge_port *port,
-				      const struct in6_addr *group)
+				      const struct in6_addr *group,
+				      __u16 vid)
 {
 	struct br_ip br_group;
 
@@ -720,6 +729,7 @@ static int br_ip6_multicast_add_group(struct net_bridge *br,
 
 	br_group.u.ip6 = *group;
 	br_group.proto = htons(ETH_P_IPV6);
+	br_group.vid = vid;
 
 	return br_multicast_add_group(br, port, &br_group);
 }
@@ -871,10 +881,10 @@ void br_multicast_disable_port(struct net_bridge_port *port)
 {
 	struct net_bridge *br = port->br;
 	struct net_bridge_port_group *pg;
-	struct hlist_node *p, *n;
+	struct hlist_node *n;
 
 	spin_lock(&br->multicast_lock);
-	hlist_for_each_entry_safe(pg, p, n, &port->mglist, mglist)
+	hlist_for_each_entry_safe(pg, n, &port->mglist, mglist)
 		br_multicast_del_pg(br, pg);
 
 	if (!hlist_unhashed(&port->rlist))
@@ -896,10 +906,12 @@ static int br_ip4_multicast_igmp3_report(struct net_bridge *br,
 	int type;
 	int err = 0;
 	__be32 group;
+	u16 vid = 0;
 
 	if (!pskb_may_pull(skb, sizeof(*ih)))
 		return -EINVAL;
 
+	br_vlan_get_tag(skb, &vid);
 	ih = igmpv3_report_hdr(skb);
 	num = ntohs(ih->ngrec);
 	len = sizeof(*ih);
@@ -931,7 +943,7 @@ static int br_ip4_multicast_igmp3_report(struct net_bridge *br,
 			continue;
 		}
 
-		err = br_ip4_multicast_add_group(br, port, group);
+		err = br_ip4_multicast_add_group(br, port, group, vid);
 		if (err)
 			break;
 	}
@@ -950,10 +962,12 @@ static int br_ip6_multicast_mld2_report(struct net_bridge *br,
 	int len;
 	int num;
 	int err = 0;
+	u16 vid = 0;
 
 	if (!pskb_may_pull(skb, sizeof(*icmp6h)))
 		return -EINVAL;
 
+	br_vlan_get_tag(skb, &vid);
 	icmp6h = icmp6_hdr(skb);
 	num = ntohs(icmp6h->icmp6_dataun.un_data16[1]);
 	len = sizeof(*icmp6h);
@@ -991,7 +1005,8 @@ static int br_ip6_multicast_mld2_report(struct net_bridge *br,
 			continue;
 		}
 
-		err = br_ip6_multicast_add_group(br, port, &grec->grec_mca);
+		err = br_ip6_multicast_add_group(br, port, &grec->grec_mca,
+						 vid);
 		if (!err)
 			break;
 	}
@@ -1009,12 +1024,12 @@ static void br_multicast_add_router(struct net_bridge *br,
 				    struct net_bridge_port *port)
 {
 	struct net_bridge_port *p;
-	struct hlist_node *n, *slot = NULL;
+	struct hlist_node *slot = NULL;
 
-	hlist_for_each_entry(p, n, &br->router_list, rlist) {
+	hlist_for_each_entry(p, &br->router_list, rlist) {
 		if ((unsigned long) port >= (unsigned long) p)
 			break;
-		slot = n;
+		slot = &p->rlist;
 	}
 
 	if (slot)
@@ -1075,6 +1090,7 @@ static int br_ip4_multicast_query(struct net_bridge *br,
 	unsigned long now = jiffies;
 	__be32 group;
 	int err = 0;
+	u16 vid = 0;
 
 	spin_lock(&br->multicast_lock);
 	if (!netif_running(br->dev) ||
@@ -1109,7 +1125,8 @@ static int br_ip4_multicast_query(struct net_bridge *br,
 	if (!group)
 		goto out;
 
-	mp = br_mdb_ip4_get(mlock_dereference(br->mdb, br), group);
+	br_vlan_get_tag(skb, &vid);
+	mp = br_mdb_ip4_get(mlock_dereference(br->mdb, br), group, vid);
 	if (!mp)
 		goto out;
 
@@ -1150,6 +1167,7 @@ static int br_ip6_multicast_query(struct net_bridge *br,
 	unsigned long now = jiffies;
 	const struct in6_addr *group = NULL;
 	int err = 0;
+	u16 vid = 0;
 
 	spin_lock(&br->multicast_lock);
 	if (!netif_running(br->dev) ||
@@ -1157,12 +1175,6 @@ static int br_ip6_multicast_query(struct net_bridge *br,
 		goto out;
 
 	br_multicast_query_received(br, port, !ipv6_addr_any(&ip6h->saddr));
-
-	/* RFC2710+RFC3810 (MLDv1+MLDv2) require link-local source addresses */
-	if (!(ipv6_addr_type(&ip6h->saddr) & IPV6_ADDR_LINKLOCAL)) {
-		err = -EINVAL;
-		goto out;
-	}
 
 	if (skb->len == sizeof(*mld)) {
 		if (!pskb_may_pull(skb, sizeof(*mld))) {
@@ -1173,7 +1185,7 @@ static int br_ip6_multicast_query(struct net_bridge *br,
 		max_delay = msecs_to_jiffies(ntohs(mld->mld_maxdelay));
 		if (max_delay)
 			group = &mld->mld_mca;
-	} else {
+	} else if (skb->len >= sizeof(*mld2q)) {
 		if (!pskb_may_pull(skb, sizeof(*mld2q))) {
 			err = -EINVAL;
 			goto out;
@@ -1181,14 +1193,14 @@ static int br_ip6_multicast_query(struct net_bridge *br,
 		mld2q = (struct mld2_query *)icmp6_hdr(skb);
 		if (!mld2q->mld2q_nsrcs)
 			group = &mld2q->mld2q_mca;
-
-		max_delay = max(msecs_to_jiffies(MLDV2_MRC(ntohs(mld2q->mld2q_mrc))), 1UL);
+		max_delay = mld2q->mld2q_mrc ? MLDV2_MRC(ntohs(mld2q->mld2q_mrc)) : 1;
 	}
 
 	if (!group)
 		goto out;
 
-	mp = br_mdb_ip6_get(mlock_dereference(br->mdb, br), group);
+	br_vlan_get_tag(skb, &vid);
+	mp = br_mdb_ip6_get(mlock_dereference(br->mdb, br), group, vid);
 	if (!mp)
 		goto out;
 
@@ -1294,7 +1306,8 @@ out:
 
 static void br_ip4_multicast_leave_group(struct net_bridge *br,
 					 struct net_bridge_port *port,
-					 __be32 group)
+					 __be32 group,
+					 __u16 vid)
 {
 	struct br_ip br_group;
 
@@ -1303,6 +1316,7 @@ static void br_ip4_multicast_leave_group(struct net_bridge *br,
 
 	br_group.u.ip4 = group;
 	br_group.proto = htons(ETH_P_IP);
+	br_group.vid = vid;
 
 	br_multicast_leave_group(br, port, &br_group);
 }
@@ -1310,7 +1324,8 @@ static void br_ip4_multicast_leave_group(struct net_bridge *br,
 #if IS_ENABLED(CONFIG_IPV6)
 static void br_ip6_multicast_leave_group(struct net_bridge *br,
 					 struct net_bridge_port *port,
-					 const struct in6_addr *group)
+					 const struct in6_addr *group,
+					 __u16 vid)
 {
 	struct br_ip br_group;
 
@@ -1319,6 +1334,7 @@ static void br_ip6_multicast_leave_group(struct net_bridge *br,
 
 	br_group.u.ip6 = *group;
 	br_group.proto = htons(ETH_P_IPV6);
+	br_group.vid = vid;
 
 	br_multicast_leave_group(br, port, &br_group);
 }
@@ -1334,6 +1350,7 @@ static int br_multicast_ipv4_rcv(struct net_bridge *br,
 	unsigned int len;
 	unsigned int offset;
 	int err;
+	u16 vid = 0;
 
 	/* We treat OOM as packet loss for now. */
 	if (!pskb_may_pull(skb, sizeof(*iph)))
@@ -1353,7 +1370,7 @@ static int br_multicast_ipv4_rcv(struct net_bridge *br,
 		return -EINVAL;
 
 	if (iph->protocol != IPPROTO_IGMP) {
-		if ((iph->daddr & IGMP_LOCAL_GROUP_MASK) != IGMP_LOCAL_GROUP)
+		if (!ipv4_is_local_multicast(iph->daddr))
 			BR_INPUT_SKB_CB(skb)->mrouters_only = 1;
 		return 0;
 	}
@@ -1394,6 +1411,7 @@ static int br_multicast_ipv4_rcv(struct net_bridge *br,
 
 	err = 0;
 
+	br_vlan_get_tag(skb2, &vid);
 	BR_INPUT_SKB_CB(skb)->igmp = 1;
 	ih = igmp_hdr(skb2);
 
@@ -1401,7 +1419,7 @@ static int br_multicast_ipv4_rcv(struct net_bridge *br,
 	case IGMP_HOST_MEMBERSHIP_REPORT:
 	case IGMPV2_HOST_MEMBERSHIP_REPORT:
 		BR_INPUT_SKB_CB(skb)->mrouters_only = 1;
-		err = br_ip4_multicast_add_group(br, port, ih->group);
+		err = br_ip4_multicast_add_group(br, port, ih->group, vid);
 		break;
 	case IGMPV3_HOST_MEMBERSHIP_REPORT:
 		err = br_ip4_multicast_igmp3_report(br, port, skb2);
@@ -1410,7 +1428,7 @@ static int br_multicast_ipv4_rcv(struct net_bridge *br,
 		err = br_ip4_multicast_query(br, port, skb2);
 		break;
 	case IGMP_HOST_LEAVE_MESSAGE:
-		br_ip4_multicast_leave_group(br, port, ih->group);
+		br_ip4_multicast_leave_group(br, port, ih->group, vid);
 		break;
 	}
 
@@ -1435,6 +1453,7 @@ static int br_multicast_ipv6_rcv(struct net_bridge *br,
 	unsigned int len;
 	int offset;
 	int err;
+	u16 vid = 0;
 
 	if (!pskb_may_pull(skb, sizeof(*ip6h)))
 		return -EINVAL;
@@ -1518,6 +1537,7 @@ static int br_multicast_ipv6_rcv(struct net_bridge *br,
 
 	err = 0;
 
+	br_vlan_get_tag(skb, &vid);
 	BR_INPUT_SKB_CB(skb)->igmp = 1;
 
 	switch (icmp6_type) {
@@ -1530,7 +1550,7 @@ static int br_multicast_ipv6_rcv(struct net_bridge *br,
 		}
 		mld = (struct mld_msg *)skb_transport_header(skb2);
 		BR_INPUT_SKB_CB(skb)->mrouters_only = 1;
-		err = br_ip6_multicast_add_group(br, port, &mld->mld_mca);
+		err = br_ip6_multicast_add_group(br, port, &mld->mld_mca, vid);
 		break;
 	    }
 	case ICMPV6_MLD2_REPORT:
@@ -1547,7 +1567,7 @@ static int br_multicast_ipv6_rcv(struct net_bridge *br,
 			goto out;
 		}
 		mld = (struct mld_msg *)skb_transport_header(skb2);
-		br_ip6_multicast_leave_group(br, port, &mld->mld_mca);
+		br_ip6_multicast_leave_group(br, port, &mld->mld_mca, vid);
 	    }
 	}
 
@@ -1632,7 +1652,7 @@ void br_multicast_stop(struct net_bridge *br)
 {
 	struct net_bridge_mdb_htable *mdb;
 	struct net_bridge_mdb_entry *mp;
-	struct hlist_node *p, *n;
+	struct hlist_node *n;
 	u32 ver;
 	int i;
 
@@ -1649,7 +1669,7 @@ void br_multicast_stop(struct net_bridge *br)
 
 	ver = mdb->ver;
 	for (i = 0; i < mdb->max; i++) {
-		hlist_for_each_entry_safe(mp, p, n, &mdb->mhash[i],
+		hlist_for_each_entry_safe(mp, n, &mdb->mhash[i],
 					  hlist[ver]) {
 			del_timer(&mp->timer);
 			call_rcu_bh(&mp->rcu, br_multicast_free_group);
@@ -1818,7 +1838,7 @@ int br_multicast_set_hash_max(struct net_bridge *br, unsigned long val)
 	u32 old;
 	struct net_bridge_mdb_htable *mdb;
 
-	spin_lock_bh(&br->multicast_lock);
+	spin_lock(&br->multicast_lock);
 	if (!netif_running(br->dev))
 		goto unlock;
 
@@ -1850,7 +1870,7 @@ rollback:
 	}
 
 unlock:
-	spin_unlock_bh(&br->multicast_lock);
+	spin_unlock(&br->multicast_lock);
 
 	return err;
 }

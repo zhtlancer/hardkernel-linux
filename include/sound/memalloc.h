@@ -37,7 +37,7 @@ struct snd_dma_device {
 #ifndef snd_dma_pci_data
 #define snd_dma_pci_data(pci)	(&(pci)->dev)
 #define snd_dma_isa_data()	NULL
-#define snd_dma_continuous_data(x)	((struct device *)(unsigned long)(x))
+#define snd_dma_continuous_data(x)	((struct device *)(__force unsigned long)(x))
 #endif
 
 
@@ -103,7 +103,7 @@ static inline dma_addr_t snd_sgbuf_get_addr(struct snd_dma_buffer *dmab,
 {
 	struct snd_sg_buf *sgbuf = dmab->private_data;
 	dma_addr_t addr = sgbuf->table[offset >> PAGE_SHIFT].addr;
-	addr &= ~((dma_addr_t)PAGE_SIZE - 1);
+	addr &= PAGE_MASK;
 	return addr + offset % PAGE_SIZE;
 }
 

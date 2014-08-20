@@ -76,7 +76,9 @@ int kvm_iommu_map_pages(struct kvm *kvm, struct kvm_memory_slot *slot)
 	gfn     = slot->base_gfn;
 	end_gfn = gfn + slot->npages;
 
-	flags = IOMMU_READ | IOMMU_WRITE;
+	flags = IOMMU_READ;
+	if (!(slot->flags & KVM_MEM_READONLY))
+		flags |= IOMMU_WRITE;
 	if (kvm->arch.iommu_flags & KVM_IOMMU_CACHE_COHERENCY)
 		flags |= IOMMU_CACHE;
 
@@ -99,10 +101,6 @@ int kvm_iommu_map_pages(struct kvm *kvm, struct kvm_memory_slot *slot)
 
 		/* Make sure gfn is aligned to the page size we want to map */
 		while ((gfn << PAGE_SHIFT) & (page_size - 1))
-			page_size >>= 1;
-
-		/* Make sure hva is aligned to the page size we want to map */
-		while (__gfn_to_hva_memslot(slot, gfn) & (page_size - 1))
 			page_size >>= 1;
 
 		/*

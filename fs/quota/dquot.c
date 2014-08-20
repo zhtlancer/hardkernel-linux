@@ -581,17 +581,9 @@ int dquot_scan_active(struct super_block *sb,
 		dqstats_inc(DQST_LOOKUPS);
 		dqput(old_dquot);
 		old_dquot = dquot;
-		/*
-		 * ->release_dquot() can be racing with us. Our reference
-		 * protects us from new calls to it so just wait for any
-		 * outstanding call and recheck the DQ_ACTIVE_B after that.
-		 */
-		wait_on_dquot(dquot);
-		if (test_bit(DQ_ACTIVE_B, &dquot->dq_flags)) {
-			ret = fn(dquot, priv);
-			if (ret < 0)
-				goto out;
-		}
+		ret = fn(dquot, priv);
+		if (ret < 0)
+			goto out;
 		spin_lock(&dq_list_lock);
 		/* We are safe to continue now because our dquot could not
 		 * be moved out of the inuse list while we hold the reference */
@@ -1447,8 +1439,11 @@ static void __dquot_initialize(struct inode *inode, int type)
 			 * did a write before quota was turned on
 			 */
 			rsv = inode_get_rsv_space(inode);
-			if (unlikely(rsv))
+			if (unlikely(rsv)) {
+				spin_lock(&dq_data_lock);
 				dquot_resv_space(inode->i_dquot[cnt], rsv);
+				spin_unlock(&dq_data_lock);
+			}
 		}
 	}
 out_err:

@@ -16,14 +16,14 @@
 #include <linux/kernel.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
+#include <linux/irqchip/chained_irq.h>
 #include <linux/io.h>
 
 #include <mach/map.h>
+#include <mach/irqs.h>
 #include <plat/cpu.h>
 #include <plat/irq-vic-timer.h>
 #include <plat/regs-timer.h>
-
-#include <asm/mach/irq.h>
 
 static void s3c_irq_demux_vic_timer(unsigned int irq, struct irq_desc *desc)
 {
@@ -58,6 +58,11 @@ void __init s3c_init_vic_timer_irq(unsigned int num, unsigned int timer_irq)
 	struct irq_chip_type *ct;
 	unsigned int i;
 
+	if (num > 5) {
+		pr_err("%s:num = %d is wrong parameter\n",
+		       __func__, num);
+		return;
+	}
 #ifdef CONFIG_ARCH_EXYNOS
 	if (soc_is_exynos5250()) {
 		pirq[0] = EXYNOS5_IRQ_TIMER0_VIC;

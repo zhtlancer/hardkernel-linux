@@ -74,7 +74,6 @@ struct grant {
 struct blk_shadow {
 	struct blkif_request req;
 	struct request *request;
-	unsigned long frame[BLKIF_MAX_SEGMENTS_PER_REQUEST];
 	struct grant *grants_used[BLKIF_MAX_SEGMENTS_PER_REQUEST];
 	struct scatterlist sg[BLKIF_MAX_SEGMENTS_PER_REQUEST];
 };
@@ -163,6 +162,69 @@ static int add_id_to_freelist(struct blkfront_info *info,
 	info->shadow[id].request = NULL;
 	info->shadow_free = id;
 	return 0;
+}
+
+static int fill_grant_buffer(struct blkfront_info *info, int num)
+{
+	struct page *granted_page;
+	struct grant *gnt_list_entry, *n;
+	int i = 0;
+
+	while(i < num) {
+		gnt_list_entry = kzalloc(sizeof(struct grant), GFP_NOIO);
+		if (!gnt_list_entry)
+			goto out_of_memory;
+
+		granted_page = alloc_page(GFP_NOIO);
+		if (!granted_page) {
+			kfree(gnt_list_entry);
+			goto out_of_memory;
+		}
+
+		gnt_list_entry->pfn = page_to_pfn(granted_page);
+		gnt_list_entry->gref = GRANT_INVALID_REF;
+		list_add(&gnt_list_entry->node, &info->persistent_gnts);
+		i++;
+	}
+
+	return 0;
+
+out_of_memory:
+	list_for_each_entry_safe(gnt_list_entry, n,
+	                         &info->persistent_gnts, node) {
+		list_del(&gnt_list_entry->node);
+		__free_page(pfn_to_page(gnt_list_entry->pfn));
+		kfree(gnt_list_entry);
+		i--;
+	}
+	BUG_ON(i != 0);
+	return -ENOMEM;
+}
+
+static struct grant *get_grant(grant_ref_t *gref_head,
+                               struct blkfront_info *info)
+{
+	struct grant *gnt_list_entry;
+	unsigned long buffer_mfn;
+
+	BUG_ON(list_empty(&info->persistent_gnts));
+	gnt_list_entry = list_first_entry(&info->persistent_gnts, struct grant,
+	                                  node);
+	list_del(&gnt_list_entry->node);
+
+	if (gnt_list_entry->gref != GRANT_INVALID_REF) {
+		info->persistent_gnts_c--;
+		return gnt_list_entry;
+	}
+
+	/* Assign a gref to this page */
+	gnt_list_entry->gref = gnttab_claim_grant_reference(gref_head);
+	BUG_ON(gnt_list_entry->gref == -ENOSPC);
+	buffer_mfn = pfn_to_mfn(gnt_list_entry->pfn);
+	gnttab_grant_foreign_access_ref(gnt_list_entry->gref,
+	                                info->xbdev->otherend_id,
+	                                buffer_mfn, 0);
+	return gnt_list_entry;
 }
 
 static const char *op_name(int op)
@@ -293,7 +355,6 @@ static int blkif_ioctl(struct block_device *bdev, fmode_t mode,
 static int blkif_queue_request(struct request *req)
 {
 	struct blkfront_info *info = req->rq_disk->private_data;
-	unsigned long buffer_mfn;
 	struct blkif_request *ring_req;
 	unsigned long id;
 	unsigned int fsect, lsect;
@@ -306,7 +367,6 @@ static int blkif_queue_request(struct request *req)
 	 */
 	bool new_persistent_gnts;
 	grant_ref_t gref_head;
-	struct page *granted_page;
 	struct grant *gnt_list_entry = NULL;
 	struct scatterlist *sg;
 
@@ -370,42 +430,8 @@ static int blkif_queue_request(struct request *req)
 			fsect = sg->offset >> 9;
 			lsect = fsect + (sg->length >> 9) - 1;
 
-			if (info->persistent_gnts_c) {
-				BUG_ON(list_empty(&info->persistent_gnts));
-				gnt_list_entry = list_first_entry(
-				                      &info->persistent_gnts,
-				                      struct grant, node);
-				list_del(&gnt_list_entry->node);
-
-				ref = gnt_list_entry->gref;
-				buffer_mfn = pfn_to_mfn(gnt_list_entry->pfn);
-				info->persistent_gnts_c--;
-			} else {
-				ref = gnttab_claim_grant_reference(&gref_head);
-				BUG_ON(ref == -ENOSPC);
-
-				gnt_list_entry =
-					kmalloc(sizeof(struct grant),
-							 GFP_ATOMIC);
-				if (!gnt_list_entry)
-					return -ENOMEM;
-
-				granted_page = alloc_page(GFP_ATOMIC);
-				if (!granted_page) {
-					kfree(gnt_list_entry);
-					return -ENOMEM;
-				}
-
-				gnt_list_entry->pfn =
-					page_to_pfn(granted_page);
-				gnt_list_entry->gref = ref;
-
-				buffer_mfn = pfn_to_mfn(page_to_pfn(
-								granted_page));
-				gnttab_grant_foreign_access_ref(ref,
-					info->xbdev->otherend_id,
-					buffer_mfn, 0);
-			}
+			gnt_list_entry = get_grant(&gref_head, info);
+			ref = gnt_list_entry->gref;
 
 			info->shadow[id].grants_used[i] = gnt_list_entry;
 
@@ -436,7 +462,6 @@ static int blkif_queue_request(struct request *req)
 				kunmap_atomic(shared_data);
 			}
 
-			info->shadow[id].frame[i] = mfn_to_pfn(buffer_mfn);
 			ring_req->u.rw.seg[i] =
 					(struct blkif_request_segment) {
 						.gref       = ref,
@@ -803,17 +828,20 @@ static void blkif_free(struct blkfront_info *info, int suspend)
 		blk_stop_queue(info->rq);
 
 	/* Remove all persistent grants */
-	if (info->persistent_gnts_c) {
+	if (!list_empty(&info->persistent_gnts)) {
 		list_for_each_entry_safe(persistent_gnt, n,
 		                         &info->persistent_gnts, node) {
 			list_del(&persistent_gnt->node);
-			gnttab_end_foreign_access(persistent_gnt->gref, 0, 0UL);
+			if (persistent_gnt->gref != GRANT_INVALID_REF) {
+				gnttab_end_foreign_access(persistent_gnt->gref,
+				                          0, 0UL);
+				info->persistent_gnts_c--;
+			}
 			__free_page(pfn_to_page(persistent_gnt->pfn));
 			kfree(persistent_gnt);
-			info->persistent_gnts_c--;
 		}
-		BUG_ON(info->persistent_gnts_c != 0);
 	}
+	BUG_ON(info->persistent_gnts_c != 0);
 
 	/* No more gnttab callback work. */
 	gnttab_cancel_free_callback(&info->callback);
@@ -1006,6 +1034,12 @@ static int setup_blkring(struct xenbus_device *dev,
 	for (i = 0; i < BLK_RING_SIZE; i++)
 		sg_init_table(info->shadow[i].sg, BLKIF_MAX_SEGMENTS_PER_REQUEST);
 
+	/* Allocate memory for grants */
+	err = fill_grant_buffer(info, BLK_RING_SIZE *
+	                              BLKIF_MAX_SEGMENTS_PER_REQUEST);
+	if (err)
+		goto fail;
+
 	err = xenbus_grant_ring(dev, virt_to_mfn(info->ring.sring));
 	if (err < 0) {
 		free_page((unsigned long)sring);
@@ -1129,7 +1163,7 @@ static int blkfront_probe(struct xenbus_device *dev,
 		char *type;
 		int len;
 		/* no unplug has been done: do not hook devices != xen vbds */
-		if (xen_has_pv_and_legacy_disk_devices()) {
+		if (xen_platform_pci_unplug & XEN_UNPLUG_UNNECESSARY) {
 			int major;
 
 			if (!VDEV_IS_EXTENDED(vdevice))
@@ -1196,11 +1230,10 @@ static int blkif_recover(struct blkfront_info *info)
 	int j;
 
 	/* Stage 1: Make a safe copy of the shadow state. */
-	copy = kmalloc(sizeof(info->shadow),
+	copy = kmemdup(info->shadow, sizeof(info->shadow),
 		       GFP_NOIO | __GFP_REPEAT | __GFP_HIGH);
 	if (!copy)
 		return -ENOMEM;
-	memcpy(copy, info->shadow, sizeof(info->shadow));
 
 	/* Stage 2: Set up free list. */
 	memset(&info->shadow, 0, sizeof(info->shadow));
@@ -1229,7 +1262,7 @@ static int blkif_recover(struct blkfront_info *info)
 				gnttab_grant_foreign_access_ref(
 					req->u.rw.seg[j].gref,
 					info->xbdev->otherend_id,
-					pfn_to_mfn(info->shadow[req->u.rw.id].frame[j]),
+					pfn_to_mfn(copy[i].grants_used[j]->pfn),
 					0);
 		}
 		info->shadow[req->u.rw.id].req = *req;
@@ -1485,16 +1518,13 @@ static void blkback_changed(struct xenbus_device *dev,
 	case XenbusStateReconfiguring:
 	case XenbusStateReconfigured:
 	case XenbusStateUnknown:
+	case XenbusStateClosed:
 		break;
 
 	case XenbusStateConnected:
 		blkfront_connect(info);
 		break;
 
-	case XenbusStateClosed:
-		if (dev->state == XenbusStateClosed)
-			break;
-		/* Missed the backend's Closing state -- fallthrough */
 	case XenbusStateClosing:
 		blkfront_closing(info);
 		break;
@@ -1585,7 +1615,7 @@ out:
 	return err;
 }
 
-static int blkif_release(struct gendisk *disk, fmode_t mode)
+static void blkif_release(struct gendisk *disk, fmode_t mode)
 {
 	struct blkfront_info *info = disk->private_data;
 	struct block_device *bdev;
@@ -1626,7 +1656,6 @@ static int blkif_release(struct gendisk *disk, fmode_t mode)
 out:
 	bdput(bdev);
 	mutex_unlock(&blkfront_mutex);
-	return 0;
 }
 
 static const struct block_device_operations xlvbd_block_fops =
@@ -1659,7 +1688,7 @@ static int __init xlblk_init(void)
 	if (!xen_domain())
 		return -ENODEV;
 
-	if (!xen_has_pv_disk_devices())
+	if (xen_hvm_domain() && !xen_platform_pci_unplug)
 		return -ENODEV;
 
 	if (register_blkdev(XENVBD_MAJOR, DEV_NAME)) {

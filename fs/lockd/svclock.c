@@ -406,8 +406,8 @@ nlmsvc_lock(struct svc_rqst *rqstp, struct nlm_file *file,
 	__be32			ret;
 
 	dprintk("lockd: nlmsvc_lock(%s/%ld, ty=%d, pi=%d, %Ld-%Ld, bl=%d)\n",
-				file->f_file->f_path.dentry->d_inode->i_sb->s_id,
-				file->f_file->f_path.dentry->d_inode->i_ino,
+				file_inode(file->f_file)->i_sb->s_id,
+				file_inode(file->f_file)->i_ino,
 				lock->fl.fl_type, lock->fl.fl_pid,
 				(long long)lock->fl.fl_start,
 				(long long)lock->fl.fl_end,
@@ -513,8 +513,8 @@ nlmsvc_testlock(struct svc_rqst *rqstp, struct nlm_file *file,
 	__be32			ret;
 
 	dprintk("lockd: nlmsvc_testlock(%s/%ld, ty=%d, %Ld-%Ld)\n",
-				file->f_file->f_path.dentry->d_inode->i_sb->s_id,
-				file->f_file->f_path.dentry->d_inode->i_ino,
+				file_inode(file->f_file)->i_sb->s_id,
+				file_inode(file->f_file)->i_ino,
 				lock->fl.fl_type,
 				(long long)lock->fl.fl_start,
 				(long long)lock->fl.fl_end);
@@ -606,8 +606,8 @@ nlmsvc_unlock(struct net *net, struct nlm_file *file, struct nlm_lock *lock)
 	int	error;
 
 	dprintk("lockd: nlmsvc_unlock(%s/%ld, pi=%d, %Ld-%Ld)\n",
-				file->f_file->f_path.dentry->d_inode->i_sb->s_id,
-				file->f_file->f_path.dentry->d_inode->i_ino,
+				file_inode(file->f_file)->i_sb->s_id,
+				file_inode(file->f_file)->i_ino,
 				lock->fl.fl_pid,
 				(long long)lock->fl.fl_start,
 				(long long)lock->fl.fl_end);
@@ -635,8 +635,8 @@ nlmsvc_cancel_blocked(struct net *net, struct nlm_file *file, struct nlm_lock *l
 	int status = 0;
 
 	dprintk("lockd: nlmsvc_cancel(%s/%ld, pi=%d, %Ld-%Ld)\n",
-				file->f_file->f_path.dentry->d_inode->i_sb->s_id,
-				file->f_file->f_path.dentry->d_inode->i_ino,
+				file_inode(file->f_file)->i_sb->s_id,
+				file_inode(file->f_file)->i_ino,
 				lock->fl.fl_pid,
 				(long long)lock->fl.fl_start,
 				(long long)lock->fl.fl_end);
@@ -767,7 +767,6 @@ nlmsvc_grant_blocked(struct nlm_block *block)
 	struct nlm_file		*file = block->b_file;
 	struct nlm_lock		*lock = &block->b_call->a_args.lock;
 	int			error;
-	loff_t			fl_start, fl_end;
 
 	dprintk("lockd: grant blocked lock %p\n", block);
 
@@ -785,16 +784,9 @@ nlmsvc_grant_blocked(struct nlm_block *block)
 	}
 
 	/* Try the lock operation again */
-	/* vfs_lock_file() can mangle fl_start and fl_end, but we need
-	 * them unchanged for the GRANT_MSG
-	 */
 	lock->fl.fl_flags |= FL_SLEEP;
-	fl_start = lock->fl.fl_start;
-	fl_end = lock->fl.fl_end;
 	error = vfs_lock_file(file->f_file, F_SETLK, &lock->fl, NULL);
 	lock->fl.fl_flags &= ~FL_SLEEP;
-	lock->fl.fl_start = fl_start;
-	lock->fl.fl_end = fl_end;
 
 	switch (error) {
 	case 0:

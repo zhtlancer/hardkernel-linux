@@ -341,10 +341,17 @@ static void emit_load_be16(u8 cond, u8 r_res, u8 r_addr, struct jit_ctx *ctx)
 
 static inline void emit_swap16(u8 r_dst, u8 r_src, struct jit_ctx *ctx)
 {
-	emit(ARM_LSL_R(ARM_R1, r_src, 8), ctx);
-	emit(ARM_ORR_S(r_dst, ARM_R1, r_src, SRTYPE_LSL, 8), ctx);
-	emit(ARM_LSL_I(r_dst, r_dst, 8), ctx);
-	emit(ARM_LSL_R(r_dst, r_dst, 8), ctx);
+	/* r_dst = (r_src << 8) | (r_src >> 8) */
+	emit(ARM_LSL_I(ARM_R1, r_src, 8), ctx);
+	emit(ARM_ORR_S(r_dst, ARM_R1, r_src, SRTYPE_LSR, 8), ctx);
+
+	/*
+	 * we need to mask out the bits set in r_dst[23:16] due to
+	 * the first shift instruction.
+	 *
+	 * note that 0x8ff is the encoded immediate 0x00ff0000.
+	 */
+	emit(ARM_BIC_I(r_dst, r_dst, 0x8ff), ctx);
 }
 
 #else  /* ARMv6+ */
@@ -569,7 +576,7 @@ load_ind:
 			/* x = ((*(frame + k)) & 0xf) << 2; */
 			ctx->seen |= SEEN_X | SEEN_DATA | SEEN_CALL;
 			/* the interpreter should deal with the negative K */
-			if (k < 0)
+			if ((int)k < 0)
 				return -1;
 			/* offset in r1: we might have to take the slow path */
 			emit_mov_i(r_off, k, ctx);
@@ -630,10 +637,10 @@ load_ind:
 			emit(ARM_MUL(r_A, r_A, r_X), ctx);
 			break;
 		case BPF_S_ALU_DIV_K:
-			if (k == 1)
-				break;
+			/* current k == reciprocal_value(userspace k) */
 			emit_mov_i(r_scratch, k, ctx);
-			emit_udiv(r_A, r_A, r_scratch, ctx);
+			/* A = top 32 bits of the product */
+			emit(ARM_UMULL(r_scratch, r_A, r_A, r_scratch), ctx);
 			break;
 		case BPF_S_ALU_DIV_X:
 			update_on_xread(ctx);
@@ -911,9 +918,8 @@ void bpf_jit_compile(struct sk_filter *fp)
 #endif
 
 	if (bpf_jit_enable > 1)
-		print_hex_dump(KERN_INFO, "BPF JIT code: ",
-			       DUMP_PREFIX_ADDRESS, 16, 4, ctx.target,
-			       alloc_size, false);
+		/* there are 2 passes here */
+		bpf_jit_dump(fp->len, alloc_size, 2, ctx.target);
 
 	fp->bpf_func = (void *)ctx.target;
 out:

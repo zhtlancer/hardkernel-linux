@@ -18,6 +18,7 @@
 #include <linux/writeback.h>
 #include <linux/quotaops.h>
 #include <linux/swap.h>
+#include <linux/aio.h>
 
 int reiserfs_commit_write(struct file *f, struct page *page,
 			  unsigned from, unsigned to);
@@ -1603,10 +1604,10 @@ int reiserfs_encode_fh(struct inode *inode, __u32 * data, int *lenp,
 
 	if (parent && (maxlen < 5)) {
 		*lenp = 5;
-		return 255;
+		return FILEID_INVALID;
 	} else if (maxlen < 3) {
 		*lenp = 3;
-		return 255;
+		return FILEID_INVALID;
 	}
 
 	data[0] = inode->i_ino;
@@ -3210,14 +3211,8 @@ int reiserfs_setattr(struct dentry *dentry, struct iattr *attr)
 	    attr->ia_size != i_size_read(inode)) {
 		error = inode_newsize_ok(inode, attr->ia_size);
 		if (!error) {
-			/*
-			 * Could race against reiserfs_file_release
-			 * if called from NFS, so take tailpack mutex.
-			 */
-			mutex_lock(&REISERFS_I(inode)->tailpack);
 			truncate_setsize(inode, attr->ia_size);
-			reiserfs_truncate_file(inode, 1);
-			mutex_unlock(&REISERFS_I(inode)->tailpack);
+			reiserfs_vfs_truncate_file(inode);
 		}
 	}
 

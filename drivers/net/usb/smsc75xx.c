@@ -1396,13 +1396,11 @@ static int smsc75xx_bind(struct usbnet *dev, struct usb_interface *intf)
 	}
 
 	dev->data[0] = (unsigned long)kzalloc(sizeof(struct smsc75xx_priv),
-		GFP_KERNEL);
+					      GFP_KERNEL);
 
 	pdata = (struct smsc75xx_priv *)(dev->data[0]);
-	if (!pdata) {
-		netdev_warn(dev->net, "Unable to allocate smsc75xx_priv\n");
+	if (!pdata)
 		return -ENOMEM;
-	}
 
 	pdata->dev = dev;
 
@@ -2013,7 +2011,11 @@ static int smsc75xx_suspend(struct usb_interface *intf, pm_message_t message)
 	ret = smsc75xx_enter_suspend0(dev);
 
 done:
-	if (ret)
+	/*
+	 * TODO: resume() might need to handle the suspend failure
+	 * in system sleep
+	 */
+	if (ret && PMSG_IS_AUTO(message))
 		usbnet_resume(intf);
 	return ret;
 }

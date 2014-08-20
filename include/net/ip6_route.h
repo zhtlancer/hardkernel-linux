@@ -23,6 +23,7 @@ struct route_info {
 #include <net/sock.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
+#include <linux/route.h>
 
 #define RT6_LOOKUP_F_IFACE		0x00000001
 #define RT6_LOOKUP_F_REACHABLE		0x00000002
@@ -30,11 +31,6 @@ struct route_info {
 #define RT6_LOOKUP_F_SRCPREF_TMP	0x00000008
 #define RT6_LOOKUP_F_SRCPREF_PUBLIC	0x00000010
 #define RT6_LOOKUP_F_SRCPREF_COA	0x00000020
-
-/* We do not (yet ?) support IPv6 jumbograms (RFC 2675)
- * Unlike IPv4, hdr->seg_len doesn't include the IPv6 header
- */
-#define IP6_MAX_MTU (0xFFFF + sizeof(struct ipv6hdr))
 
 /*
  * rt6_srcprefs2flags() and rt6_flags2srcprefs() translate
@@ -107,7 +103,6 @@ extern struct rt6_info		*rt6_lookup(struct net *net,
 					    int oif, int flags);
 
 extern struct dst_entry *icmp6_dst_alloc(struct net_device *dev,
-					 struct neighbour *neigh,
 					 struct flowi6 *fl6);
 extern int icmp6_dst_gc(void);
 
@@ -197,6 +192,13 @@ static inline int ip6_skb_dst_mtu(struct sk_buff *skb)
 
 	return (np && np->pmtudisc == IPV6_PMTUDISC_PROBE) ?
 	       skb_dst(skb)->dev->mtu : dst_mtu(skb_dst(skb));
+}
+
+static inline struct in6_addr *rt6_nexthop(struct rt6_info *rt, struct in6_addr *dest)
+{
+	if (rt->rt6i_flags & RTF_GATEWAY)
+		return &rt->rt6i_gateway;
+	return dest;
 }
 
 #endif

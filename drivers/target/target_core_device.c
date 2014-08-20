@@ -68,7 +68,6 @@ transport_lookup_cmd_lun(struct se_cmd *se_cmd, u32 unpacked_lun)
 		struct se_dev_entry *deve = se_cmd->se_deve;
 
 		deve->total_cmds++;
-		deve->total_bytes += se_cmd->data_length;
 
 		if ((se_cmd->data_direction == DMA_TO_DEVICE) &&
 		    (deve->lun_flags & TRANSPORT_LUNFLAGS_READ_ONLY)) {
@@ -84,8 +83,6 @@ transport_lookup_cmd_lun(struct se_cmd *se_cmd, u32 unpacked_lun)
 			deve->write_bytes += se_cmd->data_length;
 		else if (se_cmd->data_direction == DMA_FROM_DEVICE)
 			deve->read_bytes += se_cmd->data_length;
-
-		deve->deve_cmds++;
 
 		se_lun = deve->se_lun;
 		se_cmd->se_lun = deve->se_lun;
@@ -273,17 +270,6 @@ int core_free_device_list_for_node(
 	nacl->device_list = NULL;
 
 	return 0;
-}
-
-void core_dec_lacl_count(struct se_node_acl *se_nacl, struct se_cmd *se_cmd)
-{
-	struct se_dev_entry *deve;
-	unsigned long flags;
-
-	spin_lock_irqsave(&se_nacl->device_list_lock, flags);
-	deve = se_nacl->device_list[se_cmd->orig_fe_lun];
-	deve->deve_cmds--;
-	spin_unlock_irqrestore(&se_nacl->device_list_lock, flags);
 }
 
 void core_update_device_list_access(
@@ -628,7 +614,6 @@ void core_dev_unexport(
 	dev->export_count--;
 	spin_unlock(&hba->device_lock);
 
-	lun->lun_sep = NULL;
 	lun->lun_se_dev = NULL;
 }
 
@@ -714,6 +699,44 @@ int se_dev_set_max_write_same_len(
 	return 0;
 }
 
+static void dev_set_t10_wwn_model_alias(struct se_device *dev)
+{
+	const char *configname;
+
+	configname = config_item_name(&dev->dev_group.cg_item);
+	if (strlen(configname) >= 16) {
+		pr_warn("dev[%p]: Backstore name '%s' is too long for "
+			"INQUIRY_MODEL, truncating to 16 bytes\n", dev,
+			configname);
+	}
+	snprintf(&dev->t10_wwn.model[0], 16, "%s", configname);
+}
+
+int se_dev_set_emulate_model_alias(struct se_device *dev, int flag)
+{
+	if (dev->export_count) {
+		pr_err("dev[%p]: Unable to change model alias"
+			" while export_count is %d\n",
+			dev, dev->export_count);
+			return -EINVAL;
+	}
+
+	if (flag != 0 && flag != 1) {
+		pr_err("Illegal value %d\n", flag);
+		return -EINVAL;
+	}
+
+	if (flag) {
+		dev_set_t10_wwn_model_alias(dev);
+	} else {
+		strncpy(&dev->t10_wwn.model[0],
+			dev->transport->inquiry_prod, 16);
+	}
+	dev->dev_attrib.emulate_model_alias = flag;
+
+	return 0;
+}
+
 int se_dev_set_emulate_dpo(struct se_device *dev, int flag)
 {
 	if (flag != 0 && flag != 1) {
@@ -773,6 +796,12 @@ int se_dev_set_emulate_write_cache(struct se_device *dev, int flag)
 		pr_err("emulate_write_cache not supported for pSCSI\n");
 		return -EINVAL;
 	}
+	if (dev->transport->get_write_cache) {
+		pr_warn("emulate_write_cache cannot be changed when underlying"
+			" HW reports WriteCacheEnabled, ignoring request\n");
+		return 0;
+	}
+
 	dev->dev_attrib.emulate_write_cache = flag;
 	pr_debug("dev[%p]: SE Device WRITE_CACHE_EMULATION flag: %d\n",
 			dev, dev->dev_attrib.emulate_write_cache);
@@ -1049,11 +1078,6 @@ int se_dev_set_block_size(struct se_device *dev, u32 block_size)
 	dev->dev_attrib.block_size = block_size;
 	pr_debug("dev[%p]: SE Device block_size changed to %u\n",
 			dev, block_size);
-
-	if (dev->dev_attrib.max_bytes_per_io)
-		dev->dev_attrib.hw_max_sectors =
-			dev->dev_attrib.max_bytes_per_io / block_size;
-
 	return 0;
 }
 
@@ -1391,6 +1415,7 @@ struct se_device *target_alloc_device(struct se_hba *hba, const char *name)
 	dev->t10_alua.t10_dev = dev;
 
 	dev->dev_attrib.da_dev = dev;
+	dev->dev_attrib.emulate_model_alias = DA_EMULATE_MODEL_ALIAS;
 	dev->dev_attrib.emulate_dpo = DA_EMULATE_DPO;
 	dev->dev_attrib.emulate_fua_write = DA_EMULATE_FUA_WRITE;
 	dev->dev_attrib.emulate_fua_read = DA_EMULATE_FUA_READ;

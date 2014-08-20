@@ -51,6 +51,15 @@ struct platform_device *of_find_device_by_node(struct device_node *np)
 }
 EXPORT_SYMBOL(of_find_device_by_node);
 
+struct amba_device *of_find_amba_device_by_node(struct device_node *np)
+{
+	struct device *dev;
+
+	dev = bus_find_device(&amba_bustype, NULL, np, of_dev_node_match);
+	return dev ? to_amba_device(dev) : NULL;
+}
+EXPORT_SYMBOL(of_find_amba_device_by_node);
+
 #if defined(CONFIG_PPC_DCR)
 #include <asm/dcr.h>
 #endif
@@ -436,6 +445,7 @@ EXPORT_SYMBOL(of_platform_bus_probe);
  * of_platform_populate() - Populate platform_devices from device tree data
  * @root: parent of the first level to probe or NULL for the root of the tree
  * @matches: match table, NULL to use the default
+ * @lookup: auxdata table for matching id and platform_data with device nodes
  * @parent: parent to hook devices from, NULL for toplevel
  *
  * Similar to of_platform_bus_probe(), this function walks the device tree

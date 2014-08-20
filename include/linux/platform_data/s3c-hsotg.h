@@ -15,6 +15,8 @@
 #ifndef __LINUX_USB_S3C_HSOTG_H
 #define __LINUX_USB_S3C_HSOTG_H
 
+struct platform_device;
+
 enum s3c_hsotg_dmamode {
 	S3C_HSOTG_DMA_NONE,	/* do not use DMA at-all */
 	S3C_HSOTG_DMA_ONLY,	/* always use DMA */
@@ -33,8 +35,6 @@ struct s3c_hsotg_plat {
 
 	int (*phy_init)(struct platform_device *pdev, int type);
 	int (*phy_exit)(struct platform_device *pdev, int type);
-	int (*phy_suspend)(struct platform_device *pdev, int type);
-	int (*phy_resume)(struct platform_device *pdev, int type);
 };
 
 extern void s3c_hsotg_set_platdata(struct s3c_hsotg_plat *pd);

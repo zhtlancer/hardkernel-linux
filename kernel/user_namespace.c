@@ -9,7 +9,7 @@
 #include <linux/nsproxy.h>
 #include <linux/slab.h>
 #include <linux/user_namespace.h>
-#include <linux/proc_fs.h>
+#include <linux/proc_ns.h>
 #include <linux/highuid.h>
 #include <linux/cred.h>
 #include <linux/securebits.h>
@@ -92,7 +92,7 @@ int create_user_ns(struct cred *new)
 		return ret;
 	}
 
-	kref_init(&ns->kref);
+	atomic_set(&ns->count, 1);
 	/* Leave the new->user_ns reference with the new user namespace. */
 	ns->parent = parent_ns;
 	ns->level = parent_ns->level + 1;
@@ -126,15 +126,16 @@ int unshare_userns(unsigned long unshare_flags, struct cred **new_cred)
 	return err;
 }
 
-void free_user_ns(struct kref *kref)
+void free_user_ns(struct user_namespace *ns)
 {
-	struct user_namespace *parent, *ns =
-		container_of(kref, struct user_namespace, kref);
+	struct user_namespace *parent;
 
-	parent = ns->parent;
-	proc_free_inum(ns->proc_inum);
-	kmem_cache_free(user_ns_cachep, ns);
-	put_user_ns(parent);
+	do {
+		parent = ns->parent;
+		proc_free_inum(ns->proc_inum);
+		kmem_cache_free(user_ns_cachep, ns);
+		ns = parent;
+	} while (atomic_dec_and_test(&parent->count));
 }
 EXPORT_SYMBOL(free_user_ns);
 
@@ -147,7 +148,7 @@ static u32 map_id_range_down(struct uid_gid_map *map, u32 id, u32 count)
 
 	/* Find the matching extent */
 	extents = map->nr_extents;
-	smp_rmb();
+	smp_read_barrier_depends();
 	for (idx = 0; idx < extents; idx++) {
 		first = map->extent[idx].first;
 		last = first + map->extent[idx].count - 1;
@@ -171,7 +172,7 @@ static u32 map_id_down(struct uid_gid_map *map, u32 id)
 
 	/* Find the matching extent */
 	extents = map->nr_extents;
-	smp_rmb();
+	smp_read_barrier_depends();
 	for (idx = 0; idx < extents; idx++) {
 		first = map->extent[idx].first;
 		last = first + map->extent[idx].count - 1;
@@ -194,7 +195,7 @@ static u32 map_id_up(struct uid_gid_map *map, u32 id)
 
 	/* Find the matching extent */
 	extents = map->nr_extents;
-	smp_rmb();
+	smp_read_barrier_depends();
 	for (idx = 0; idx < extents; idx++) {
 		first = map->extent[idx].lower_first;
 		last = first + map->extent[idx].count - 1;
@@ -541,6 +542,42 @@ struct seq_operations proc_projid_seq_operations = {
 	.show = projid_m_show,
 };
 
+static bool mappings_overlap(struct uid_gid_map *new_map, struct uid_gid_extent *extent)
+{
+	u32 upper_first, lower_first, upper_last, lower_last;
+	unsigned idx;
+
+	upper_first = extent->first;
+	lower_first = extent->lower_first;
+	upper_last = upper_first + extent->count - 1;
+	lower_last = lower_first + extent->count - 1;
+
+	for (idx = 0; idx < new_map->nr_extents; idx++) {
+		u32 prev_upper_first, prev_lower_first;
+		u32 prev_upper_last, prev_lower_last;
+		struct uid_gid_extent *prev;
+
+		prev = &new_map->extent[idx];
+
+		prev_upper_first = prev->first;
+		prev_lower_first = prev->lower_first;
+		prev_upper_last = prev_upper_first + prev->count - 1;
+		prev_lower_last = prev_lower_first + prev->count - 1;
+
+		/* Does the upper range intersect a previous extent? */
+		if ((prev_upper_first <= upper_last) &&
+		    (prev_upper_last >= upper_first))
+			return true;
+
+		/* Does the lower range intersect a previous extent? */
+		if ((prev_lower_first <= lower_last) &&
+		    (prev_lower_last >= lower_first))
+			return true;
+	}
+	return false;
+}
+
+
 static DEFINE_MUTEX(id_map_mutex);
 
 static ssize_t map_write(struct file *file, const char __user *buf,
@@ -553,7 +590,7 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 	struct user_namespace *ns = seq->private;
 	struct uid_gid_map new_map;
 	unsigned idx;
-	struct uid_gid_extent *extent, *last = NULL;
+	struct uid_gid_extent *extent = NULL;
 	unsigned long page = 0;
 	char *kbuf, *pos, *next_line;
 	ssize_t ret = -EINVAL;
@@ -574,8 +611,9 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 	 * were written before the count of the extents.
 	 *
 	 * To achieve this smp_wmb() is used on guarantee the write
-	 * order and smp_rmb() is guaranteed that we don't have crazy
-	 * architectures returning stale data.
+	 * order and smp_read_barrier_depends() is guaranteed that we
+	 * don't have crazy architectures returning stale data.
+	 *
 	 */
 	mutex_lock(&id_map_mutex);
 
@@ -655,14 +693,11 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 		if ((extent->lower_first + extent->count) <= extent->lower_first)
 			goto out;
 
-		/* For now only accept extents that are strictly in order */
-		if (last &&
-		    (((last->first + last->count) > extent->first) ||
-		     ((last->lower_first + last->count) > extent->lower_first)))
+		/* Do the ranges in extent overlap any previous extents? */
+		if (mappings_overlap(&new_map, extent))
 			goto out;
 
 		new_map.nr_extents++;
-		last = extent;
 
 		/* Fail if the file contains too many extents */
 		if ((new_map.nr_extents == UID_GID_MAP_MAX_EXTENTS) &&
@@ -762,7 +797,7 @@ ssize_t proc_projid_map_write(struct file *file, const char __user *buf, size_t 
 			 &ns->projid_map, &ns->parent->projid_map);
 }
 
-static bool new_idmap_permitted(const struct file *file,
+static bool new_idmap_permitted(const struct file *file, 
 				struct user_namespace *ns, int cap_setid,
 				struct uid_gid_map *new_map)
 {

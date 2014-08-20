@@ -125,7 +125,7 @@ struct menu_device {
 
 #define LOAD_INT(x) ((x) >> FSHIFT)
 #define LOAD_FRAC(x) LOAD_INT(((x) & (FIXED_1-1)) * 100)
-
+/*
 static int get_loadavg(void)
 {
 	unsigned long this = this_cpu_load();
@@ -133,6 +133,7 @@ static int get_loadavg(void)
 
 	return LOAD_INT(this) * 10 + LOAD_FRAC(this) / 10;
 }
+*/
 
 static inline int which_bucket(unsigned int duration)
 {
@@ -173,7 +174,12 @@ static inline int performance_multiplier(void)
 
 	/* for higher loadavg, we are more reluctant */
 
-	mult += 2 * get_loadavg();
+	/*
+	 * this doesn't work as intended - it is almost always 0, but can
+	 * sometimes, depending on workload, spike very high into the hundreds
+	 * even when the average cpu load is under 10%.
+	 */
+	/* mult += 2 * get_loadavg(); */
 
 	/* for IO wait tasks (per cpu!) we add 5x each */
 	mult += 10 * nr_iowait_cpu(smp_processor_id());
@@ -197,12 +203,11 @@ static u64 div_round64(u64 dividend, u32 divisor)
  * of points is below a threshold. If it is... then use the
  * average of these 8 points as the estimated value.
  */
-static u32 get_typical_interval(struct menu_device *data)
+static void get_typical_interval(struct menu_device *data)
 {
 	int i = 0, divisor = 0;
 	uint64_t max = 0, avg = 0, stddev = 0;
 	int64_t thresh = LLONG_MAX; /* Discard outliers above this value. */
-	unsigned int ret = 0;
 
 again:
 
@@ -243,16 +248,13 @@ again:
 	if (((avg > stddev * 6) && (divisor * 4 >= INTERVALS * 3))
 							|| stddev <= 20) {
 		data->predicted_us = avg;
-		ret = 1;
-		return ret;
+		return;
 
 	} else if ((divisor * 4) > INTERVALS * 3) {
 		/* Exclude the max interval */
 		thresh = max - 1;
 		goto again;
 	}
-
-	return ret;
 }
 
 /**
@@ -301,7 +303,17 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 	data->predicted_us = div_round64(data->expected_us * data->correction_factor[data->bucket],
 					 RESOLUTION * DECAY);
 
+	/* This patch is not checked */
+#ifndef CONFIG_CPU_THERMAL_IPA
 	get_typical_interval(data);
+#else
+	/*
+	 * HACK - Ignore repeating patterns when we're
+	 * forecasting a very large idle period.
+	 */
+	if(data->predicted_us < MAX_INTERESTING)
+		get_typical_interval(data);
+#endif
 
 	/*
 	 * We want to default to C1 (hlt), not to busy polling

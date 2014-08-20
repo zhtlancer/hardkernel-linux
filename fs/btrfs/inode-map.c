@@ -207,14 +207,24 @@ again:
 
 void btrfs_return_ino(struct btrfs_root *root, u64 objectid)
 {
+	struct btrfs_free_space_ctl *ctl = root->free_ino_ctl;
 	struct btrfs_free_space_ctl *pinned = root->free_ino_pinned;
 
 	if (!btrfs_test_opt(root, INODE_MAP_CACHE))
 		return;
+
 again:
 	if (root->cached == BTRFS_CACHE_FINISHED) {
-		__btrfs_add_free_space(pinned, objectid, 1);
+		__btrfs_add_free_space(ctl, objectid, 1);
 	} else {
+		/*
+		 * If we are in the process of caching free ino chunks,
+		 * to avoid adding the same inode number to the free_ino
+		 * tree twice due to cross transaction, we'll leave it
+		 * in the pinned tree until a transaction is committed
+		 * or the caching work is done.
+		 */
+
 		mutex_lock(&root->fs_commit_mutex);
 		spin_lock(&root->cache_lock);
 		if (root->cached == BTRFS_CACHE_FINISHED) {
@@ -226,7 +236,11 @@ again:
 
 		start_caching(root);
 
-		__btrfs_add_free_space(pinned, objectid, 1);
+		if (objectid <= root->cache_progress ||
+		    objectid > root->highest_objectid)
+			__btrfs_add_free_space(ctl, objectid, 1);
+		else
+			__btrfs_add_free_space(pinned, objectid, 1);
 
 		mutex_unlock(&root->fs_commit_mutex);
 	}
@@ -415,11 +429,12 @@ int btrfs_save_ino_cache(struct btrfs_root *root,
 	num_bytes = trans->bytes_reserved;
 	/*
 	 * 1 item for inode item insertion if need
-	 * 3 items for inode item update (in the worst case)
+	 * 4 items for inode item update (in the worst case)
+	 * 1 items for slack space if we need do truncation
 	 * 1 item for free space object
 	 * 3 items for pre-allocation
 	 */
-	trans->bytes_reserved = btrfs_calc_trans_metadata_size(root, 8);
+	trans->bytes_reserved = btrfs_calc_trans_metadata_size(root, 10);
 	ret = btrfs_block_rsv_add(root, trans->block_rsv,
 				  trans->bytes_reserved,
 				  BTRFS_RESERVE_NO_FLUSH);
@@ -454,7 +469,8 @@ again:
 	if (i_size_read(inode) > 0) {
 		ret = btrfs_truncate_free_space_cache(root, trans, path, inode);
 		if (ret) {
-			btrfs_abort_transaction(trans, root, ret);
+			if (ret != -ENOSPC)
+				btrfs_abort_transaction(trans, root, ret);
 			goto out_put;
 		}
 	}

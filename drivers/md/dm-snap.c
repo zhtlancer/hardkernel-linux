@@ -66,18 +66,6 @@ struct dm_snapshot {
 
 	atomic_t pending_exceptions_count;
 
-	/* Protected by "lock" */
-	sector_t exception_start_sequence;
-
-	/* Protected by kcopyd single-threaded callback */
-	sector_t exception_complete_sequence;
-
-	/*
-	 * A list of pending exceptions that completed out of order.
-	 * Protected by kcopyd single-threaded callback.
-	 */
-	struct list_head out_of_order_list;
-
 	mempool_t *pending_pool;
 
 	struct dm_exception_table pending;
@@ -136,6 +124,9 @@ struct dm_snapshot {
 #define RUNNING_MERGE          0
 #define SHUTDOWN_MERGE         1
 
+DECLARE_DM_KCOPYD_THROTTLE_WITH_MODULE_PARM(snapshot_copy_throttle,
+		"A percentage of time allocated for copy on write");
+
 struct dm_dev *dm_snap_origin(struct dm_snapshot *s)
 {
 	return s->origin;
@@ -181,14 +172,6 @@ struct dm_snap_pending_exception {
 	 * kcopyd.
 	 */
 	int started;
-
-	/* There was copying error. */
-	int copy_error;
-
-	/* A sequence number, it is used for in-order completion. */
-	sector_t exception_sequence;
-
-	struct list_head out_of_order_entry;
 
 	/*
 	 * For writing a complete chunk, bypassing the copy.
@@ -247,12 +230,11 @@ static void stop_tracking_chunk(struct dm_snapshot *s, struct bio *bio)
 static int __chunk_is_tracked(struct dm_snapshot *s, chunk_t chunk)
 {
 	struct dm_snap_tracked_chunk *c;
-	struct hlist_node *hn;
 	int found = 0;
 
 	spin_lock_irq(&s->tracked_chunk_lock);
 
-	hlist_for_each_entry(c, hn,
+	hlist_for_each_entry(c,
 	    &s->tracked_chunk_hash[DM_TRACKED_CHUNK_HASH(chunk)], node) {
 		if (c->chunk == chunk) {
 			found = 1;
@@ -743,16 +725,17 @@ static int calc_max_buckets(void)
  */
 static int init_hash_tables(struct dm_snapshot *s)
 {
-	sector_t hash_size, cow_dev_size, max_buckets;
+	sector_t hash_size, cow_dev_size, origin_dev_size, max_buckets;
 
 	/*
 	 * Calculate based on the size of the original volume or
 	 * the COW volume...
 	 */
 	cow_dev_size = get_dev_size(s->cow->bdev);
+	origin_dev_size = get_dev_size(s->origin->bdev);
 	max_buckets = calc_max_buckets();
 
-	hash_size = cow_dev_size >> s->store->chunk_shift;
+	hash_size = min(origin_dev_size, cow_dev_size) >> s->store->chunk_shift;
 	hash_size = min(hash_size, max_buckets);
 
 	if (hash_size < 64)
@@ -1057,7 +1040,7 @@ static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	int i;
 	int r = -EINVAL;
 	char *origin_path, *cow_path;
-	unsigned args_used, num_flush_requests = 1;
+	unsigned args_used, num_flush_bios = 1;
 	fmode_t origin_mode = FMODE_READ;
 
 	if (argc != 4) {
@@ -1067,7 +1050,7 @@ static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	}
 
 	if (dm_target_is_snapshot_merge(ti)) {
-		num_flush_requests = 2;
+		num_flush_bios = 2;
 		origin_mode = FMODE_WRITE;
 	}
 
@@ -1112,9 +1095,6 @@ static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	s->valid = 1;
 	s->active = 0;
 	atomic_set(&s->pending_exceptions_count, 0);
-	s->exception_start_sequence = 0;
-	s->exception_complete_sequence = 0;
-	INIT_LIST_HEAD(&s->out_of_order_list);
 	init_rwsem(&s->lock);
 	INIT_LIST_HEAD(&s->list);
 	spin_lock_init(&s->pe_lock);
@@ -1131,7 +1111,7 @@ static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		goto bad_hash_tables;
 	}
 
-	s->kcopyd_client = dm_kcopyd_client_create();
+	s->kcopyd_client = dm_kcopyd_client_create(&dm_kcopyd_throttle);
 	if (IS_ERR(s->kcopyd_client)) {
 		r = PTR_ERR(s->kcopyd_client);
 		ti->error = "Could not create kcopyd client";
@@ -1151,7 +1131,7 @@ static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	spin_lock_init(&s->tracked_chunk_lock);
 
 	ti->private = s;
-	ti->num_flush_requests = num_flush_requests;
+	ti->num_flush_bios = num_flush_bios;
 	ti->per_bio_data_size = sizeof(struct dm_snap_tracked_chunk);
 
 	/* Add snapshot to the list of snapshots for this origin */
@@ -1464,19 +1444,6 @@ static void commit_callback(void *context, int success)
 	pending_complete(pe, success);
 }
 
-static void complete_exception(struct dm_snap_pending_exception *pe)
-{
-	struct dm_snapshot *s = pe->snap;
-
-	if (unlikely(pe->copy_error))
-		pending_complete(pe, 0);
-
-	else
-		/* Update the metadata if we are persistent */
-		s->store->type->commit_exception(s->store, &pe->e,
-						 commit_callback, pe);
-}
-
 /*
  * Called when the copy I/O has finished.  kcopyd actually runs
  * this code so don't block.
@@ -1486,32 +1453,13 @@ static void copy_callback(int read_err, unsigned long write_err, void *context)
 	struct dm_snap_pending_exception *pe = context;
 	struct dm_snapshot *s = pe->snap;
 
-	pe->copy_error = read_err || write_err;
+	if (read_err || write_err)
+		pending_complete(pe, 0);
 
-	if (pe->exception_sequence == s->exception_complete_sequence) {
-		s->exception_complete_sequence++;
-		complete_exception(pe);
-
-		while (!list_empty(&s->out_of_order_list)) {
-			pe = list_entry(s->out_of_order_list.next,
-					struct dm_snap_pending_exception, out_of_order_entry);
-			if (pe->exception_sequence != s->exception_complete_sequence)
-				break;
-			s->exception_complete_sequence++;
-			list_del(&pe->out_of_order_entry);
-			complete_exception(pe);
-		}
-	} else {
-		struct list_head *lh;
-		struct dm_snap_pending_exception *pe2;
-
-		list_for_each_prev(lh, &s->out_of_order_list) {
-			pe2 = list_entry(lh, struct dm_snap_pending_exception, out_of_order_entry);
-			if (pe2->exception_sequence < pe->exception_sequence)
-				break;
-		}
-		list_add(&pe->out_of_order_entry, lh);
-	}
+	else
+		/* Update the metadata if we are persistent */
+		s->store->type->commit_exception(s->store, &pe->e,
+						 commit_callback, pe);
 }
 
 /*
@@ -1605,8 +1553,6 @@ __find_pending_exception(struct dm_snapshot *s,
 		free_pending_exception(pe);
 		return NULL;
 	}
-
-	pe->exception_sequence = s->exception_start_sequence++;
 
 	dm_insert_exception(&s->pending, &pe->e);
 
@@ -1749,7 +1695,7 @@ static int snapshot_merge_map(struct dm_target *ti, struct bio *bio)
 	init_tracked_chunk(bio);
 
 	if (bio->bi_rw & REQ_FLUSH) {
-		if (!dm_bio_get_target_request_nr(bio))
+		if (!dm_bio_get_target_bio_nr(bio))
 			bio->bi_bdev = s->origin->bdev;
 		else
 			bio->bi_bdev = s->cow->bdev;
@@ -2160,7 +2106,7 @@ static int origin_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	}
 
 	ti->private = dev;
-	ti->num_flush_requests = 1;
+	ti->num_flush_bios = 1;
 
 	return 0;
 }
@@ -2247,7 +2193,7 @@ static struct target_type origin_target = {
 
 static struct target_type snapshot_target = {
 	.name    = "snapshot",
-	.version = {1, 12, 0},
+	.version = {1, 11, 1},
 	.module  = THIS_MODULE,
 	.ctr     = snapshot_ctr,
 	.dtr     = snapshot_dtr,

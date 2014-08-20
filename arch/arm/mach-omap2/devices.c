@@ -20,8 +20,7 @@
 #include <linux/pinctrl/machine.h>
 #include <linux/platform_data/omap4-keypad.h>
 #include <linux/platform_data/omap_ocp2scp.h>
-#include <linux/netdevice.h>
-#include <linux/if_ether.h>
+#include <linux/usb/omap_control_usb.h>
 
 #include <asm/mach-types.h>
 #include <asm/mach/map.h>
@@ -39,13 +38,9 @@
 #include "control.h"
 #include "devices.h"
 #include "dma.h"
-#include "id.h"
 
 #define L3_MODULES_MAX_LEN 12
 #define L3_MODULES 3
-
-static const char * const *mac_device_fixup_paths;
-int count_mac_device_fixup_paths;
 
 static int __init omap3_l3_init(void)
 {
@@ -67,8 +62,7 @@ static int __init omap3_l3_init(void)
 	if (!oh)
 		pr_err("could not look up %s\n", oh_name);
 
-	pdev = omap_device_build("omap_l3_smx", 0, oh, NULL, 0,
-							   NULL, 0, 0);
+	pdev = omap_device_build("omap_l3_smx", 0, oh, NULL, 0);
 
 	WARN(IS_ERR(pdev), "could not build omap_device for %s\n", oh_name);
 
@@ -102,8 +96,7 @@ static int __init omap4_l3_init(void)
 			pr_err("could not look up %s\n", oh_name);
 	}
 
-	pdev = omap_device_build_ss("omap_l3_noc", 0, oh, 3, NULL,
-						     0, NULL, 0, 0);
+	pdev = omap_device_build_ss("omap_l3_noc", 0, oh, 3, NULL, 0);
 
 	WARN(IS_ERR(pdev), "could not build omap_device for %s\n", oh_name);
 
@@ -260,6 +253,49 @@ static inline void omap_init_camera(void)
 #endif
 }
 
+#if IS_ENABLED(CONFIG_OMAP_CONTROL_USB)
+static struct omap_control_usb_platform_data omap4_control_usb_pdata = {
+	.type = 1,
+};
+
+struct resource omap4_control_usb_res[] = {
+	{
+		.name	= "control_dev_conf",
+		.start	= 0x4a002300,
+		.end	= 0x4a002303,
+		.flags	= IORESOURCE_MEM,
+	},
+	{
+		.name	= "otghs_control",
+		.start	= 0x4a00233c,
+		.end	= 0x4a00233f,
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device omap4_control_usb = {
+	.name = "omap-control-usb",
+	.id = -1,
+	.dev = {
+		.platform_data = &omap4_control_usb_pdata,
+	},
+	.num_resources = 2,
+	.resource = omap4_control_usb_res,
+};
+
+static inline void __init omap_init_control_usb(void)
+{
+	if (!cpu_is_omap44xx())
+		return;
+
+	if (platform_device_register(&omap4_control_usb))
+		pr_err("Error registering omap_control_usb device\n");
+}
+
+#else
+static inline void omap_init_control_usb(void) { }
+#endif /* CONFIG_OMAP_CONTROL_USB */
+
 int __init omap4_keyboard_init(struct omap4_keypad_platform_data
 			*sdp4430_keypad_data, struct omap_board_data *bdata)
 {
@@ -279,7 +315,7 @@ int __init omap4_keyboard_init(struct omap4_keypad_platform_data
 	keypad_data = sdp4430_keypad_data;
 
 	pdev = omap_device_build(name, id, oh, keypad_data,
-			sizeof(struct omap4_keypad_platform_data), NULL, 0, 0);
+				 sizeof(struct omap4_keypad_platform_data));
 
 	if (IS_ERR(pdev)) {
 		WARN(1, "Can't build omap_device for %s:%s.\n",
@@ -303,7 +339,7 @@ static inline void __init omap_init_mbox(void)
 		return;
 	}
 
-	pdev = omap_device_build("omap-mailbox", -1, oh, NULL, 0, NULL, 0, 0);
+	pdev = omap_device_build("omap-mailbox", -1, oh, NULL, 0);
 	WARN(IS_ERR(pdev), "%s: could not build device, err %ld\n",
 						__func__, PTR_ERR(pdev));
 }
@@ -343,7 +379,7 @@ static void __init omap_init_mcpdm(void)
 		return;
 	}
 
-	pdev = omap_device_build("omap-mcpdm", -1, oh, NULL, 0, NULL, 0, 0);
+	pdev = omap_device_build("omap-mcpdm", -1, oh, NULL, 0);
 	WARN(IS_ERR(pdev), "Can't build omap_device for omap-mcpdm.\n");
 }
 #else
@@ -364,7 +400,7 @@ static void __init omap_init_dmic(void)
 		return;
 	}
 
-	pdev = omap_device_build("omap-dmic", -1, oh, NULL, 0, NULL, 0, 0);
+	pdev = omap_device_build("omap-dmic", -1, oh, NULL, 0);
 	WARN(IS_ERR(pdev), "Can't build omap_device for omap-dmic.\n");
 }
 #else
@@ -390,8 +426,7 @@ static void __init omap_init_hdmi_audio(void)
 		return;
 	}
 
-	pdev = omap_device_build("omap-hdmi-audio-dai",
-		-1, oh, NULL, 0, NULL, 0, 0);
+	pdev = omap_device_build("omap-hdmi-audio-dai", -1, oh, NULL, 0);
 	WARN(IS_ERR(pdev),
 	     "Can't build omap_device for omap-hdmi-audio-dai.\n");
 
@@ -435,8 +470,7 @@ static int __init omap_mcspi_init(struct omap_hwmod *oh, void *unused)
 	}
 
 	spi_num++;
-	pdev = omap_device_build(name, spi_num, oh, pdata,
-				sizeof(*pdata),	NULL, 0, 0);
+	pdev = omap_device_build(name, spi_num, oh, pdata, sizeof(*pdata));
 	WARN(IS_ERR(pdev), "Can't build omap_device for %s:%s\n",
 				name, oh->name);
 	kfree(pdata);
@@ -466,144 +500,35 @@ static void omap_init_rng(void)
 	if (!oh)
 		return;
 
-	pdev = omap_device_build("omap_rng", -1, oh, NULL, 0, NULL, 0, 0);
+	pdev = omap_device_build("omap_rng", -1, oh, NULL, 0);
 	WARN(IS_ERR(pdev), "Can't build omap_device for omap_rng\n");
 }
 
-#if defined(CONFIG_CRYPTO_DEV_OMAP_SHAM) || defined(CONFIG_CRYPTO_DEV_OMAP_SHAM_MODULE)
-
-#ifdef CONFIG_ARCH_OMAP2
-static struct resource omap2_sham_resources[] = {
-	{
-		.start	= OMAP24XX_SEC_SHA1MD5_BASE,
-		.end	= OMAP24XX_SEC_SHA1MD5_BASE + 0x64,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.start	= 51 + OMAP_INTC_START,
-		.flags	= IORESOURCE_IRQ,
-	}
-};
-static int omap2_sham_resources_sz = ARRAY_SIZE(omap2_sham_resources);
-#else
-#define omap2_sham_resources		NULL
-#define omap2_sham_resources_sz		0
-#endif
-
-#ifdef CONFIG_ARCH_OMAP3
-static struct resource omap3_sham_resources[] = {
-	{
-		.start	= OMAP34XX_SEC_SHA1MD5_BASE,
-		.end	= OMAP34XX_SEC_SHA1MD5_BASE + 0x64,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.start	= 49 + OMAP_INTC_START,
-		.flags	= IORESOURCE_IRQ,
-	},
-	{
-		.start	= OMAP34XX_DMA_SHA1MD5_RX,
-		.flags	= IORESOURCE_DMA,
-	}
-};
-static int omap3_sham_resources_sz = ARRAY_SIZE(omap3_sham_resources);
-#else
-#define omap3_sham_resources		NULL
-#define omap3_sham_resources_sz		0
-#endif
-
-static struct platform_device sham_device = {
-	.name		= "omap-sham",
-	.id		= -1,
-};
-
-static void omap_init_sham(void)
+static void __init omap_init_sham(void)
 {
-	if (cpu_is_omap24xx()) {
-		sham_device.resource = omap2_sham_resources;
-		sham_device.num_resources = omap2_sham_resources_sz;
-	} else if (cpu_is_omap34xx()) {
-		sham_device.resource = omap3_sham_resources;
-		sham_device.num_resources = omap3_sham_resources_sz;
-	} else {
-		pr_err("%s: platform not supported\n", __func__);
+	struct omap_hwmod *oh;
+	struct platform_device *pdev;
+
+	oh = omap_hwmod_lookup("sham");
+	if (!oh)
 		return;
-	}
-	platform_device_register(&sham_device);
-}
-#else
-static inline void omap_init_sham(void) { }
-#endif
 
-#if defined(CONFIG_CRYPTO_DEV_OMAP_AES) || defined(CONFIG_CRYPTO_DEV_OMAP_AES_MODULE)
-
-#ifdef CONFIG_ARCH_OMAP2
-static struct resource omap2_aes_resources[] = {
-	{
-		.start	= OMAP24XX_SEC_AES_BASE,
-		.end	= OMAP24XX_SEC_AES_BASE + 0x4C,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.start	= OMAP24XX_DMA_AES_TX,
-		.flags	= IORESOURCE_DMA,
-	},
-	{
-		.start	= OMAP24XX_DMA_AES_RX,
-		.flags	= IORESOURCE_DMA,
-	}
-};
-static int omap2_aes_resources_sz = ARRAY_SIZE(omap2_aes_resources);
-#else
-#define omap2_aes_resources		NULL
-#define omap2_aes_resources_sz		0
-#endif
-
-#ifdef CONFIG_ARCH_OMAP3
-static struct resource omap3_aes_resources[] = {
-	{
-		.start	= OMAP34XX_SEC_AES_BASE,
-		.end	= OMAP34XX_SEC_AES_BASE + 0x4C,
-		.flags	= IORESOURCE_MEM,
-	},
-	{
-		.start	= OMAP34XX_DMA_AES2_TX,
-		.flags	= IORESOURCE_DMA,
-	},
-	{
-		.start	= OMAP34XX_DMA_AES2_RX,
-		.flags	= IORESOURCE_DMA,
-	}
-};
-static int omap3_aes_resources_sz = ARRAY_SIZE(omap3_aes_resources);
-#else
-#define omap3_aes_resources		NULL
-#define omap3_aes_resources_sz		0
-#endif
-
-static struct platform_device aes_device = {
-	.name		= "omap-aes",
-	.id		= -1,
-};
-
-static void omap_init_aes(void)
-{
-	if (cpu_is_omap24xx()) {
-		aes_device.resource = omap2_aes_resources;
-		aes_device.num_resources = omap2_aes_resources_sz;
-	} else if (cpu_is_omap34xx()) {
-		aes_device.resource = omap3_aes_resources;
-		aes_device.num_resources = omap3_aes_resources_sz;
-	} else {
-		pr_err("%s: platform not supported\n", __func__);
-		return;
-	}
-	platform_device_register(&aes_device);
+	pdev = omap_device_build("omap-sham", -1, oh, NULL, 0);
+	WARN(IS_ERR(pdev), "Can't build omap_device for omap-sham\n");
 }
 
-#else
-static inline void omap_init_aes(void) { }
-#endif
+static void __init omap_init_aes(void)
+{
+	struct omap_hwmod *oh;
+	struct platform_device *pdev;
+
+	oh = omap_hwmod_lookup("aes");
+	if (!oh)
+		return;
+
+	pdev = omap_device_build("omap-aes", -1, oh, NULL, 0);
+	WARN(IS_ERR(pdev), "Can't build omap_device for omap-aes\n");
+}
 
 /*-------------------------------------------------------------------------*/
 
@@ -631,87 +556,6 @@ static void omap_init_vout(void)
 #else
 static inline void omap_init_vout(void) {}
 #endif
-
-static int omap_device_path_need_mac(struct device *dev)
-{
-	const char **try = (const char **)mac_device_fixup_paths;
-	const char *path;
-	int count = count_mac_device_fixup_paths;
-	const char *p;
-	int len;
-	struct device *devn;
-	
-	while (count--) {
-
-		p = *try + strlen(*try);
-		devn = dev;
-
-		while (devn) {
-
-			path = dev_name(devn);
-			len = strlen(path);
-
-			if ((p - *try) < len) {
-				devn = NULL;
-				continue;
-			}
-
-			p -= len;
-
-			if (strncmp(path, p, len)) {
-				devn = NULL;
-				continue;
-			}
-	
-			devn = devn->parent;
-			if (p == *try)
-				return count;
-
-			if (devn != NULL && (p - *try) < 2)
-				devn = NULL;
-
-			p--;
-			if (devn != NULL && *p != '/')
-				devn = NULL;
-		}
-
-		try++;
-	}
-
-	return -ENOENT;	
-}
-
-static int omap_panda_netdev_event(struct notifier_block *this,
-	unsigned long event, void *ptr)
-{
-	struct net_device *dev = ptr;
-	struct sockaddr sa;
-	int n;
-
-	if (event != NETDEV_REGISTER)
-		return NOTIFY_DONE;
-
-	n = omap_device_path_need_mac(dev->dev.parent);
-	if (n >= 0) {
-		sa.sa_family = dev->type;
-		omap2_die_id_to_ethernet_mac(sa.sa_data, n);
-		dev->netdev_ops->ndo_set_mac_address(dev, &sa);
-	}
-
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block omap_panda_netdev_notifier = {
-	.notifier_call = omap_panda_netdev_event,
-	.priority = 1,
-};
-
-int omap_register_mac_device_fixup_paths(const char * const *paths, int count)
-{
-	mac_device_fixup_paths = paths;
-	count_mac_device_fixup_paths = count;
-	return register_netdevice_notifier(&omap_panda_netdev_notifier);
-}
 
 #if defined(CONFIG_OMAP_OCP2SCP) || defined(CONFIG_OMAP_OCP2SCP_MODULE)
 static int count_ocp2scp_devices(struct omap_ocp2scp_dev *ocp2scp_dev)
@@ -776,8 +620,7 @@ static void __init omap_init_ocp2scp(void)
 
 	pdata->dev_cnt	= dev_cnt;
 
-	pdev = omap_device_build(name, bus_id, oh, pdata, sizeof(*pdata), NULL,
-								0, false);
+	pdev = omap_device_build(name, bus_id, oh, pdata, sizeof(*pdata));
 	if (IS_ERR(pdev)) {
 		pr_err("Could not build omap_device for %s %s\n",
 						name, oh_name);
@@ -808,14 +651,15 @@ static int __init omap2_init_devices(void)
 	omap_init_mbox();
 	/* If dtb is there, the devices will be created dynamically */
 	if (!of_have_populated_dt()) {
+		omap_init_control_usb();
 		omap_init_dmic();
 		omap_init_mcpdm();
 		omap_init_mcspi();
+		omap_init_sham();
+		omap_init_aes();
 	}
 	omap_init_sti();
 	omap_init_rng();
-	omap_init_sham();
-	omap_init_aes();
 	omap_init_vout();
 	omap_init_ocp2scp();
 

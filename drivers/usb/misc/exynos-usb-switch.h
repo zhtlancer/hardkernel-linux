@@ -33,12 +33,12 @@ struct exynos_usb_switch {
 	struct device *ehci_dev;
 	struct device *ohci_dev;
 
-	struct device *s3c_hsotg_dev;
+	struct device *s3c_udc_dev;
 
 	struct workqueue_struct	*workqueue;
 	struct work_struct switch_work;
 	struct mutex mutex;
-//	struct wake_lock wake_lock;
+	struct wake_lock wake_lock;
 	atomic_t usb_status;
 	int (*get_usb_mode)(void);
 	int (*change_usb_mode)(int mode);

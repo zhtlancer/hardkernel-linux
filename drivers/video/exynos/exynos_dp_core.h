@@ -41,7 +41,12 @@ struct exynos_dp_device {
 
 	struct video_info	*video_info;
 	struct link_train	link_train;
+#if defined(CONFIG_MACH_ODROIDXU3)
+	int			hpd_gpio;
+	struct delayed_work		hotplug_work;
+#else	
 	struct work_struct	hotplug_work;
+#endif	
 };
 
 /* exynos_dp_reg.c */

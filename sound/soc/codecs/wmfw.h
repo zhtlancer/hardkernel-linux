@@ -15,6 +15,12 @@
 
 #include <linux/types.h>
 
+#define WMFW_MAX_ALG_NAME         256
+#define WMFW_MAX_ALG_DESCR_NAME   256
+
+#define WMFW_MAX_COEFF_NAME       256
+#define WMFW_MAX_COEFF_DESCR_NAME 256
+
 struct wmfw_header {
 	char magic[4];
 	__le32 len;
@@ -90,18 +96,47 @@ struct wmfw_adsp2_alg_hdr {
 	__be32 ym;
 } __packed;
 
+struct wmfw_adsp2_alg_data {
+	__le32 id;
+	u8 name[WMFW_MAX_ALG_NAME];
+	u8 descr[WMFW_MAX_ALG_DESCR_NAME];
+	__le32 ncoeff;
+	u8 data[];
+} __packed;
+
+struct wmfw_adsp2_coeff_data_hdr {
+	union {
+		__le32 type;
+		__le32 offset;
+	};
+	__le32 size;
+} __packed;
+
+struct wmfw_adsp2_coeff_data {
+	u8 name[WMFW_MAX_COEFF_NAME];
+	u8 descr[WMFW_MAX_COEFF_DESCR_NAME];
+	__le32 type;
+	__le32 len;
+	u8 data[];
+} __packed;
+
 struct wmfw_coeff_hdr {
 	u8 magic[4];
 	__le32 len;
-	__le32 ver;
+	union {
+		__be32 rev;
+		__le32 ver;
+	};
+	union {
+		__be32 core;
+		__le32 core_ver;
+	};
 	u8 data[];
 } __packed;
 
 struct wmfw_coeff_item {
-	union {
-		__be32 type;
-		__le32 offset;
-	};
+	__le16 offset;
+	__le16 type;
 	__le32 id;
 	__le32 ver;
 	__le32 sr;
@@ -112,9 +147,10 @@ struct wmfw_coeff_item {
 #define WMFW_ADSP1 1
 #define WMFW_ADSP2 2
 
-#define WMFW_ABSOLUTE  0xf0
-#define WMFW_NAME_TEXT 0xfe
-#define WMFW_INFO_TEXT 0xff
+#define WMFW_ABSOLUTE         0xf0
+#define WMFW_ALGORITHM_DATA   0xf2
+#define WMFW_NAME_TEXT        0xfe
+#define WMFW_INFO_TEXT        0xff
 
 #define WMFW_ADSP1_PM 2
 #define WMFW_ADSP1_DM 3

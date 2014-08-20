@@ -55,6 +55,7 @@
  * @rate:	Frequency in hertz
  * @u_volt:	Nominal voltage in microvolts corresponding to this OPP
  * @dev_opp:	points back to the device_opp struct this opp belongs to
+ * @head:	RCU callback head used for deferred freeing
  *
  * This structure stores the OPP information for a given device.
  */
@@ -730,9 +731,11 @@ int of_init_opp_table(struct device *dev)
 		unsigned long freq = be32_to_cpup(val++) * 1000;
 		unsigned long volt = be32_to_cpup(val++);
 
-		if (opp_add(dev, freq, volt))
+		if (opp_add(dev, freq, volt)) {
 			dev_warn(dev, "%s: Failed to add OPP %ld\n",
 				 __func__, freq);
+			continue;
+		}
 		nr -= 2;
 	}
 

@@ -7,6 +7,7 @@
  */
 #include <linux/moduleloader.h>
 #include <linux/netdevice.h>
+#include <linux/if_vlan.h>
 #include <linux/filter.h>
 #include <asm/cacheflush.h>
 #include <asm/processor.h>
@@ -242,6 +243,7 @@ static void bpf_jit_noleaks(struct bpf_jit *jit, struct sock_filter *filter)
 	case BPF_S_LD_W_IND:
 	case BPF_S_LD_H_IND:
 	case BPF_S_LD_B_IND:
+	case BPF_S_LDX_B_MSH:
 	case BPF_S_LD_IMM:
 	case BPF_S_LD_MEM:
 	case BPF_S_MISC_TXA:
@@ -253,6 +255,8 @@ static void bpf_jit_noleaks(struct bpf_jit *jit, struct sock_filter *filter)
 	case BPF_S_ANC_HATYPE:
 	case BPF_S_ANC_RXHASH:
 	case BPF_S_ANC_CPU:
+	case BPF_S_ANC_VLAN_TAG:
+	case BPF_S_ANC_VLAN_TAG_PRESENT:
 	case BPF_S_RET_K:
 		/* first instruction sets A register */
 		break;
@@ -331,16 +335,14 @@ static int bpf_jit_insn(struct bpf_jit *jit, struct sock_filter *filter,
 		EMIT4_PCREL(0xa7840000, (jit->ret0_ip - jit->prg));
 		/* lhi %r4,0 */
 		EMIT4(0xa7480000);
-		/* dlr %r4,%r12 */
-		EMIT4(0xb997004c);
+		/* dr %r4,%r12 */
+		EMIT2(0x1d4c);
 		break;
-	case BPF_S_ALU_DIV_K: /* A /= K */
-		if (K == 1)
-			break;
-		/* lhi %r4,0 */
-		EMIT4(0xa7480000);
-		/* dl %r4,<d(K)>(%r13) */
-		EMIT6_DISP(0xe340d000, 0x0097, EMIT_CONST(K));
+	case BPF_S_ALU_DIV_K: /* A = reciprocal_divide(A, K) */
+		/* m %r4,<d(K)>(%r13) */
+		EMIT4_DISP(0x5c40d000, EMIT_CONST(K));
+		/* lr %r5,%r4 */
+		EMIT2(0x1854);
 		break;
 	case BPF_S_ALU_MOD_X: /* A %= X */
 		jit->seen |= SEEN_XREG | SEEN_RET0;
@@ -350,21 +352,16 @@ static int bpf_jit_insn(struct bpf_jit *jit, struct sock_filter *filter,
 		EMIT4_PCREL(0xa7840000, (jit->ret0_ip - jit->prg));
 		/* lhi %r4,0 */
 		EMIT4(0xa7480000);
-		/* dlr %r4,%r12 */
-		EMIT4(0xb997004c);
+		/* dr %r4,%r12 */
+		EMIT2(0x1d4c);
 		/* lr %r5,%r4 */
 		EMIT2(0x1854);
 		break;
 	case BPF_S_ALU_MOD_K: /* A %= K */
-		if (K == 1) {
-			/* lhi %r5,0 */
-			EMIT4(0xa7580000);
-			break;
-		}
 		/* lhi %r4,0 */
 		EMIT4(0xa7480000);
-		/* dl %r4,<d(K)>(%r13) */
-		EMIT6_DISP(0xe340d000, 0x0097, EMIT_CONST(K));
+		/* d %r4,<d(K)>(%r13) */
+		EMIT4_DISP(0x5d40d000, EMIT_CONST(K));
 		/* lr %r5,%r4 */
 		EMIT2(0x1854);
 		break;
@@ -705,6 +702,24 @@ call_fn:	/* lg %r1,<d(function)>(%r13) */
 		/* l %r5,<d(rxhash)>(%r2) */
 		EMIT4_DISP(0x58502000, offsetof(struct sk_buff, rxhash));
 		break;
+	case BPF_S_ANC_VLAN_TAG:
+	case BPF_S_ANC_VLAN_TAG_PRESENT:
+		BUILD_BUG_ON(FIELD_SIZEOF(struct sk_buff, vlan_tci) != 2);
+		BUILD_BUG_ON(VLAN_TAG_PRESENT != 0x1000);
+		/* lhi %r5,0 */
+		EMIT4(0xa7580000);
+		/* icm	%r5,3,<d(vlan_tci)>(%r2) */
+		EMIT4_DISP(0xbf532000, offsetof(struct sk_buff, vlan_tci));
+		if (filter->code == BPF_S_ANC_VLAN_TAG) {
+			/* nill %r5,0xefff */
+			EMIT4_IMM(0xa5570000, ~VLAN_TAG_PRESENT);
+		} else {
+			/* nill %r5,0x1000 */
+			EMIT4_IMM(0xa5570000, VLAN_TAG_PRESENT);
+			/* srl %r5,12 */
+			EMIT4_DISP(0x88500000, 12);
+		}
+		break;
 	case BPF_S_ANC_CPU: /* A = smp_processor_id() */
 #ifdef CONFIG_SMP
 		/* l %r5,<d(cpu_nr)> */
@@ -732,10 +747,9 @@ void bpf_jit_compile(struct sk_filter *fp)
 
 	if (!bpf_jit_enable)
 		return;
-	addrs = kmalloc(fp->len * sizeof(*addrs), GFP_KERNEL);
+	addrs = kcalloc(fp->len, sizeof(*addrs), GFP_KERNEL);
 	if (addrs == NULL)
 		return;
-	memset(addrs, 0, fp->len * sizeof(*addrs));
 	memset(&jit, 0, sizeof(cjit));
 	memset(&cjit, 0, sizeof(cjit));
 

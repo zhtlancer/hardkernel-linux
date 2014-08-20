@@ -26,7 +26,6 @@
 #include <linux/math64.h>
 #include <linux/uaccess.h>
 #include <linux/ioport.h>
-#include <linux/cred.h>
 #include <net/addrconf.h>
 
 #include <asm/page.h>		/* for PAGE_SIZE */
@@ -535,14 +534,21 @@ char *string(char *buf, char *end, const char *s, struct printf_spec spec)
 
 static noinline_for_stack
 char *symbol_string(char *buf, char *end, void *ptr,
-		    struct printf_spec spec, char ext)
+		    struct printf_spec spec, const char *fmt)
 {
-	unsigned long value = (unsigned long) ptr;
+	unsigned long value;
 #ifdef CONFIG_KALLSYMS
 	char sym[KSYM_SYMBOL_LEN];
-	if (ext == 'B')
+#endif
+
+	if (fmt[1] == 'R')
+		ptr = __builtin_extract_return_addr(ptr);
+	value = (unsigned long)ptr;
+
+#ifdef CONFIG_KALLSYMS
+	if (*fmt == 'B')
 		sprint_backtrace(sym, value);
-	else if (ext != 'f' && ext != 's')
+	else if (*fmt != 'f' && *fmt != 's')
 		sprint_symbol(sym, value);
 	else
 		sprint_symbol_no_offset(sym, value);
@@ -988,6 +994,7 @@ int kptr_restrict __read_mostly;
  * - 'f' For simple symbolic function names without offset
  * - 'S' For symbolic direct pointers with offset
  * - 's' For symbolic direct pointers without offset
+ * - '[FfSs]R' as above with __builtin_extract_return_addr() translation
  * - 'B' For backtraced symbolic direct pointers with offset
  * - 'R' For decoded struct resource, e.g., [mem 0x0-0x1f 64bit pref]
  * - 'r' For raw struct resource, e.g., [mem 0x0-0x1f flags 0x201]
@@ -1031,6 +1038,7 @@ int kptr_restrict __read_mostly;
  *              N no separator
  *            The maximum supported length is 64 bytes of the input. Consider
  *            to use print_hex_dump() for the larger input.
+ * - 'a' For a phys_addr_t type and its derivative types (passed by reference)
  *
  * Note: The difference between 'S' and 'F' is that on ia64 and ppc64
  * function pointers are really function descriptors, which contain a
@@ -1060,7 +1068,7 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 	case 'S':
 	case 's':
 	case 'B':
-		return symbol_string(buf, end, ptr, spec, *fmt);
+		return symbol_string(buf, end, ptr, spec, fmt);
 	case 'R':
 	case 'r':
 		return resource_string(buf, end, ptr, spec, fmt);
@@ -1110,43 +1118,23 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 				spec.field_width = default_width;
 			return string(buf, end, "pK-error", spec);
 		}
-
-		switch (kptr_restrict) {
-		case 0:
-			/* Always print %pK values */
-			break;
-		case 1: {
-			/*
-			 * Only print the real pointer value if the current
-			 * process has CAP_SYSLOG and is running with the
-			 * same credentials it started with. This is because
-			 * access to files is checked at open() time, but %pK
-			 * checks permission at read() time. We don't want to
-			 * leak pointer values if a binary opens a file using
-			 * %pK and then elevates privileges before reading it.
-			 */
-			const struct cred *cred = current_cred();
-
-			if (!has_capability_noaudit(current, CAP_SYSLOG) ||
-			    !uid_eq(cred->euid, cred->uid) ||
-			    !gid_eq(cred->egid, cred->gid))
-				ptr = NULL;
-			break;
-		}
-		case 2:
-		default:
-			/* Always print 0's for %pK */
+		if (!((kptr_restrict == 0) ||
+		      (kptr_restrict == 1 &&
+		       has_capability_noaudit(current, CAP_SYSLOG))))
 			ptr = NULL;
-			break;
-		}
 		break;
-
 	case 'N':
 		switch (fmt[1]) {
 		case 'F':
 			return netdev_feature_string(buf, end, ptr, spec);
 		}
 		break;
+	case 'a':
+		spec.flags |= SPECIAL | SMALL | ZEROPAD;
+		spec.field_width = sizeof(phys_addr_t) * 2 + 2;
+		spec.base = 16;
+		return number(buf, end,
+			      (unsigned long long) *((phys_addr_t *)ptr), spec);
 	}
 	spec.flags |= SMALL;
 	if (spec.field_width == -1) {

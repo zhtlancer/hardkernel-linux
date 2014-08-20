@@ -78,7 +78,7 @@ static void __iomem *intcp_con_base;
  * fcb00000	cb000000	CP system control
  */
 
-static struct map_desc intcp_io_desc[] __initdata = {
+static struct map_desc intcp_io_desc[] __initdata __maybe_unused = {
 	{
 		.virtual	= IO_ADDRESS(INTEGRATOR_HDR_BASE),
 		.pfn		= __phys_to_pfn(INTEGRATOR_HDR_BASE),
@@ -199,8 +199,7 @@ static struct mmci_platform_data mmc_data = {
 static void cp_clcd_enable(struct clcd_fb *fb)
 {
 	struct fb_var_screeninfo *var = &fb->fb.var;
-	u32 val = CM_CTRL_STATIC1 | CM_CTRL_STATIC2
-			| CM_CTRL_LCDEN0 | CM_CTRL_LCDEN1;
+	u32 val = CM_CTRL_STATIC1 | CM_CTRL_STATIC2;
 
 	if (var->bits_per_pixel <= 8 ||
 	    (var->bits_per_pixel == 16 && var->green.length == 5))
@@ -251,43 +250,6 @@ static void __init intcp_init_early(void)
 }
 
 #ifdef CONFIG_OF
-
-static void __init intcp_timer_init_of(void)
-{
-	struct device_node *node;
-	const char *path;
-	void __iomem *base;
-	int err;
-	int irq;
-
-	err = of_property_read_string(of_aliases,
-				"arm,timer-primary", &path);
-	if (WARN_ON(err))
-		return;
-	node = of_find_node_by_path(path);
-	base = of_iomap(node, 0);
-	if (WARN_ON(!base))
-		return;
-	writel(0, base + TIMER_CTRL);
-	sp804_clocksource_init(base, node->name);
-
-	err = of_property_read_string(of_aliases,
-				"arm,timer-secondary", &path);
-	if (WARN_ON(err))
-		return;
-	node = of_find_node_by_path(path);
-	base = of_iomap(node, 0);
-	if (WARN_ON(!base))
-		return;
-	irq = irq_of_parse_and_map(node, 0);
-	writel(0, base + TIMER_CTRL);
-	sp804_clockevents_init(base, irq, node->name);
-}
-
-static struct sys_timer cp_of_timer = {
-	.init		= intcp_timer_init_of,
-};
-
 static const struct of_device_id fpga_irq_of_match[] __initconst = {
 	{ .compatible = "arm,versatile-fpga-irq", .data = fpga_irq_of_init, },
 	{ /* Sentinel */ }
@@ -365,17 +327,14 @@ static void __init intcp_init_of(void)
 					   'A' + (intcp_sc_id & 0x0f));
 
 	soc_dev = soc_device_register(soc_dev_attr);
-	if (IS_ERR_OR_NULL(soc_dev)) {
+	if (IS_ERR(soc_dev)) {
 		kfree(soc_dev_attr->revision);
 		kfree(soc_dev_attr);
 		return;
 	}
 
 	parent = soc_device_to_device(soc_dev);
-
-	if (!IS_ERR_OR_NULL(parent))
-		integrator_init_sysfs(parent, intcp_sc_id);
-
+	integrator_init_sysfs(parent, intcp_sc_id);
 	of_platform_populate(root, of_default_bus_match_table,
 			intcp_auxdata_lookup, parent);
 }
@@ -391,7 +350,6 @@ DT_MACHINE_START(INTEGRATOR_CP_DT, "ARM Integrator/CP (Device Tree)")
 	.init_early	= intcp_init_early,
 	.init_irq	= intcp_init_irq_of,
 	.handle_irq	= fpga_handle_irq,
-	.timer		= &cp_of_timer,
 	.init_machine	= intcp_init_of,
 	.restart	= integrator_restart,
 	.dt_compat      = intcp_dt_board_compat,
@@ -513,7 +471,7 @@ static void __init intcp_init_irq(void)
 #define TIMER1_VA_BASE __io_address(INTEGRATOR_TIMER1_BASE)
 #define TIMER2_VA_BASE __io_address(INTEGRATOR_TIMER2_BASE)
 
-static void __init intcp_timer_init(void)
+static void __init cp_timer_init(void)
 {
 	writel(0, TIMER0_VA_BASE + TIMER_CTRL);
 	writel(0, TIMER1_VA_BASE + TIMER_CTRL);
@@ -522,10 +480,6 @@ static void __init intcp_timer_init(void)
 	sp804_clocksource_init(TIMER2_VA_BASE, "timer2");
 	sp804_clockevents_init(TIMER1_VA_BASE, IRQ_TIMERINT1, "timer1");
 }
-
-static struct sys_timer cp_timer = {
-	.init		= intcp_timer_init,
-};
 
 #define INTEGRATOR_CP_MMC_IRQS	{ IRQ_CP_MMCIINT0, IRQ_CP_MMCIINT1 }
 #define INTEGRATOR_CP_AACI_IRQS	{ IRQ_CP_AACIINT }
@@ -566,7 +520,7 @@ MACHINE_START(CINTEGRATOR, "ARM-IntegratorCP")
 	.init_early	= intcp_init_early,
 	.init_irq	= intcp_init_irq,
 	.handle_irq	= fpga_handle_irq,
-	.timer		= &cp_timer,
+	.init_time	= cp_timer_init,
 	.init_machine	= intcp_init,
 	.restart	= integrator_restart,
 MACHINE_END

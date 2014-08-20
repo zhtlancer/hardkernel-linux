@@ -499,7 +499,8 @@ void svc_wake_up(struct svc_serv *serv)
 			rqstp->rq_xprt = NULL;
 			 */
 			wake_up(&rqstp->rq_wait);
-		}
+		} else
+			pool->sp_task_pending = 1;
 		spin_unlock_bh(&pool->sp_lock);
 	}
 }
@@ -634,7 +635,13 @@ struct svc_xprt *svc_get_next_xprt(struct svc_rqst *rqstp, long timeout)
 		 * long for cache updates.
 		 */
 		rqstp->rq_chandle.thread_wait = 1*HZ;
+		pool->sp_task_pending = 0;
 	} else {
+		if (pool->sp_task_pending) {
+			pool->sp_task_pending = 0;
+			spin_unlock_bh(&pool->sp_lock);
+			return ERR_PTR(-EAGAIN);
+		}
 		/* No data pending. Go to sleep */
 		svc_thread_enqueue(pool, rqstp);
 
@@ -723,8 +730,6 @@ static int svc_handle_xprt(struct svc_rqst *rqstp, struct svc_xprt *xprt)
 		newxpt = xprt->xpt_ops->xpo_accept(xprt);
 		if (newxpt)
 			svc_add_new_temp_xprt(serv, newxpt);
-		else
-			module_put(xprt->xpt_class->xcl_owner);
 	} else if (xprt->xpt_ops->xpo_has_wspace(xprt)) {
 		/* XPT_DATA|XPT_DEFERRED case: */
 		dprintk("svc: server %p, pool %u, transport %p, inuse=%d\n",

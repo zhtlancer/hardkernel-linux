@@ -474,8 +474,6 @@ static int kvaser_usb_get_card_info(struct kvaser_usb *dev)
 		return err;
 
 	dev->nchannels = msg.u.cardinfo.nchannels;
-	if (dev->nchannels > MAX_NET_DEVICES)
-		return -EINVAL;
 
 	return 0;
 }
@@ -566,7 +564,6 @@ static int kvaser_usb_simple_msg_async(struct kvaser_usb_net_priv *priv,
 
 	buf = kmalloc(sizeof(struct kvaser_msg), GFP_ATOMIC);
 	if (!buf) {
-		netdev_err(netdev, "No memory left for USB buffer\n");
 		usb_free_urb(urb);
 		return -ENOMEM;
 	}
@@ -1292,7 +1289,6 @@ static netdev_tx_t kvaser_usb_start_xmit(struct sk_buff *skb,
 
 	buf = kmalloc(sizeof(struct kvaser_msg), GFP_ATOMIC);
 	if (!buf) {
-		netdev_err(netdev, "No memory left for USB buffer\n");
 		stats->tx_dropped++;
 		goto nobufmem;
 	}
@@ -1548,9 +1544,9 @@ static int kvaser_usb_init_one(struct usb_interface *intf,
 	return 0;
 }
 
-static int kvaser_usb_get_endpoints(const struct usb_interface *intf,
-				    struct usb_endpoint_descriptor **in,
-				    struct usb_endpoint_descriptor **out)
+static void kvaser_usb_get_endpoints(const struct usb_interface *intf,
+				     struct usb_endpoint_descriptor **in,
+				     struct usb_endpoint_descriptor **out)
 {
 	const struct usb_host_interface *iface_desc;
 	struct usb_endpoint_descriptor *endpoint;
@@ -1561,18 +1557,12 @@ static int kvaser_usb_get_endpoints(const struct usb_interface *intf,
 	for (i = 0; i < iface_desc->desc.bNumEndpoints; ++i) {
 		endpoint = &iface_desc->endpoint[i].desc;
 
-		if (!*in && usb_endpoint_is_bulk_in(endpoint))
+		if (usb_endpoint_is_bulk_in(endpoint))
 			*in = endpoint;
 
-		if (!*out && usb_endpoint_is_bulk_out(endpoint))
+		if (usb_endpoint_is_bulk_out(endpoint))
 			*out = endpoint;
-
-		/* use first bulk endpoint for in and out */
-		if (*in && *out)
-			return 0;
 	}
-
-	return -ENODEV;
 }
 
 static int kvaser_usb_probe(struct usb_interface *intf,
@@ -1586,8 +1576,8 @@ static int kvaser_usb_probe(struct usb_interface *intf,
 	if (!dev)
 		return -ENOMEM;
 
-	err = kvaser_usb_get_endpoints(intf, &dev->bulk_in, &dev->bulk_out);
-	if (err) {
+	kvaser_usb_get_endpoints(intf, &dev->bulk_in, &dev->bulk_out);
+	if (!dev->bulk_in || !dev->bulk_out) {
 		dev_err(&intf->dev, "Cannot get usb endpoint(s)");
 		return err;
 	}

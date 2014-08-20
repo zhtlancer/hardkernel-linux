@@ -1067,9 +1067,9 @@ static void gsm_process_modem(struct tty_struct *tty, struct gsm_dlci *dlci,
 		if ((mlines & TIOCM_CD) == 0 && (dlci->modem_rx & TIOCM_CD))
 			if (!(tty->termios.c_cflag & CLOCAL))
 				tty_hangup(tty);
-		if (brk & 0x01)
-			tty_insert_flip_char(tty, 0, TTY_BREAK);
 	}
+	if (brk & 0x01)
+		tty_insert_flip_char(&dlci->port, 0, TTY_BREAK);
 	dlci->modem_rx = mlines;
 }
 
@@ -1089,7 +1089,6 @@ static void gsm_control_modem(struct gsm_mux *gsm, u8 *data, int clen)
 {
 	unsigned int addr = 0;
 	unsigned int modem = 0;
-	unsigned int brk = 0;
 	struct gsm_dlci *dlci;
 	int len = clen;
 	u8 *dp = data;
@@ -1116,16 +1115,6 @@ static void gsm_control_modem(struct gsm_mux *gsm, u8 *data, int clen)
 		if (len == 0)
 			return;
 	}
-	len--;
-	if (len > 0) {
-		while (gsm_read_ea(&brk, *dp++) == 0) {
-			len--;
-			if (len == 0)
-				return;
-		}
-		modem <<= 7;
-		modem |= (brk & 0x7f);
-	}
 	tty = tty_port_tty_get(&dlci->port);
 	gsm_process_modem(tty, dlci, modem, clen);
 	if (tty) {
@@ -1148,7 +1137,7 @@ static void gsm_control_modem(struct gsm_mux *gsm, u8 *data, int clen)
 
 static void gsm_control_rls(struct gsm_mux *gsm, u8 *data, int clen)
 {
-	struct tty_struct *tty;
+	struct tty_port *port;
 	unsigned int addr = 0 ;
 	u8 bits;
 	int len = clen;
@@ -1171,19 +1160,18 @@ static void gsm_control_rls(struct gsm_mux *gsm, u8 *data, int clen)
 	bits = *dp;
 	if ((bits & 1) == 0)
 		return;
-	/* See if we have an uplink tty */
-	tty = tty_port_tty_get(&gsm->dlci[addr]->port);
 
-	if (tty) {
-		if (bits & 2)
-			tty_insert_flip_char(tty, 0, TTY_OVERRUN);
-		if (bits & 4)
-			tty_insert_flip_char(tty, 0, TTY_PARITY);
-		if (bits & 8)
-			tty_insert_flip_char(tty, 0, TTY_FRAME);
-		tty_flip_buffer_push(tty);
-		tty_kref_put(tty);
-	}
+	port = &gsm->dlci[addr]->port;
+
+	if (bits & 2)
+		tty_insert_flip_char(port, 0, TTY_OVERRUN);
+	if (bits & 4)
+		tty_insert_flip_char(port, 0, TTY_PARITY);
+	if (bits & 8)
+		tty_insert_flip_char(port, 0, TTY_FRAME);
+
+	tty_flip_buffer_push(port);
+
 	gsm_control_reply(gsm, CMD_RLS, data, clen);
 }
 
@@ -1430,11 +1418,7 @@ static void gsm_dlci_close(struct gsm_dlci *dlci)
 		pr_debug("DLCI %d goes closed.\n", dlci->addr);
 	dlci->state = DLCI_CLOSED;
 	if (dlci->addr != 0) {
-		struct tty_struct  *tty = tty_port_tty_get(&dlci->port);
-		if (tty) {
-			tty_hangup(tty);
-			tty_kref_put(tty);
-		}
+		tty_port_tty_hangup(&dlci->port, false);
 		kfifo_reset(dlci->fifo);
 	} else
 		dlci->gsm->dead = 1;
@@ -1556,36 +1540,37 @@ static void gsm_dlci_data(struct gsm_dlci *dlci, u8 *data, int clen)
 {
 	/* krefs .. */
 	struct tty_port *port = &dlci->port;
-	struct tty_struct *tty = tty_port_tty_get(port);
+	struct tty_struct *tty;
 	unsigned int modem = 0;
 	int len = clen;
 
 	if (debug & 16)
-		pr_debug("%d bytes for tty %p\n", len, tty);
-	if (tty) {
-		switch (dlci->adaption)  {
-		/* Unsupported types */
-		/* Packetised interruptible data */
-		case 4:
-			break;
-		/* Packetised uininterruptible voice/data */
-		case 3:
-			break;
-		/* Asynchronous serial with line state in each frame */
-		case 2:
-			while (gsm_read_ea(&modem, *data++) == 0) {
-				len--;
-				if (len == 0)
-					return;
-			}
-			gsm_process_modem(tty, dlci, modem, clen);
-		/* Line state will go via DLCI 0 controls only */
-		case 1:
-		default:
-			tty_insert_flip_string(tty, data, len);
-			tty_flip_buffer_push(tty);
+		pr_debug("%d bytes for tty\n", len);
+	switch (dlci->adaption)  {
+	/* Unsupported types */
+	/* Packetised interruptible data */
+	case 4:
+		break;
+	/* Packetised uininterruptible voice/data */
+	case 3:
+		break;
+	/* Asynchronous serial with line state in each frame */
+	case 2:
+		while (gsm_read_ea(&modem, *data++) == 0) {
+			len--;
+			if (len == 0)
+				return;
 		}
-		tty_kref_put(tty);
+		tty = tty_port_tty_get(port);
+		if (tty) {
+			gsm_process_modem(tty, dlci, modem, clen);
+			tty_kref_put(tty);
+		}
+	/* Line state will go via DLCI 0 controls only */
+	case 1:
+	default:
+		tty_insert_flip_string(port, data, len);
+		tty_flip_buffer_push(port);
 	}
 }
 
@@ -2979,6 +2964,10 @@ static void gsmtty_close(struct tty_struct *tty, struct file *filp)
 	if (tty_port_close_start(&dlci->port, tty, filp) == 0)
 		goto out;
 	gsm_dlci_begin_close(dlci);
+	if (test_bit(ASYNCB_INITIALIZED, &dlci->port.flags)) {
+		if (C_HUPCL(tty))
+			tty_port_lower_dtr_rts(&dlci->port);
+	}
 	tty_port_close_end(&dlci->port, tty);
 	tty_port_tty_set(&dlci->port, NULL);
 out:

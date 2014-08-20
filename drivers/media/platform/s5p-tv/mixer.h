@@ -19,6 +19,7 @@
 #endif
 
 #include <linux/fb.h>
+#include <linux/irqreturn.h>
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
 #include <linux/wait.h>
@@ -152,8 +153,6 @@ struct mxr_layer_ops {
 struct mxr_layer {
 	/** parent mixer device */
 	struct mxr_device *mdev;
-	/** frame buffer emulator */
-	void *fb;
 	/** layer index (unique identifier) */
 	int idx;
 	/** callbacks for layer methods */
@@ -362,7 +361,6 @@ void mxr_reg_vp_buffer(struct mxr_device *mdev,
 void mxr_reg_vp_format(struct mxr_device *mdev,
 	const struct mxr_format *fmt, const struct mxr_geometry *geo);
 void mxr_reg_dump(struct mxr_device *mdev);
-
 
 #endif /* SAMSUNG_MIXER_H */
 

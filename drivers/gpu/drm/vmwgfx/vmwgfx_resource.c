@@ -32,8 +32,6 @@
 #include <drm/drmP.h>
 #include "vmwgfx_resource_priv.h"
 
-#define VMW_RES_EVICT_ERR_COUNT 10
-
 struct vmw_user_dma_buffer {
 	struct ttm_base_object base;
 	struct vmw_dma_buffer dma;
@@ -179,17 +177,16 @@ int vmw_resource_alloc_id(struct vmw_resource *res)
 
 	BUG_ON(res->id != -1);
 
-	do {
-		if (unlikely(idr_pre_get(idr, GFP_KERNEL) == 0))
-			return -ENOMEM;
+	idr_preload(GFP_KERNEL);
+	write_lock(&dev_priv->resource_lock);
 
-		write_lock(&dev_priv->resource_lock);
-		ret = idr_get_new_above(idr, res, 1, &res->id);
-		write_unlock(&dev_priv->resource_lock);
+	ret = idr_alloc(idr, res, 1, 0, GFP_NOWAIT);
+	if (ret >= 0)
+		res->id = ret;
 
-	} while (ret == -EAGAIN);
-
-	return ret;
+	write_unlock(&dev_priv->resource_lock);
+	idr_preload_end();
+	return ret < 0 ? ret : 0;
 }
 
 /**
@@ -961,19 +958,19 @@ void vmw_resource_unreserve(struct vmw_resource *res,
 	if (new_backup && new_backup != res->backup) {
 
 		if (res->backup) {
-			BUG_ON(atomic_read(&res->backup->base.reserved) == 0);
+			BUG_ON(!ttm_bo_is_reserved(&res->backup->base));
 			list_del_init(&res->mob_head);
 			vmw_dmabuf_unreference(&res->backup);
 		}
 
 		res->backup = vmw_dmabuf_reference(new_backup);
-		BUG_ON(atomic_read(&new_backup->base.reserved) == 0);
+		BUG_ON(!ttm_bo_is_reserved(&new_backup->base));
 		list_add_tail(&res->mob_head, &new_backup->res_list);
 	}
 	if (new_backup)
 		res->backup_offset = new_backup_offset;
 
-	if (!res->func->may_evict || res->id == -1)
+	if (!res->func->may_evict)
 		return;
 
 	write_lock(&dev_priv->resource_lock);
@@ -1090,9 +1087,8 @@ void vmw_resource_backoff_reservation(struct ttm_validate_buffer *val_buf)
  *                         to a backup buffer.
  *
  * @res:            The resource to evict.
- * @interruptible:  Whether to wait interruptible.
  */
-int vmw_resource_do_evict(struct vmw_resource *res, bool interruptible)
+int vmw_resource_do_evict(struct vmw_resource *res)
 {
 	struct ttm_validate_buffer val_buf;
 	const struct vmw_res_func *func = res->func;
@@ -1101,7 +1097,7 @@ int vmw_resource_do_evict(struct vmw_resource *res, bool interruptible)
 	BUG_ON(!func->may_evict);
 
 	val_buf.bo = NULL;
-	ret = vmw_resource_check_buffer(res, interruptible, &val_buf);
+	ret = vmw_resource_check_buffer(res, true, &val_buf);
 	if (unlikely(ret != 0))
 		return ret;
 
@@ -1140,7 +1136,6 @@ int vmw_resource_validate(struct vmw_resource *res)
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct list_head *lru_list = &dev_priv->res_lru[res->func->res_type];
 	struct ttm_validate_buffer val_buf;
-	unsigned err_count = 0;
 
 	if (likely(!res->func->may_evict))
 		return 0;
@@ -1155,7 +1150,7 @@ int vmw_resource_validate(struct vmw_resource *res)
 
 		write_lock(&dev_priv->resource_lock);
 		if (list_empty(lru_list) || !res->func->may_evict) {
-			DRM_ERROR("Out of device device resources "
+			DRM_ERROR("Out of device device id entries "
 				  "for %s.\n", res->func->type_name);
 			ret = -EBUSY;
 			write_unlock(&dev_priv->resource_lock);
@@ -1168,19 +1163,7 @@ int vmw_resource_validate(struct vmw_resource *res)
 		list_del_init(&evict_res->lru_head);
 
 		write_unlock(&dev_priv->resource_lock);
-
-		ret = vmw_resource_do_evict(evict_res, true);
-		if (unlikely(ret != 0)) {
-			write_lock(&dev_priv->resource_lock);
-			list_add_tail(&evict_res->lru_head, lru_list);
-			write_unlock(&dev_priv->resource_lock);
-			if (ret == -ERESTARTSYS ||
-			    ++err_count > VMW_RES_EVICT_ERR_COUNT) {
-				vmw_resource_unreference(&evict_res);
-				goto out_no_validate;
-			}
-		}
-
+		vmw_resource_do_evict(evict_res);
 		vmw_resource_unreference(&evict_res);
 	} while (1);
 
@@ -1265,15 +1248,13 @@ bool vmw_resource_needs_backup(const struct vmw_resource *res)
  * @type:           The resource type to evict
  *
  * To avoid thrashing starvation or as part of the hibernation sequence,
- * try to evict all evictable resources of a specific type.
+ * evict all evictable resources of a specific type.
  */
 static void vmw_resource_evict_type(struct vmw_private *dev_priv,
 				    enum vmw_res_type type)
 {
 	struct list_head *lru_list = &dev_priv->res_lru[type];
 	struct vmw_resource *evict_res;
-	unsigned err_count = 0;
-	int ret;
 
 	do {
 		write_lock(&dev_priv->resource_lock);
@@ -1286,18 +1267,7 @@ static void vmw_resource_evict_type(struct vmw_private *dev_priv,
 					 lru_head));
 		list_del_init(&evict_res->lru_head);
 		write_unlock(&dev_priv->resource_lock);
-
-		ret = vmw_resource_do_evict(evict_res, false);
-		if (unlikely(ret != 0)) {
-			write_lock(&dev_priv->resource_lock);
-			list_add_tail(&evict_res->lru_head, lru_list);
-			write_unlock(&dev_priv->resource_lock);
-			if (++err_count > VMW_RES_EVICT_ERR_COUNT) {
-				vmw_resource_unreference(&evict_res);
-				return;
-			}
-		}
-
+		vmw_resource_do_evict(evict_res);
 		vmw_resource_unreference(&evict_res);
 	} while (1);
 

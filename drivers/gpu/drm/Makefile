@@ -5,7 +5,7 @@
 ccflags-y := -Iinclude/drm
 
 drm-y       :=	drm_auth.o drm_buffer.o drm_bufs.o drm_cache.o \
-		drm_context.o drm_dma.o drm_sman.o \
+		drm_context.o drm_dma.o \
 		drm_drv.o drm_fops.o drm_gem.o drm_ioctl.o drm_irq.o \
 		drm_lock.o drm_memory.o drm_proc.o drm_stub.o drm_vm.o \
 		drm_agpsupport.o drm_scatter.o drm_pci.o \
@@ -49,5 +49,7 @@ obj-$(CONFIG_DRM_GMA500) += gma500/
 obj-$(CONFIG_DRM_UDL) += udl/
 obj-$(CONFIG_DRM_AST) += ast/
 obj-$(CONFIG_DRM_SHMOBILE) +=shmobile/
-obj-$(CONFIG_DRM_TEGRA) += tegra/
+obj-$(CONFIG_DRM_OMAP)	+= omapdrm/
+obj-$(CONFIG_DRM_TILCDC)	+= tilcdc/
+obj-$(CONFIG_DRM_QXL) += qxl/
 obj-y			+= i2c/

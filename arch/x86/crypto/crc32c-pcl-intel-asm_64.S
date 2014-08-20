@@ -1,9 +1,10 @@
 /*
  * Implement fast CRC32C with PCLMULQDQ instructions. (x86_64)
  *
- * The white paper on CRC32C calculations with PCLMULQDQ instruction can be
+ * The white papers on CRC32C calculations with PCLMULQDQ instruction can be
  * downloaded from:
- * http://download.intel.com/design/intarch/papers/323405.pdf
+ * http://www.intel.com/content/dam/www/public/us/en/documents/white-papers/crc-iscsi-polynomial-crc32-instruction-paper.pdf
+ * http://www.intel.com/content/dam/www/public/us/en/documents/white-papers/fast-crc-computation-paper.pdf
  *
  * Copyright (C) 2012 Intel Corporation.
  *
@@ -43,6 +44,7 @@
  */
 
 #include <asm/inst.h>
+#include <linux/linkage.h>
 
 ## ISCSI CRC 32 Implementation with crc32 and pclmulqdq Instruction
 
@@ -70,8 +72,7 @@
 
 # unsigned int crc_pcl(u8 *buffer, int len, unsigned int crc_init);
 
-.global crc_pcl
-crc_pcl:
+ENTRY(crc_pcl)
 #define    bufp		%rdi
 #define    bufp_dw	%edi
 #define    bufp_w	%di
@@ -325,6 +326,9 @@ JMPTBL_ENTRY %i
 .noaltmacro
 	i=i+1
 .endr
+
+ENDPROC(crc_pcl)
+
 	################################################################
 	## PCLMULQDQ tables
 	## Table is 128 entries x 2 quad words each

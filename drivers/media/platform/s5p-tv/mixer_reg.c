@@ -115,7 +115,7 @@ void mxr_reg_reset(struct mxr_device *mdev)
 	/* setting graphical layers */
 
 	val  = MXR_GRP_CFG_COLOR_KEY_DISABLE; /* no blank key */
-//	val |= MXR_GRP_CFG_BLEND_PRE_MUL; /* premul mode */
+	val |= MXR_GRP_CFG_BLEND_PRE_MUL; /* premul mode */
 	val |= MXR_GRP_CFG_ALPHA_VAL(0xff); /* non-transparent alpha */
 
 	/* the same configuration for both layers */
@@ -470,11 +470,11 @@ static inline void mxr_reg_vp_filter_set(struct mxr_device *mdev,
 static void mxr_reg_vp_default_filter(struct mxr_device *mdev)
 {
 	mxr_reg_vp_filter_set(mdev, VP_POLY8_Y0_LL,
-		filter_y_horiz_tap8, sizeof filter_y_horiz_tap8);
+		filter_y_horiz_tap8, sizeof(filter_y_horiz_tap8));
 	mxr_reg_vp_filter_set(mdev, VP_POLY4_Y0_LL,
-		filter_y_vert_tap4, sizeof filter_y_vert_tap4);
+		filter_y_vert_tap4, sizeof(filter_y_vert_tap4));
 	mxr_reg_vp_filter_set(mdev, VP_POLY4_C0_LL,
-		filter_cr_horiz_tap4, sizeof filter_cr_horiz_tap4);
+		filter_cr_horiz_tap4, sizeof(filter_cr_horiz_tap4));
 }
 
 static void mxr_reg_mxr_dump(struct mxr_device *mdev)

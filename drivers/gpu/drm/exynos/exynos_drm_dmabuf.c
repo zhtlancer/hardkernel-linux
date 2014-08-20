@@ -155,66 +155,36 @@ static void exynos_dmabuf_release(struct dma_buf *dmabuf)
 static void *exynos_gem_dmabuf_kmap_atomic(struct dma_buf *dma_buf,
 						unsigned long page_num)
 {
-        struct exynos_drm_gem_obj *exynos_gem_obj = dma_buf->priv;
-        struct exynos_drm_gem_buf *buf = exynos_gem_obj->buffer;
-        return kmap_atomic(buf->pages[page_num]);
+	/* TODO */
+
+	return NULL;
 }
 
 static void exynos_gem_dmabuf_kunmap_atomic(struct dma_buf *dma_buf,
 						unsigned long page_num,
 						void *addr)
 {
-	kunmap_atomic(addr);
+	/* TODO */
 }
 
 static void *exynos_gem_dmabuf_kmap(struct dma_buf *dma_buf,
 					unsigned long page_num)
 {
-        struct exynos_drm_gem_obj *exynos_gem_obj = dma_buf->priv;
-        struct exynos_drm_gem_buf *buf = exynos_gem_obj->buffer;
-        return kmap(buf->pages[page_num]);
+	/* TODO */
+
+	return NULL;
 }
 
 static void exynos_gem_dmabuf_kunmap(struct dma_buf *dma_buf,
 					unsigned long page_num, void *addr)
 {
-        struct exynos_drm_gem_obj *exynos_gem_obj = dma_buf->priv;
-        struct exynos_drm_gem_buf *buf = exynos_gem_obj->buffer;
-        kunmap(buf->pages[page_num]);
+	/* TODO */
 }
 
 static int exynos_gem_dmabuf_mmap(struct dma_buf *dma_buf,
 	struct vm_area_struct *vma)
 {
-        struct exynos_drm_gem_obj *exynos_gem_obj = dma_buf->priv;
-        struct drm_device *dev = exynos_gem_obj->base.dev;
-        struct exynos_drm_gem_buf *buf = exynos_gem_obj->buffer;
-        int ret = 0;
-        if (WARN_ON(!exynos_gem_obj->base.filp))
-                return -EINVAL;
-        /* Check for valid size. */
-        if (buf->size < vma->vm_end - vma->vm_start) {
-                ret = -EINVAL;
-                goto out_unlock;
-        }
-        if (!dev->driver->gem_vm_ops) {
-                ret = -EINVAL;
-                goto out_unlock;
-        }
-        vma->vm_flags |= VM_DONTDUMP | VM_IO | VM_MIXEDMAP | VM_DONTEXPAND;
-        vma->vm_ops = dev->driver->gem_vm_ops;
-        vma->vm_private_data = exynos_gem_obj;
-        vma->vm_page_prot = pgprot_writecombine(
-                        vm_get_page_prot(vma->vm_flags));
-        /* Take a ref for this mapping of the object, so that the fault
-         * handler can dereference the mmap offset's pointer to the object.
-         * This reference is cleaned up by the corresponding vm_close
-         * (which should happen whether the vma was created by this call or
-         * by a vm_open due to mremap or partial unmap or whatever).
-         */
-        vma->vm_ops->open(vma);
-out_unlock:
-        return ret;
+	return -ENOTTY;
 }
 
 static struct dma_buf_ops exynos_dmabuf_ops = {
@@ -265,7 +235,6 @@ struct drm_gem_object *exynos_dmabuf_prime_import(struct drm_device *drm_dev,
 			 * refcount on gem itself instead of f_count of dmabuf.
 			 */
 			drm_gem_object_reference(obj);
-			dma_buf_put(dma_buf);
 			return obj;
 		}
 	}
@@ -274,6 +243,7 @@ struct drm_gem_object *exynos_dmabuf_prime_import(struct drm_device *drm_dev,
 	if (IS_ERR(attach))
 		return ERR_PTR(-EINVAL);
 
+	get_dma_buf(dma_buf);
 
 	sgt = dma_buf_map_attachment(attach, DMA_BIDIRECTIONAL);
 	if (IS_ERR_OR_NULL(sgt)) {
@@ -328,6 +298,8 @@ err_unmap_attach:
 	dma_buf_unmap_attachment(attach, sgt, DMA_BIDIRECTIONAL);
 err_buf_detach:
 	dma_buf_detach(dma_buf, attach);
+	dma_buf_put(dma_buf);
+
 	return ERR_PTR(ret);
 }
 

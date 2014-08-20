@@ -62,7 +62,7 @@ struct v4l2_m2m_dev {
 	struct list_head	job_queue;
 	spinlock_t		job_spinlock;
 
-	struct v4l2_m2m_ops	*m2m_ops;
+	const struct v4l2_m2m_ops *m2m_ops;
 };
 
 static struct v4l2_m2m_queue_ctx *get_queue_ctx(struct v4l2_m2m_ctx *m2m_ctx,
@@ -202,10 +202,10 @@ static void v4l2_m2m_try_run(struct v4l2_m2m_dev *m2m_dev)
  * An example of the above could be an instance that requires more than one
  * src/dst buffer per transaction.
  */
-static void v4l2_m2m_try_schedule(struct v4l2_m2m_ctx *m2m_ctx)
+void v4l2_m2m_try_schedule(struct v4l2_m2m_ctx *m2m_ctx)
 {
 	struct v4l2_m2m_dev *m2m_dev;
-	unsigned long flags_job, flags;
+	unsigned long flags_job, flags_out, flags_cap;
 
 	m2m_dev = m2m_ctx->m2m_dev;
 	dprintk("Trying to schedule a job for m2m_ctx: %p\n", m2m_ctx);
@@ -223,20 +223,26 @@ static void v4l2_m2m_try_schedule(struct v4l2_m2m_ctx *m2m_ctx)
 		return;
 	}
 
-	spin_lock_irqsave(&m2m_ctx->out_q_ctx.rdy_spinlock, flags);
+	spin_lock_irqsave(&m2m_ctx->out_q_ctx.rdy_spinlock, flags_out);
 	if (list_empty(&m2m_ctx->out_q_ctx.rdy_queue)) {
-		spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock, flags);
+		spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock,
+					flags_out);
 		spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags_job);
 		dprintk("No input buffers available\n");
 		return;
 	}
+	spin_lock_irqsave(&m2m_ctx->cap_q_ctx.rdy_spinlock, flags_cap);
 	if (list_empty(&m2m_ctx->cap_q_ctx.rdy_queue)) {
-		spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock, flags);
+		spin_unlock_irqrestore(&m2m_ctx->cap_q_ctx.rdy_spinlock,
+					flags_cap);
+		spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock,
+					flags_out);
 		spin_unlock_irqrestore(&m2m_dev->job_spinlock, flags_job);
 		dprintk("No output buffers available\n");
 		return;
 	}
-	spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock, flags);
+	spin_unlock_irqrestore(&m2m_ctx->cap_q_ctx.rdy_spinlock, flags_cap);
+	spin_unlock_irqrestore(&m2m_ctx->out_q_ctx.rdy_spinlock, flags_out);
 
 	if (m2m_dev->m2m_ops->job_ready
 		&& (!m2m_dev->m2m_ops->job_ready(m2m_ctx->priv))) {
@@ -369,6 +375,20 @@ int v4l2_m2m_dqbuf(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
 EXPORT_SYMBOL_GPL(v4l2_m2m_dqbuf);
 
 /**
+ * v4l2_m2m_create_bufs() - create a source or destination buffer, depending
+ * on the type
+ */
+int v4l2_m2m_create_bufs(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
+			 struct v4l2_create_buffers *create)
+{
+	struct vb2_queue *vq;
+
+	vq = v4l2_m2m_get_vq(m2m_ctx, create->format.type);
+	return vb2_create_bufs(vq, create);
+}
+EXPORT_SYMBOL_GPL(v4l2_m2m_create_bufs);
+
+/**
  * v4l2_m2m_expbuf() - export a source or destination buffer, depending on
  * the type
  */
@@ -418,6 +438,14 @@ int v4l2_m2m_streamoff(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
 	m2m_dev = m2m_ctx->m2m_dev;
 	spin_lock_irqsave(&m2m_dev->job_spinlock, flags_job);
 	/* We should not be scheduled anymore, since we're dropping a queue. */
+	if (!list_empty(&m2m_dev->job_queue)) {
+		struct v4l2_m2m_ctx *list_ctx, *temp_ctx;
+		list_for_each_entry_safe(list_ctx, temp_ctx,
+			&m2m_dev->job_queue, queue) {
+		if (list_ctx == m2m_ctx)
+			list_del(&m2m_ctx->queue);
+		}
+	}
 	INIT_LIST_HEAD(&m2m_ctx->queue);
 	m2m_ctx->job_flags = 0;
 
@@ -483,8 +511,10 @@ unsigned int v4l2_m2m_poll(struct file *file, struct v4l2_m2m_ctx *m2m_ctx,
 	if (m2m_ctx->m2m_dev->m2m_ops->unlock)
 		m2m_ctx->m2m_dev->m2m_ops->unlock(m2m_ctx->priv);
 
-	poll_wait(file, &src_q->done_wq, wait);
-	poll_wait(file, &dst_q->done_wq, wait);
+	if (list_empty(&src_q->done_list))
+		poll_wait(file, &src_q->done_wq, wait);
+	if (list_empty(&dst_q->done_list))
+		poll_wait(file, &dst_q->done_wq, wait);
 
 	if (m2m_ctx->m2m_dev->m2m_ops->lock)
 		m2m_ctx->m2m_dev->m2m_ops->lock(m2m_ctx->priv);
@@ -544,7 +574,7 @@ EXPORT_SYMBOL(v4l2_m2m_mmap);
  *
  * Usually called from driver's probe() function.
  */
-struct v4l2_m2m_dev *v4l2_m2m_init(struct v4l2_m2m_ops *m2m_ops)
+struct v4l2_m2m_dev *v4l2_m2m_init(const struct v4l2_m2m_ops *m2m_ops)
 {
 	struct v4l2_m2m_dev *m2m_dev;
 

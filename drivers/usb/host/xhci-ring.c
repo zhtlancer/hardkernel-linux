@@ -122,16 +122,6 @@ static int enqueue_is_link_trb(struct xhci_ring *ring)
 	return TRB_TYPE_LINK_LE32(link->control);
 }
 
-union xhci_trb *xhci_find_next_enqueue(struct xhci_ring *ring)
-{
-	/* Enqueue pointer can be left pointing to the link TRB,
-	 * we must handle that
-	 */
-	if (TRB_TYPE_LINK_LE32(ring->enqueue->link.control))
-		return ring->enq_seg->next->trbs;
-	return ring->enqueue;
-}
-
 /* Updates trb to point to the next TRB in the ring, and updates seg if the next
  * TRB is in a new segment.  This does not skip over link TRBs, and it does not
  * effect the ring dequeue or enqueue pointers.
@@ -551,11 +541,10 @@ void xhci_find_new_dequeue_state(struct xhci_hcd *xhci,
 		struct xhci_dequeue_state *state)
 {
 	struct xhci_virt_device *dev = xhci->devs[slot_id];
-	struct xhci_virt_ep *ep = &dev->eps[ep_index];
 	struct xhci_ring *ep_ring;
 	struct xhci_generic_trb *trb;
+	struct xhci_ep_ctx *ep_ctx;
 	dma_addr_t addr;
-	u64 hw_dequeue;
 
 	ep_ring = xhci_triad_to_transfer_ring(xhci, slot_id,
 			ep_index, stream_id);
@@ -565,62 +554,52 @@ void xhci_find_new_dequeue_state(struct xhci_hcd *xhci,
 				stream_id);
 		return;
 	}
-
-	/* Dig out the cycle state saved by the xHC during the stop ep cmd */
-	xhci_dbg(xhci, "Finding endpoint context\n");
-	/* 4.6.9 the css flag is written to the stream context for streams */
-	if (ep->ep_state & EP_HAS_STREAMS) {
-		struct xhci_stream_ctx *ctx =
-			&ep->stream_info->stream_ctx_array[stream_id];
-		hw_dequeue = le64_to_cpu(ctx->stream_ring);
-	} else {
-		struct xhci_ep_ctx *ep_ctx
-			= xhci_get_ep_ctx(xhci, dev->out_ctx, ep_index);
-		hw_dequeue = le64_to_cpu(ep_ctx->deq);
-	}
-
-	/* Find virtual address and segment of hardware dequeue pointer */
-	state->new_deq_seg = ep_ring->deq_seg;
-	state->new_deq_ptr = ep_ring->dequeue;
-	while (xhci_trb_virt_to_dma(state->new_deq_seg, state->new_deq_ptr)
-			!= (dma_addr_t)(hw_dequeue & ~0xf)) {
-		next_trb(xhci, ep_ring, &state->new_deq_seg,
-					&state->new_deq_ptr);
-		if (state->new_deq_ptr == ep_ring->dequeue) {
-			WARN_ON(1);
-			return;
-		}
-	}
-	/*
-	 * Find cycle state for last_trb, starting at old cycle state of
-	 * hw_dequeue. If there is only one segment ring, find_trb_seg() will
-	 * return immediately and cannot toggle the cycle state if this search
-	 * wraps around, so add one more toggle manually in that case.
-	 */
-	state->new_cycle_state = hw_dequeue & 0x1;
-	if (ep_ring->first_seg == ep_ring->first_seg->next &&
-			cur_td->last_trb < state->new_deq_ptr)
-		state->new_cycle_state ^= 0x1;
-
-	state->new_deq_ptr = cur_td->last_trb;
-	xhci_dbg(xhci, "Finding segment containing last TRB in TD.\n");
-	state->new_deq_seg = find_trb_seg(state->new_deq_seg,
-			state->new_deq_ptr, &state->new_cycle_state);
+	state->new_cycle_state = 0;
+	xhci_dbg(xhci, "Finding segment containing stopped TRB.\n");
+	state->new_deq_seg = find_trb_seg(cur_td->start_seg,
+			dev->eps[ep_index].stopped_trb,
+			&state->new_cycle_state);
 	if (!state->new_deq_seg) {
 		WARN_ON(1);
 		return;
 	}
 
-	/* Increment to find next TRB after last_trb. Cycle if appropriate. */
+	/* Dig out the cycle state saved by the xHC during the stop ep cmd */
+	xhci_dbg(xhci, "Finding endpoint context\n");
+	ep_ctx = xhci_get_ep_ctx(xhci, dev->out_ctx, ep_index);
+	state->new_cycle_state = 0x1 & le64_to_cpu(ep_ctx->deq);
+
+	state->new_deq_ptr = cur_td->last_trb;
+	xhci_dbg(xhci, "Finding segment containing last TRB in TD.\n");
+	state->new_deq_seg = find_trb_seg(state->new_deq_seg,
+			state->new_deq_ptr,
+			&state->new_cycle_state);
+	if (!state->new_deq_seg) {
+		WARN_ON(1);
+		return;
+	}
+
 	trb = &state->new_deq_ptr->generic;
 	if (TRB_TYPE_LINK_LE32(trb->field[3]) &&
 	    (trb->field[3] & cpu_to_le32(LINK_TOGGLE)))
 		state->new_cycle_state ^= 0x1;
 	next_trb(xhci, ep_ring, &state->new_deq_seg, &state->new_deq_ptr);
 
-	/* Don't update the ring cycle state for the producer (us). */
+	/*
+	 * If there is only one segment in a ring, find_trb_seg()'s while loop
+	 * will not run, and it will return before it has a chance to see if it
+	 * needs to toggle the cycle bit.  It can't tell if the stalled transfer
+	 * ended just before the link TRB on a one-segment ring, or if the TD
+	 * wrapped around the top of the ring, because it doesn't have the TD in
+	 * question.  Look for the one-segment case where stalled TRB's address
+	 * is greater than the new dequeue pointer address.
+	 */
+	if (ep_ring->first_seg == ep_ring->first_seg->next &&
+			state->new_deq_ptr < dev->eps[ep_index].stopped_trb)
+		state->new_cycle_state ^= 0x1;
 	xhci_dbg(xhci, "Cycle state = 0x%x\n", state->new_cycle_state);
 
+	/* Don't update the ring cycle state for the producer (us). */
 	xhci_dbg(xhci, "New dequeue segment = %p (virtual)\n",
 			state->new_deq_seg);
 	addr = xhci_trb_virt_to_dma(state->new_deq_seg, state->new_deq_ptr);
@@ -802,6 +781,7 @@ static void handle_stopped_endpoint(struct xhci_hcd *xhci,
 	if (list_empty(&ep->cancelled_td_list)) {
 		xhci_stop_watchdog_timer_in_irq(xhci, ep);
 		ep->stopped_td = NULL;
+		ep->stopped_trb = NULL;
 		ring_doorbell_for_active_rings(xhci, slot_id, ep_index);
 		return;
 	}
@@ -867,10 +847,8 @@ remove_finished_td:
 		/* Otherwise ring the doorbell(s) to restart queued transfers */
 		ring_doorbell_for_active_rings(xhci, slot_id, ep_index);
 	}
-
-	/* Clear stopped_td if endpoint is not halted */
-	if (!(ep->ep_state & EP_HALTED))
-		ep->stopped_td = NULL;
+	ep->stopped_td = NULL;
+	ep->stopped_trb = NULL;
 
 	/*
 	 * Drop the lock and complete the URBs in the cancelled TD list.
@@ -1412,12 +1390,6 @@ static void handle_cmd_completion(struct xhci_hcd *xhci,
 			inc_deq(xhci, xhci->cmd_ring);
 			return;
 		}
-		/* There is no command to handle if we get a stop event when the
-		 * command ring is empty, event->cmd_trb points to the next
-		 * unset command
-		 */
-		if (xhci->cmd_ring->dequeue == xhci->cmd_ring->enqueue)
-			return;
 	}
 
 	switch (le32_to_cpu(xhci->cmd_ring->dequeue->generic.field[3])
@@ -1627,14 +1599,20 @@ static void handle_port_status(struct xhci_hcd *xhci,
 	max_ports = HCS_MAX_PORTS(xhci->hcs_params1);
 	if ((port_id <= 0) || (port_id > max_ports)) {
 		xhci_warn(xhci, "Invalid port id %d\n", port_id);
-		bogus_port_status = true;
-		goto cleanup;
+		inc_deq(xhci, xhci->event_ring);
+		return;
 	}
 
 	/* Figure out which usb_hcd this port is attached to:
 	 * is it a USB 3.0 port or a USB 2.0/1.1 port?
 	 */
 	major_revision = xhci->port_array[port_id - 1];
+
+	/* Find the right roothub. */
+	hcd = xhci_to_hcd(xhci);
+	if ((major_revision == 0x03) != (hcd->speed == HCD_USB3))
+		hcd = xhci->shared_hcd;
+
 	if (major_revision == 0) {
 		xhci_warn(xhci, "Event for port %u not in "
 				"Extended Capabilities, ignoring.\n",
@@ -1657,10 +1635,6 @@ static void handle_port_status(struct xhci_hcd *xhci,
 	 * into the index into the ports on the correct split roothub, and the
 	 * correct bus_state structure.
 	 */
-	/* Find the right roothub. */
-	hcd = xhci_to_hcd(xhci);
-	if ((major_revision == 0x03) != (hcd->speed == HCD_USB3))
-		hcd = xhci->shared_hcd;
 	bus_state = &xhci->bus_state[hcd_index(hcd)];
 	if (hcd->speed == HCD_USB3)
 		port_array = xhci->usb3_ports;
@@ -1832,12 +1806,14 @@ static void xhci_cleanup_halted_endpoint(struct xhci_hcd *xhci,
 	struct xhci_virt_ep *ep = &xhci->devs[slot_id]->eps[ep_index];
 	ep->ep_state |= EP_HALTED;
 	ep->stopped_td = td;
+	ep->stopped_trb = event_trb;
 	ep->stopped_stream = stream_id;
 
 	xhci_queue_reset_ep(xhci, slot_id, ep_index);
 	xhci_cleanup_stalled_ring(xhci, td->urb->dev, ep_index);
 
 	ep->stopped_td = NULL;
+	ep->stopped_trb = NULL;
 	ep->stopped_stream = 0;
 
 	xhci_ring_cmd_db(xhci);
@@ -1919,6 +1895,7 @@ static int finish_td(struct xhci_hcd *xhci, struct xhci_td *td,
 		 * the ring dequeue pointer or take this TD off any lists yet.
 		 */
 		ep->stopped_td = td;
+		ep->stopped_trb = event_trb;
 		return 0;
 	} else {
 		if (trb_comp_code == COMP_STALL) {
@@ -1930,6 +1907,7 @@ static int finish_td(struct xhci_hcd *xhci, struct xhci_td *td,
 			 * USB class driver clear the stall later.
 			 */
 			ep->stopped_td = td;
+			ep->stopped_trb = event_trb;
 			ep->stopped_stream = ep_ring->stream_id;
 		} else if (xhci_requires_manual_halt_cleanup(xhci,
 					ep_ctx, trb_comp_code)) {
@@ -2739,13 +2717,11 @@ irqreturn_t xhci_irq(struct usb_hcd *hcd)
 {
 	struct xhci_hcd *xhci = hcd_to_xhci(hcd);
 	u32 status;
-	union xhci_trb *trb;
 	u64 temp_64;
 	union xhci_trb *event_ring_deq;
 	dma_addr_t deq;
 
 	spin_lock(&xhci->lock);
-	trb = xhci->event_ring->dequeue;
 	/* Check if the xHC generated the interrupt, or the irq is shared */
 	status = xhci_readl(xhci, &xhci->op_regs->status);
 	if (status == 0xffffffff)

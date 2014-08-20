@@ -38,8 +38,8 @@ struct devfreq;
  */
 struct devfreq_dev_status {
 	/* both since the last measure */
-	unsigned long total_time;
-	unsigned long busy_time;
+	unsigned long long total_time;
+	unsigned long long busy_time;
 	unsigned long current_frequency;
 	void *private_data;
 };
@@ -192,6 +192,13 @@ extern int devfreq_register_opp_notifier(struct device *dev,
 extern int devfreq_unregister_opp_notifier(struct device *dev,
 					   struct devfreq *devfreq);
 
+#if IS_ENABLED(CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND) || IS_ENABLED(CONFIG_DEVFREQ_GOV_SIMPLE_USAGE)
+struct devfreq_notifier_block {
+	struct notifier_block nb;
+	struct devfreq *df;
+};
+#endif
+
 #if IS_ENABLED(CONFIG_DEVFREQ_GOV_SIMPLE_ONDEMAND)
 /**
  * struct devfreq_simple_ondemand_data - void *data fed to struct devfreq
@@ -207,13 +214,45 @@ extern int devfreq_unregister_opp_notifier(struct device *dev,
  * the governor uses the default values.
  */
 struct devfreq_simple_ondemand_data {
+	unsigned int multiplication_weight;
 	unsigned int upthreshold;
 	unsigned int downdifferential;
+	unsigned long cal_qos_max;
+	int pm_qos_class;
+	struct devfreq_notifier_block nb;
+};
+#endif
+
+#if IS_ENABLED(CONFIG_DEVFREQ_GOV_SIMPLE_USAGE)
+struct devfreq_simple_usage_data {
+	unsigned int multiplication_weight;
+	unsigned int proportional;
+	unsigned int upthreshold;
+	unsigned int target_percentage;
+	int pm_qos_class;
+	unsigned long cal_qos_max;
+	bool en_monitoring;
+	struct devfreq_notifier_block nb;
+};
+#endif
+
+#if IS_ENABLED(CONFIG_DEVFREQ_GOV_SIMPLE_EXYNOS)
+struct devfreq_simple_exynos_data {
+	unsigned int urgentthreshold;
+	unsigned int upthreshold;
+	unsigned int downthreshold;
+	unsigned int idlethreshold;
+	unsigned long above_freq;
+	unsigned long below_freq;
+	int pm_qos_class;
+	unsigned long cal_qos_max;
+	bool en_monitoring;
+	struct devfreq_notifier_block nb;
 };
 #endif
 
 #else /* !CONFIG_PM_DEVFREQ */
-static struct devfreq *devfreq_add_device(struct device *dev,
+static inline struct devfreq *devfreq_add_device(struct device *dev,
 					  struct devfreq_dev_profile *profile,
 					  const char *governor_name,
 					  void *data)
@@ -221,34 +260,34 @@ static struct devfreq *devfreq_add_device(struct device *dev,
 	return NULL;
 }
 
-static int devfreq_remove_device(struct devfreq *devfreq)
+static inline int devfreq_remove_device(struct devfreq *devfreq)
 {
 	return 0;
 }
 
-static int devfreq_suspend_device(struct devfreq *devfreq)
+static inline int devfreq_suspend_device(struct devfreq *devfreq)
 {
 	return 0;
 }
 
-static int devfreq_resume_device(struct devfreq *devfreq)
+static inline int devfreq_resume_device(struct devfreq *devfreq)
 {
 	return 0;
 }
 
-static struct opp *devfreq_recommended_opp(struct device *dev,
+static inline struct opp *devfreq_recommended_opp(struct device *dev,
 					   unsigned long *freq, u32 flags)
 {
-	return -EINVAL;
+	return ERR_PTR(-EINVAL);
 }
 
-static int devfreq_register_opp_notifier(struct device *dev,
+static inline int devfreq_register_opp_notifier(struct device *dev,
 					 struct devfreq *devfreq)
 {
 	return -EINVAL;
 }
 
-static int devfreq_unregister_opp_notifier(struct device *dev,
+static inline int devfreq_unregister_opp_notifier(struct device *dev,
 					   struct devfreq *devfreq)
 {
 	return -EINVAL;

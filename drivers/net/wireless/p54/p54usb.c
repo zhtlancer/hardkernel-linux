@@ -83,7 +83,6 @@ static struct usb_device_id p54u_table[] = {
 	{USB_DEVICE(0x06a9, 0x000e)},	/* Westell 802.11g USB (A90-211WG-01) */
 	{USB_DEVICE(0x06b9, 0x0121)},	/* Thomson SpeedTouch 121g */
 	{USB_DEVICE(0x0707, 0xee13)},   /* SMC 2862W-G version 2 */
-	{USB_DEVICE(0x07aa, 0x0020)},	/* Corega WLUSB2GTST USB */
 	{USB_DEVICE(0x0803, 0x4310)},	/* Zoom 4410a */
 	{USB_DEVICE(0x083a, 0x4521)},   /* Siemens Gigaset USB Adapter 54 version 2 */
 	{USB_DEVICE(0x083a, 0x4531)},	/* T-Com Sinus 154 data II */
@@ -511,11 +510,8 @@ static int p54u_upload_firmware_3887(struct ieee80211_hw *dev)
 		return err;
 
 	tmp = buf = kmalloc(P54U_FW_BLOCK, GFP_KERNEL);
-	if (!buf) {
-		dev_err(&priv->udev->dev, "(p54usb) cannot allocate firmware"
-					  "upload buffer!\n");
+	if (!buf)
 		return -ENOMEM;
-	}
 
 	left = block_size = min((size_t)P54U_FW_BLOCK, priv->fw->size);
 	strcpy(buf, p54u_firmware_upload_3887);
@@ -638,11 +634,8 @@ static int p54u_upload_firmware_net2280(struct ieee80211_hw *dev)
 	const u8 *data;
 
 	buf = kmalloc(512, GFP_KERNEL);
-	if (!buf) {
-		dev_err(&priv->udev->dev, "(p54usb) firmware buffer "
-					  "alloc failed!\n");
+	if (!buf)
 		return -ENOMEM;
-	}
 
 #define P54U_WRITE(type, addr, data) \
 	do {\

@@ -361,30 +361,24 @@ static inline void usb_dma_writel(struct bcm63xx_udc *udc, u32 val, u32 off)
 	bcm_writel(val, udc->iudma_regs + off);
 }
 
-static inline u32 usb_dmac_readl(struct bcm63xx_udc *udc, u32 off, int chan)
+static inline u32 usb_dmac_readl(struct bcm63xx_udc *udc, u32 off)
 {
-	return bcm_readl(udc->iudma_regs + IUDMA_DMAC_OFFSET + off +
-			(ENETDMA_CHAN_WIDTH * chan));
+	return bcm_readl(udc->iudma_regs + IUDMA_DMAC_OFFSET + off);
 }
 
-static inline void usb_dmac_writel(struct bcm63xx_udc *udc, u32 val, u32 off,
-					int chan)
+static inline void usb_dmac_writel(struct bcm63xx_udc *udc, u32 val, u32 off)
 {
-	bcm_writel(val, udc->iudma_regs + IUDMA_DMAC_OFFSET + off +
-			(ENETDMA_CHAN_WIDTH * chan));
+	bcm_writel(val, udc->iudma_regs + IUDMA_DMAC_OFFSET + off);
 }
 
-static inline u32 usb_dmas_readl(struct bcm63xx_udc *udc, u32 off, int chan)
+static inline u32 usb_dmas_readl(struct bcm63xx_udc *udc, u32 off)
 {
-	return bcm_readl(udc->iudma_regs + IUDMA_DMAS_OFFSET + off +
-			(ENETDMA_CHAN_WIDTH * chan));
+	return bcm_readl(udc->iudma_regs + IUDMA_DMAS_OFFSET + off);
 }
 
-static inline void usb_dmas_writel(struct bcm63xx_udc *udc, u32 val, u32 off,
-					int chan)
+static inline void usb_dmas_writel(struct bcm63xx_udc *udc, u32 val, u32 off)
 {
-	bcm_writel(val, udc->iudma_regs + IUDMA_DMAS_OFFSET + off +
-			(ENETDMA_CHAN_WIDTH * chan));
+	bcm_writel(val, udc->iudma_regs + IUDMA_DMAS_OFFSET + off);
 }
 
 static inline void set_clocks(struct bcm63xx_udc *udc, bool is_enabled)
@@ -645,7 +639,7 @@ static void iudma_write(struct bcm63xx_udc *udc, struct iudma_ch *iudma,
 	} while (!last_bd);
 
 	usb_dmac_writel(udc, ENETDMAC_CHANCFG_EN_MASK,
-			ENETDMAC_CHANCFG_REG, iudma->ch_idx);
+			ENETDMAC_CHANCFG_REG(iudma->ch_idx));
 }
 
 /**
@@ -701,9 +695,9 @@ static void iudma_reset_channel(struct bcm63xx_udc *udc, struct iudma_ch *iudma)
 		bcm63xx_fifo_reset_ep(udc, max(0, iudma->ep_num));
 
 	/* stop DMA, then wait for the hardware to wrap up */
-	usb_dmac_writel(udc, 0, ENETDMAC_CHANCFG_REG, ch_idx);
+	usb_dmac_writel(udc, 0, ENETDMAC_CHANCFG_REG(ch_idx));
 
-	while (usb_dmac_readl(udc, ENETDMAC_CHANCFG_REG, ch_idx) &
+	while (usb_dmac_readl(udc, ENETDMAC_CHANCFG_REG(ch_idx)) &
 				   ENETDMAC_CHANCFG_EN_MASK) {
 		udelay(1);
 
@@ -720,10 +714,10 @@ static void iudma_reset_channel(struct bcm63xx_udc *udc, struct iudma_ch *iudma)
 			dev_warn(udc->dev, "forcibly halting IUDMA channel %d\n",
 				 ch_idx);
 			usb_dmac_writel(udc, ENETDMAC_CHANCFG_BUFHALT_MASK,
-					ENETDMAC_CHANCFG_REG, ch_idx);
+					ENETDMAC_CHANCFG_REG(ch_idx));
 		}
 	}
-	usb_dmac_writel(udc, ~0, ENETDMAC_IR_REG, ch_idx);
+	usb_dmac_writel(udc, ~0, ENETDMAC_IR_REG(ch_idx));
 
 	/* don't leave "live" HW-owned entries for the next guy to step on */
 	for (d = iudma->bd_ring; d <= iudma->end_bd; d++)
@@ -735,11 +729,11 @@ static void iudma_reset_channel(struct bcm63xx_udc *udc, struct iudma_ch *iudma)
 
 	/* set up IRQs, UBUS burst size, and BD base for this channel */
 	usb_dmac_writel(udc, ENETDMAC_IR_BUFDONE_MASK,
-			ENETDMAC_IRMASK_REG, ch_idx);
-	usb_dmac_writel(udc, 8, ENETDMAC_MAXBURST_REG, ch_idx);
+			ENETDMAC_IRMASK_REG(ch_idx));
+	usb_dmac_writel(udc, 8, ENETDMAC_MAXBURST_REG(ch_idx));
 
-	usb_dmas_writel(udc, iudma->bd_ring_dma, ENETDMAS_RSTART_REG, ch_idx);
-	usb_dmas_writel(udc, 0, ENETDMAS_SRAM2_REG, ch_idx);
+	usb_dmas_writel(udc, iudma->bd_ring_dma, ENETDMAS_RSTART_REG(ch_idx));
+	usb_dmas_writel(udc, 0, ENETDMAS_SRAM2_REG(ch_idx));
 }
 
 /**
@@ -1825,7 +1819,6 @@ static int bcm63xx_udc_start(struct usb_gadget *gadget,
 
 	udc->driver = driver;
 	driver->driver.bus = NULL;
-	udc->gadget.dev.driver = &driver->driver;
 	udc->gadget.dev.of_node = udc->dev->of_node;
 
 	spin_unlock_irqrestore(&udc->lock, flags);
@@ -1847,7 +1840,6 @@ static int bcm63xx_udc_stop(struct usb_gadget *gadget,
 	spin_lock_irqsave(&udc->lock, flags);
 
 	udc->driver = NULL;
-	udc->gadget.dev.driver = NULL;
 
 	/*
 	 * If we switch the PHY too abruptly after dropping D+, the host
@@ -2044,7 +2036,7 @@ static irqreturn_t bcm63xx_udc_data_isr(int irq, void *dev_id)
 	spin_lock(&udc->lock);
 
 	usb_dmac_writel(udc, ENETDMAC_IR_BUFDONE_MASK,
-			ENETDMAC_IR_REG, iudma->ch_idx);
+			ENETDMAC_IR_REG(iudma->ch_idx));
 	bep = iudma->bep;
 	rc = iudma_read(udc, iudma);
 
@@ -2184,18 +2176,18 @@ static int bcm63xx_iudma_dbg_show(struct seq_file *s, void *p)
 		seq_printf(s, " [ep%d]:\n",
 			   max_t(int, iudma_defaults[ch_idx].ep_num, 0));
 		seq_printf(s, "  cfg: %08x; irqstat: %08x; irqmask: %08x; maxburst: %08x\n",
-			   usb_dmac_readl(udc, ENETDMAC_CHANCFG_REG, ch_idx),
-			   usb_dmac_readl(udc, ENETDMAC_IR_REG, ch_idx),
-			   usb_dmac_readl(udc, ENETDMAC_IRMASK_REG, ch_idx),
-			   usb_dmac_readl(udc, ENETDMAC_MAXBURST_REG, ch_idx));
+			   usb_dmac_readl(udc, ENETDMAC_CHANCFG_REG(ch_idx)),
+			   usb_dmac_readl(udc, ENETDMAC_IR_REG(ch_idx)),
+			   usb_dmac_readl(udc, ENETDMAC_IRMASK_REG(ch_idx)),
+			   usb_dmac_readl(udc, ENETDMAC_MAXBURST_REG(ch_idx)));
 
-		sram2 = usb_dmas_readl(udc, ENETDMAS_SRAM2_REG, ch_idx);
-		sram3 = usb_dmas_readl(udc, ENETDMAS_SRAM3_REG, ch_idx);
+		sram2 = usb_dmas_readl(udc, ENETDMAS_SRAM2_REG(ch_idx));
+		sram3 = usb_dmas_readl(udc, ENETDMAS_SRAM3_REG(ch_idx));
 		seq_printf(s, "  base: %08x; index: %04x_%04x; desc: %04x_%04x %08x\n",
-			   usb_dmas_readl(udc, ENETDMAS_RSTART_REG, ch_idx),
+			   usb_dmas_readl(udc, ENETDMAS_RSTART_REG(ch_idx)),
 			   sram2 >> 16, sram2 & 0xffff,
 			   sram3 >> 16, sram3 & 0xffff,
-			   usb_dmas_readl(udc, ENETDMAS_SRAM4_REG, ch_idx));
+			   usb_dmas_readl(udc, ENETDMAS_SRAM4_REG(ch_idx)));
 		seq_printf(s, "  desc: %d/%d used", iudma->n_bds_used,
 			   iudma->n_bds);
 
@@ -2312,17 +2304,6 @@ static void bcm63xx_udc_cleanup_debugfs(struct bcm63xx_udc *udc)
  ***********************************************************************/
 
 /**
- * bcm63xx_udc_gadget_release - Called from device_release().
- * @dev: Unused.
- *
- * We get a warning if this function doesn't exist, but it's empty because
- * we don't have to free any of the memory allocated with the devm_* APIs.
- */
-static void bcm63xx_udc_gadget_release(struct device *dev)
-{
-}
-
-/**
  * bcm63xx_udc_probe - Initialize a new instance of the UDC.
  * @pdev: Platform device struct from the bcm63xx BSP code.
  *
@@ -2353,33 +2334,20 @@ static int bcm63xx_udc_probe(struct platform_device *pdev)
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!res) {
-		dev_err(dev, "error finding USBD resource\n");
-		return -ENXIO;
-	}
-	udc->usbd_regs = devm_request_and_ioremap(dev, res);
+	udc->usbd_regs = devm_ioremap_resource(dev, res);
+	if (IS_ERR(udc->usbd_regs))
+		return PTR_ERR(udc->usbd_regs);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
-	if (!res) {
-		dev_err(dev, "error finding IUDMA resource\n");
-		return -ENXIO;
-	}
-	udc->iudma_regs = devm_request_and_ioremap(dev, res);
-
-	if (!udc->usbd_regs || !udc->iudma_regs) {
-		dev_err(dev, "error requesting resources\n");
-		return -ENXIO;
-	}
+	udc->iudma_regs = devm_ioremap_resource(dev, res);
+	if (IS_ERR(udc->iudma_regs))
+		return PTR_ERR(udc->iudma_regs);
 
 	spin_lock_init(&udc->lock);
 	INIT_WORK(&udc->ep0_wq, bcm63xx_ep0_process);
-	dev_set_name(&udc->gadget.dev, "gadget");
 
 	udc->gadget.ops = &bcm63xx_udc_ops;
 	udc->gadget.name = dev_name(dev);
-	udc->gadget.dev.parent = dev;
-	udc->gadget.dev.release = bcm63xx_udc_gadget_release;
-	udc->gadget.dev.dma_mask = dev->dma_mask;
 
 	if (!pd->use_fullspeed && !use_fullspeed)
 		udc->gadget.max_speed = USB_SPEED_HIGH;
@@ -2419,17 +2387,12 @@ static int bcm63xx_udc_probe(struct platform_device *pdev)
 		}
 	}
 
-	rc = device_register(&udc->gadget.dev);
-	if (rc)
-		goto out_uninit;
-
 	bcm63xx_udc_init_debugfs(udc);
 	rc = usb_add_gadget_udc(dev, &udc->gadget);
 	if (!rc)
 		return 0;
 
 	bcm63xx_udc_cleanup_debugfs(udc);
-	device_unregister(&udc->gadget.dev);
 out_uninit:
 	bcm63xx_uninit_udc_hw(udc);
 	return rc;
@@ -2445,10 +2408,8 @@ static int bcm63xx_udc_remove(struct platform_device *pdev)
 
 	bcm63xx_udc_cleanup_debugfs(udc);
 	usb_del_gadget_udc(&udc->gadget);
-	device_unregister(&udc->gadget.dev);
 	BUG_ON(udc->driver);
 
-	platform_set_drvdata(pdev, NULL);
 	bcm63xx_uninit_udc_hw(udc);
 
 	return 0;

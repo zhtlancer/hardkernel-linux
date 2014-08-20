@@ -145,26 +145,21 @@ static void ath9k_htc_bssid_iter(void *data, u8 *mac, struct ieee80211_vif *vif)
 	struct ath9k_vif_iter_data *iter_data = data;
 	int i;
 
-	if (iter_data->hw_macaddr != NULL) {
-		for (i = 0; i < ETH_ALEN; i++)
-			iter_data->mask[i] &= ~(iter_data->hw_macaddr[i] ^ mac[i]);
-	} else {
-		iter_data->hw_macaddr = mac;
-	}
+	for (i = 0; i < ETH_ALEN; i++)
+		iter_data->mask[i] &= ~(iter_data->hw_macaddr[i] ^ mac[i]);
 }
 
-static void ath9k_htc_set_mac_bssid_mask(struct ath9k_htc_priv *priv,
+static void ath9k_htc_set_bssid_mask(struct ath9k_htc_priv *priv,
 				     struct ieee80211_vif *vif)
 {
 	struct ath_common *common = ath9k_hw_common(priv->ah);
 	struct ath9k_vif_iter_data iter_data;
 
 	/*
-	 * Pick the MAC address of the first interface as the new hardware
-	 * MAC address. The hardware will use it together with the BSSID mask
-	 * when matching addresses.
+	 * Use the hardware MAC address as reference, the hardware uses it
+	 * together with the BSSID mask when matching addresses.
 	 */
-	iter_data.hw_macaddr = NULL;
+	iter_data.hw_macaddr = common->macaddr;
 	memset(&iter_data.mask, 0xff, ETH_ALEN);
 
 	if (vif)
@@ -176,10 +171,6 @@ static void ath9k_htc_set_mac_bssid_mask(struct ath9k_htc_priv *priv,
 		ath9k_htc_bssid_iter, &iter_data);
 
 	memcpy(common->bssidmask, iter_data.mask, ETH_ALEN);
-
-	if (iter_data.hw_macaddr)
-		memcpy(common->macaddr, iter_data.hw_macaddr, ETH_ALEN);
-
 	ath_hw_setbssidmask(common);
 }
 
@@ -199,7 +190,7 @@ void ath9k_htc_reset(struct ath9k_htc_priv *priv)
 {
 	struct ath_hw *ah = priv->ah;
 	struct ath_common *common = ath9k_hw_common(ah);
-	struct ieee80211_channel *channel = priv->hw->conf.channel;
+	struct ieee80211_channel *channel = priv->hw->conf.chandef.chan;
 	struct ath9k_hw_cal_data *caldata = NULL;
 	enum htc_phymode mode;
 	__be16 htc_mode;
@@ -259,7 +250,7 @@ static int ath9k_htc_set_channel(struct ath9k_htc_priv *priv,
 	struct ath_common *common = ath9k_hw_common(ah);
 	struct ieee80211_conf *conf = &common->hw->conf;
 	bool fastcc;
-	struct ieee80211_channel *channel = hw->conf.channel;
+	struct ieee80211_channel *channel = hw->conf.chandef.chan;
 	struct ath9k_hw_cal_data *caldata = NULL;
 	enum htc_phymode mode;
 	__be16 htc_mode;
@@ -611,7 +602,7 @@ static void ath9k_htc_setup_rate(struct ath9k_htc_priv *priv,
 	u32 caps = 0;
 	int i, j;
 
-	sband = priv->hw->wiphy->bands[priv->hw->conf.channel->band];
+	sband = priv->hw->wiphy->bands[priv->hw->conf.chandef.chan->band];
 
 	for (i = 0, j = 0; i < sband->n_bitrates; i++) {
 		if (sta->supp_rates[sband->band] & BIT(i)) {
@@ -875,7 +866,7 @@ static void ath9k_htc_tx(struct ieee80211_hw *hw,
 	hdr = (struct ieee80211_hdr *) skb->data;
 
 	/* Add the padding after the header if this is not already done */
-	padpos = ath9k_cmn_padpos(hdr->frame_control);
+	padpos = ieee80211_hdrlen(hdr->frame_control);
 	padsize = padpos & 3;
 	if (padsize && skb->len > padpos) {
 		if (skb_headroom(skb) < padsize) {
@@ -913,7 +904,7 @@ static int ath9k_htc_start(struct ieee80211_hw *hw)
 	struct ath9k_htc_priv *priv = hw->priv;
 	struct ath_hw *ah = priv->ah;
 	struct ath_common *common = ath9k_hw_common(ah);
-	struct ieee80211_channel *curchan = hw->conf.channel;
+	struct ieee80211_channel *curchan = hw->conf.chandef.chan;
 	struct ath9k_channel *init_channel;
 	int ret = 0;
 	enum htc_phymode mode;
@@ -1085,7 +1076,7 @@ static int ath9k_htc_add_interface(struct ieee80211_hw *hw,
 		goto out;
 	}
 
-	ath9k_htc_set_mac_bssid_mask(priv, vif);
+	ath9k_htc_set_bssid_mask(priv, vif);
 
 	priv->vif_slot |= (1 << avp->index);
 	priv->nvifs++;
@@ -1148,7 +1139,7 @@ static void ath9k_htc_remove_interface(struct ieee80211_hw *hw,
 
 	ath9k_htc_set_opmode(priv);
 
-	ath9k_htc_set_mac_bssid_mask(priv, vif);
+	ath9k_htc_set_bssid_mask(priv, vif);
 
 	/*
 	 * Stop ANI only if there are no associated station interfaces.
@@ -1202,15 +1193,17 @@ static int ath9k_htc_config(struct ieee80211_hw *hw, u32 changed)
 	}
 
 	if ((changed & IEEE80211_CONF_CHANGE_CHANNEL) || chip_reset) {
-		struct ieee80211_channel *curchan = hw->conf.channel;
+		struct ieee80211_channel *curchan = hw->conf.chandef.chan;
+		enum nl80211_channel_type channel_type =
+			cfg80211_get_chandef_type(&hw->conf.chandef);
 		int pos = curchan->hw_value;
 
 		ath_dbg(common, CONFIG, "Set channel: %d MHz\n",
 			curchan->center_freq);
 
 		ath9k_cmn_update_ichannel(&priv->ah->channels[pos],
-					  hw->conf.channel,
-					  hw->conf.channel_type);
+					  hw->conf.chandef.chan,
+					  channel_type);
 
 		if (ath9k_htc_set_channel(priv, hw, &priv->ah->channels[pos]) < 0) {
 			ath_err(common, "Unable to set channel\n");
@@ -1329,22 +1322,21 @@ static void ath9k_htc_sta_rc_update(struct ieee80211_hw *hw,
 	struct ath_common *common = ath9k_hw_common(priv->ah);
 	struct ath9k_htc_target_rate trate;
 
-	if (!(changed & IEEE80211_RC_SUPP_RATES_CHANGED))
-		return;
-
 	mutex_lock(&priv->mutex);
 	ath9k_htc_ps_wakeup(priv);
 
-	memset(&trate, 0, sizeof(struct ath9k_htc_target_rate));
-	ath9k_htc_setup_rate(priv, sta, &trate);
-	if (!ath9k_htc_send_rate_cmd(priv, &trate))
-		ath_dbg(common, CONFIG,
-			"Supported rates for sta: %pM updated, rate caps: 0x%X\n",
-			sta->addr, be32_to_cpu(trate.capflags));
-	else
-		ath_dbg(common, CONFIG,
-			"Unable to update supported rates for sta: %pM\n",
-			sta->addr);
+	if (changed & IEEE80211_RC_SUPP_RATES_CHANGED) {
+		memset(&trate, 0, sizeof(struct ath9k_htc_target_rate));
+		ath9k_htc_setup_rate(priv, sta, &trate);
+		if (!ath9k_htc_send_rate_cmd(priv, &trate))
+			ath_dbg(common, CONFIG,
+				"Supported rates for sta: %pM updated, rate caps: 0x%X\n",
+				sta->addr, be32_to_cpu(trate.capflags));
+		else
+			ath_dbg(common, CONFIG,
+				"Unable to update supported rates for sta: %pM\n",
+				sta->addr);
+	}
 
 	ath9k_htc_ps_restore(priv);
 	mutex_unlock(&priv->mutex);
@@ -1638,7 +1630,9 @@ static int ath9k_htc_ampdu_action(struct ieee80211_hw *hw,
 		if (!ret)
 			ieee80211_start_tx_ba_cb_irqsafe(vif, sta->addr, tid);
 		break;
-	case IEEE80211_AMPDU_TX_STOP:
+	case IEEE80211_AMPDU_TX_STOP_CONT:
+	case IEEE80211_AMPDU_TX_STOP_FLUSH:
+	case IEEE80211_AMPDU_TX_STOP_FLUSH_CONT:
 		ath9k_htc_tx_aggr_oper(priv, vif, sta, action, tid);
 		ieee80211_stop_tx_ba_cb_irqsafe(vif, sta->addr, tid);
 		break;

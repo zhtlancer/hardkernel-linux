@@ -80,7 +80,7 @@ xfs_find_handle(
 		f = fdget(hreq->fd);
 		if (!f.file)
 			return -EBADF;
-		inode = f.file->f_path.dentry->d_inode;
+		inode = file_inode(f.file);
 	} else {
 		error = user_lpath((const char __user *)hreq->path, &path);
 		if (error)
@@ -168,7 +168,7 @@ xfs_handle_to_dentry(
 	/*
 	 * Only allow handle opens under a directory.
 	 */
-	if (!S_ISDIR(parfilp->f_path.dentry->d_inode->i_mode))
+	if (!S_ISDIR(file_inode(parfilp)->i_mode))
 		return ERR_PTR(-ENOTDIR);
 
 	if (hlen != sizeof(xfs_handle_t))
@@ -409,8 +409,7 @@ xfs_attrlist_by_handle(
 		return -XFS_ERROR(EPERM);
 	if (copy_from_user(&al_hreq, arg, sizeof(xfs_fsop_attrlist_handlereq_t)))
 		return -XFS_ERROR(EFAULT);
-	if (al_hreq.buflen < sizeof(struct attrlist) ||
-	    al_hreq.buflen > XATTR_LIST_MAX)
+	if (al_hreq.buflen > XATTR_LIST_MAX)
 		return -XFS_ERROR(EINVAL);
 
 	/*
@@ -423,9 +422,12 @@ xfs_attrlist_by_handle(
 	if (IS_ERR(dentry))
 		return PTR_ERR(dentry);
 
-	kbuf = kzalloc(al_hreq.buflen, GFP_KERNEL);
-	if (!kbuf)
-		goto out_dput;
+	kbuf = kmem_zalloc(al_hreq.buflen, KM_SLEEP | KM_MAYFAIL);
+	if (!kbuf) {
+		kbuf = kmem_zalloc_large(al_hreq.buflen);
+		if (!kbuf)
+			goto out_dput;
+	}
 
 	cursor = (attrlist_cursor_kern_t *)&al_hreq.pos;
 	error = -xfs_attr_list(XFS_I(dentry->d_inode), kbuf, al_hreq.buflen,
@@ -437,7 +439,10 @@ xfs_attrlist_by_handle(
 		error = -EFAULT;
 
  out_kfree:
-	kfree(kbuf);
+	if (is_vmalloc_addr(kbuf))
+		kmem_free_large(kbuf);
+	else
+		kmem_free(kbuf);
  out_dput:
 	dput(dentry);
 	return error;
@@ -1335,7 +1340,7 @@ xfs_file_ioctl(
 	unsigned int		cmd,
 	unsigned long		p)
 {
-	struct inode		*inode = filp->f_path.dentry->d_inode;
+	struct inode		*inode = file_inode(filp);
 	struct xfs_inode	*ip = XFS_I(inode);
 	struct xfs_mount	*mp = ip->i_mount;
 	void			__user *arg = (void __user *)p;
@@ -1606,12 +1611,6 @@ xfs_file_ioctl(
 
 	case XFS_IOC_FREE_EOFBLOCKS: {
 		struct xfs_eofblocks eofb;
-
-		if (!capable(CAP_SYS_ADMIN))
-			return -EPERM;
-
-		if (mp->m_flags & XFS_MOUNT_RDONLY)
-			return -XFS_ERROR(EROFS);
 
 		if (copy_from_user(&eofb, arg, sizeof(eofb)))
 			return -XFS_ERROR(EFAULT);

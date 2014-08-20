@@ -88,6 +88,7 @@ obj-$(CONFIG_DVB_ISL6423) += isl6423.o
 obj-$(CONFIG_DVB_EC100) += ec100.o
 obj-$(CONFIG_DVB_HD29L2) += hd29l2.o
 obj-$(CONFIG_DVB_DS3000) += ds3000.o
+obj-$(CONFIG_DVB_TS2020) += ts2020.o
 obj-$(CONFIG_DVB_MB86A16) += mb86a16.o
 obj-$(CONFIG_DVB_MB86A20S) += mb86a20s.o
 obj-$(CONFIG_DVB_IX2505V) += ix2505v.o
@@ -103,4 +104,3 @@ obj-$(CONFIG_DVB_RTL2832) += rtl2832.o
 obj-$(CONFIG_DVB_M88RS2000) += m88rs2000.o
 obj-$(CONFIG_DVB_AF9033) += af9033.o
 
-obj-$(CONFIG_DVB_TS2020) += ts2020.o

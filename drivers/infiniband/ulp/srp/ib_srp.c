@@ -532,11 +532,6 @@ static void srp_remove_target(struct srp_target_port *target)
 	ib_destroy_cm_id(target->cm_id);
 	srp_free_target_ib(target);
 	srp_free_req_data(target);
-
-	spin_lock(&target->srp_host->target_lock);
-	list_del(&target->list);
-	spin_unlock(&target->srp_host->target_lock);
-
 	scsi_host_put(target->scsi_host);
 }
 
@@ -546,6 +541,10 @@ static void srp_remove_work(struct work_struct *work)
 		container_of(work, struct srp_target_port, remove_work);
 
 	WARN_ON_ONCE(target->state != SRP_TARGET_REMOVED);
+
+	spin_lock(&target->srp_host->target_lock);
+	list_del(&target->list);
+	spin_unlock(&target->srp_host->target_lock);
 
 	srp_remove_target(target);
 }
@@ -1301,13 +1300,14 @@ static void srp_handle_recv(struct srp_target_port *target, struct ib_wc *wc)
 			     PFX "Recv failed with error code %d\n", res);
 }
 
-static void srp_handle_qp_err(enum ib_wc_status wc_status, bool send_err,
+static void srp_handle_qp_err(enum ib_wc_status wc_status,
+			      enum ib_wc_opcode wc_opcode,
 			      struct srp_target_port *target)
 {
 	if (target->connected && !target->qp_in_error) {
 		shost_printk(KERN_ERR, target->scsi_host,
 			     PFX "failed %s status %d\n",
-			     send_err ? "send" : "receive",
+			     wc_opcode & IB_WC_RECV ? "receive" : "send",
 			     wc_status);
 	}
 	target->qp_in_error = true;
@@ -1323,7 +1323,7 @@ static void srp_recv_completion(struct ib_cq *cq, void *target_ptr)
 		if (likely(wc.status == IB_WC_SUCCESS)) {
 			srp_handle_recv(target, &wc);
 		} else {
-			srp_handle_qp_err(wc.status, false, target);
+			srp_handle_qp_err(wc.status, wc.opcode, target);
 		}
 	}
 }
@@ -1339,7 +1339,7 @@ static void srp_send_completion(struct ib_cq *cq, void *target_ptr)
 			iu = (struct srp_iu *) (uintptr_t) wc.wr_id;
 			list_add(&iu->list, &target->free_tx);
 		} else {
-			srp_handle_qp_err(wc.status, true, target);
+			srp_handle_qp_err(wc.status, wc.opcode, target);
 		}
 	}
 }
@@ -1409,12 +1409,6 @@ err_unmap:
 
 err_iu:
 	srp_put_tx_iu(target, iu, SRP_IU_CMD);
-
-	/*
-	 * Avoid that the loops that iterate over the request ring can
-	 * encounter a dangling SCSI command pointer.
-	 */
-	req->scmnd = NULL;
 
 	spin_lock_irqsave(&target->lock, flags);
 	list_add(&req->list, &target->free_reqs);
@@ -1754,7 +1748,7 @@ static int srp_abort(struct scsi_cmnd *scmnd)
 	shost_printk(KERN_ERR, target->scsi_host, "SRP abort called\n");
 
 	if (!req || !srp_claim_req(target, req, scmnd))
-		return SUCCESS;
+		return FAILED;
 	srp_send_tsk_mgmt(target, req->index, scmnd->device->lun,
 			  SRP_TSK_ABORT_TASK);
 	srp_free_req(target, req, scmnd, 0);

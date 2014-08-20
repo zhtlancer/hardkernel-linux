@@ -53,6 +53,14 @@
  * as opposed to devices that do something strangely or wrongly.
  */
 
+/* In-kernel mode switching is deprecated.  Do not add new devices to
+ * this list for the sole purpose of switching them to a different
+ * mode.  Existing userspace solutions are superior.
+ *
+ * New mode switching devices should instead be added to the database
+ * maintained at http://www.draisberghof.de/usb_modeswitch/
+ */
+
 #if !defined(CONFIG_USB_STORAGE_SDDR09) && \
 		!defined(CONFIG_USB_STORAGE_SDDR09_MODULE)
 #define NO_SDDR09
@@ -223,27 +231,6 @@ UNUSUAL_DEV( 0x0421, 0x0492, 0x0452, 0x9999,
 UNUSUAL_DEV(  0x0421, 0x0495, 0x0370, 0x0370,
 		"Nokia",
 		"6234",
-		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
-		US_FL_MAX_SECTORS_64 ),
-
-/* Reported by Daniele Forsi <dforsi@gmail.com> */
-UNUSUAL_DEV(  0x0421, 0x04b9, 0x0350, 0x0350,
-		"Nokia",
-		"5300",
-		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
-		US_FL_MAX_SECTORS_64 ),
-
-/* Patch submitted by Victor A. Santos <victoraur.santos@gmail.com> */
-UNUSUAL_DEV(  0x0421, 0x05af, 0x0742, 0x0742,
-		"Nokia",
-		"305",
-		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
-		US_FL_MAX_SECTORS_64),
-
-/* Patch submitted by Mikhail Zolotaryov <lebon@lebon.org.ua> */
-UNUSUAL_DEV(  0x0421, 0x06aa, 0x1110, 0x1110,
-		"Nokia",
-		"502",
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
 		US_FL_MAX_SECTORS_64 ),
 
@@ -1204,13 +1191,6 @@ UNUSUAL_DEV(  0x0af0, 0x6971, 0x0000, 0x9999,
 		USB_SC_DEVICE, USB_PR_DEVICE, option_ms_init,
 		0),
 
-/* Reported by Timo Aaltonen <tjaalton@ubuntu.com> */
-UNUSUAL_DEV( 0x0af0, 0x7011, 0x0000, 0x9999,
-		"Option",
-		"Mass Storage",
-		USB_SC_DEVICE, USB_PR_DEVICE, option_ms_init,
-		0 ),
-
 /* Reported by F. Aben <f.aben@option.com>
  * This device (wrongly) has a vendor-specific device descriptor.
  * The entry is needed so usb-storage can bind to it's mass-storage
@@ -1467,13 +1447,6 @@ UNUSUAL_DEV( 0x0f88, 0x042e, 0x0100, 0x0100,
 		"Kidizoom",
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
 		US_FL_FIX_CAPACITY ),
-
-/* Reported by Moritz Moeller-Herrmann <moritz-kernel@moeller-herrmann.de> */
-UNUSUAL_DEV(  0x0fca, 0x8004, 0x0201, 0x0201,
-		"Research In Motion",
-		"BlackBerry Bold 9000",
-		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
-		US_FL_MAX_SECTORS_64 ),
 
 /* Reported by Michael Stattmann <michael@stattmann.com> */
 UNUSUAL_DEV(  0x0fce, 0xd008, 0x0000, 0x0000,
@@ -1951,13 +1924,6 @@ UNUSUAL_DEV(  0x1652, 0x6600, 0x0201, 0x0201,
 		"HD-35PUK-B",
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
 		US_FL_IGNORE_RESIDUE ),
-
-/* Reported by Oliver Neukum <oneukum@suse.com> */
-UNUSUAL_DEV(  0x174c, 0x55aa, 0x0100, 0x0100,
-		"ASMedia",
-		"AS2105",
-		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
-		US_FL_NEEDS_CAP16),
 
 /* Reported by Jesse Feddema <jdfeddema@gmail.com> */
 UNUSUAL_DEV(  0x177f, 0x0400, 0x0000, 0x0000,

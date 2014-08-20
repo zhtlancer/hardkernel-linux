@@ -541,12 +541,6 @@ static int rcar_i2c_master_xfer(struct i2c_adapter *adap,
 
 	ret = -EINVAL;
 	for (i = 0; i < num; i++) {
-		/* This HW can't send STOP after address phase */
-		if (msgs[i].len == 0) {
-			ret = -EOPNOTSUPP;
-			break;
-		}
-
 		/*-------------- spin lock -----------------*/
 		spin_lock_irqsave(&priv->lock, flags);
 
@@ -611,8 +605,7 @@ static int rcar_i2c_master_xfer(struct i2c_adapter *adap,
 
 static u32 rcar_i2c_func(struct i2c_adapter *adap)
 {
-	/* This HW can't do SMBUS_QUICK and NOSTART */
-	return I2C_FUNC_I2C | (I2C_FUNC_SMBUS_EMUL & ~I2C_FUNC_SMBUS_QUICK);
+	return I2C_FUNC_I2C | I2C_FUNC_SMBUS_EMUL;
 }
 
 static const struct i2c_algorithm rcar_i2c_algo = {
@@ -649,11 +642,9 @@ static int rcar_i2c_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return ret;
 
-	priv->io = devm_request_and_ioremap(dev, res);
-	if (!priv->io) {
-		dev_err(dev, "cannot ioremap\n");
-		return -ENODEV;
-	}
+	priv->io = devm_ioremap_resource(dev, res);
+	if (IS_ERR(priv->io))
+		return PTR_ERR(priv->io);
 
 	priv->irq = platform_get_irq(pdev, 0);
 	init_waitqueue_head(&priv->wait);

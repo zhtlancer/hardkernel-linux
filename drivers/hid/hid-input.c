@@ -340,7 +340,7 @@ static int hidinput_get_battery_property(struct power_supply *psy,
 {
 	struct hid_device *dev = container_of(psy, struct hid_device, battery);
 	int ret = 0;
-	__u8 *buf;
+	__u8 buf[2] = {};
 
 	switch (prop) {
 	case POWER_SUPPLY_PROP_PRESENT:
@@ -349,19 +349,13 @@ static int hidinput_get_battery_property(struct power_supply *psy,
 		break;
 
 	case POWER_SUPPLY_PROP_CAPACITY:
-
-		buf = kmalloc(2 * sizeof(__u8), GFP_KERNEL);
-		if (!buf) {
-			ret = -ENOMEM;
-			break;
-		}
 		ret = dev->hid_get_raw_report(dev, dev->battery_report_id,
-					      buf, 2,
+					      buf, sizeof(buf),
 					      dev->battery_report_type);
 
 		if (ret != 2) {
-			ret = -ENODATA;
-			kfree(buf);
+			if (ret >= 0)
+				ret = -EINVAL;
 			break;
 		}
 
@@ -370,7 +364,6 @@ static int hidinput_get_battery_property(struct power_supply *psy,
 		    buf[1] <= dev->battery_max)
 			val->intval = (100 * (buf[1] - dev->battery_min)) /
 				(dev->battery_max - dev->battery_min);
-		kfree(buf);
 		break;
 
 	case POWER_SUPPLY_PROP_MODEL_NAME:
@@ -482,10 +475,6 @@ static void hidinput_configure_usage(struct hid_input *hidinput, struct hid_fiel
 	field->hidinput = hidinput;
 
 	if (field->flags & HID_MAIN_ITEM_CONSTANT)
-		goto ignore;
-
-	/* Ignore if report count is out of bounds. */
-	if (field->report_count < 1)
 		goto ignore;
 
 	/* only LED usages are supported in output fields */
@@ -1166,11 +1155,7 @@ static void report_features(struct hid_device *hid)
 
 	rep_enum = &hid->report_enum[HID_FEATURE_REPORT];
 	list_for_each_entry(rep, &rep_enum->report_list, list)
-		for (i = 0; i < rep->maxfield; i++) {
-			/* Ignore if report count is out of bounds. */
-			if (rep->field[i]->report_count < 1)
-				continue;
-
+		for (i = 0; i < rep->maxfield; i++)
 			for (j = 0; j < rep->field[i]->maxusage; j++) {
 				/* Verify if Battery Strength feature is available */
 				hidinput_setup_battery(hid, HID_FEATURE_REPORT, rep->field[i]);
@@ -1179,7 +1164,6 @@ static void report_features(struct hid_device *hid)
 					drv->feature_mapping(hid, rep->field[i],
 							     rep->field[i]->usage + j);
 			}
-		}
 }
 
 static struct hid_input *hidinput_allocate(struct hid_device *hid)
@@ -1212,6 +1196,67 @@ static struct hid_input *hidinput_allocate(struct hid_device *hid)
 	list_add_tail(&hidinput->list, &hid->inputs);
 
 	return hidinput;
+}
+
+static bool hidinput_has_been_populated(struct hid_input *hidinput)
+{
+	int i;
+	unsigned long r = 0;
+
+	for (i = 0; i < BITS_TO_LONGS(EV_CNT); i++)
+		r |= hidinput->input->evbit[i];
+
+	for (i = 0; i < BITS_TO_LONGS(KEY_CNT); i++)
+		r |= hidinput->input->keybit[i];
+
+	for (i = 0; i < BITS_TO_LONGS(REL_CNT); i++)
+		r |= hidinput->input->relbit[i];
+
+	for (i = 0; i < BITS_TO_LONGS(ABS_CNT); i++)
+		r |= hidinput->input->absbit[i];
+
+	for (i = 0; i < BITS_TO_LONGS(MSC_CNT); i++)
+		r |= hidinput->input->mscbit[i];
+
+	for (i = 0; i < BITS_TO_LONGS(LED_CNT); i++)
+		r |= hidinput->input->ledbit[i];
+
+	for (i = 0; i < BITS_TO_LONGS(SND_CNT); i++)
+		r |= hidinput->input->sndbit[i];
+
+	for (i = 0; i < BITS_TO_LONGS(FF_CNT); i++)
+		r |= hidinput->input->ffbit[i];
+
+	for (i = 0; i < BITS_TO_LONGS(SW_CNT); i++)
+		r |= hidinput->input->swbit[i];
+
+	return !!r;
+}
+
+static void hidinput_cleanup_hidinput(struct hid_device *hid,
+		struct hid_input *hidinput)
+{
+	struct hid_report *report;
+	int i, k;
+
+	list_del(&hidinput->list);
+	input_free_device(hidinput->input);
+
+	for (k = HID_INPUT_REPORT; k <= HID_OUTPUT_REPORT; k++) {
+		if (k == HID_OUTPUT_REPORT &&
+			hid->quirks & HID_QUIRK_SKIP_OUTPUT_REPORTS)
+			continue;
+
+		list_for_each_entry(report, &hid->report_enum[k].report_list,
+				    list) {
+
+			for (i = 0; i < report->maxfield; i++)
+				if (report->field[i]->hidinput == hidinput)
+					report->field[i]->hidinput = NULL;
+		}
+	}
+
+	kfree(hidinput);
 }
 
 /*
@@ -1265,6 +1310,10 @@ int hidinput_connect(struct hid_device *hid, unsigned int force)
 					hidinput_configure_usage(hidinput, report->field[i],
 								 report->field[i]->usage + j);
 
+			if ((hid->quirks & HID_QUIRK_NO_EMPTY_INPUT) &&
+			    !hidinput_has_been_populated(hidinput))
+				continue;
+
 			if (hid->quirks & HID_QUIRK_MULTI_INPUT) {
 				/* This will leave hidinput NULL, so that it
 				 * allocates another one if we have more inputs on
@@ -1272,8 +1321,9 @@ int hidinput_connect(struct hid_device *hid, unsigned int force)
 				 * UGCI) cram a lot of unrelated inputs into the
 				 * same interface. */
 				hidinput->report = report;
-				if (drv->input_configured)
-					drv->input_configured(hid, hidinput);
+				if (drv->input_configured &&
+				    drv->input_configured(hid, hidinput))
+					goto out_cleanup;
 				if (input_register_device(hidinput->input))
 					goto out_cleanup;
 				hidinput = NULL;
@@ -1281,9 +1331,22 @@ int hidinput_connect(struct hid_device *hid, unsigned int force)
 		}
 	}
 
+	if (hidinput && (hid->quirks & HID_QUIRK_NO_EMPTY_INPUT) &&
+	    !hidinput_has_been_populated(hidinput)) {
+		/* no need to register an input device not populated */
+		hidinput_cleanup_hidinput(hid, hidinput);
+		hidinput = NULL;
+	}
+
+	if (list_empty(&hid->inputs)) {
+		hid_err(hid, "No inputs registered, leaving\n");
+		goto out_unwind;
+	}
+
 	if (hidinput) {
-		if (drv->input_configured)
-			drv->input_configured(hid, hidinput);
+		if (drv->input_configured &&
+		    drv->input_configured(hid, hidinput))
+			goto out_cleanup;
 		if (input_register_device(hidinput->input))
 			goto out_cleanup;
 	}

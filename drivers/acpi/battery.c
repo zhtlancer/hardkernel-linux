@@ -68,7 +68,6 @@ MODULE_AUTHOR("Alexey Starikovskiy <astarikovskiy@suse.de>");
 MODULE_DESCRIPTION("ACPI Battery Driver");
 MODULE_LICENSE("GPL");
 
-static int battery_bix_broken_package;
 static unsigned int cache_time = 1000;
 module_param(cache_time, uint, 0644);
 MODULE_PARM_DESC(cache_time, "cache time in milliseconds");
@@ -148,7 +147,7 @@ struct acpi_battery {
 
 #define to_acpi_battery(x) container_of(x, struct acpi_battery, bat)
 
-inline int acpi_battery_present(struct acpi_battery *battery)
+static inline int acpi_battery_present(struct acpi_battery *battery)
 {
 	return battery->device->status.battery_present;
 }
@@ -444,12 +443,7 @@ static int acpi_battery_get_info(struct acpi_battery *battery)
 		ACPI_EXCEPTION((AE_INFO, status, "Evaluating %s", name));
 		return -ENODEV;
 	}
-
-	if (battery_bix_broken_package)
-		result = extract_package(battery, buffer.pointer,
-				extended_info_offsets + 1,
-				ARRAY_SIZE(extended_info_offsets) - 1);
-	else if (test_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags))
+	if (test_bit(ACPI_BATTERY_XINFO_PRESENT, &battery->flags))
 		result = extract_package(battery, buffer.pointer,
 				extended_info_offsets,
 				ARRAY_SIZE(extended_info_offsets));
@@ -937,7 +931,7 @@ static int acpi_battery_read_##_name(struct seq_file *seq, void *offset) \
 } \
 static int acpi_battery_##_name##_open_fs(struct inode *inode, struct file *file) \
 { \
-	return single_open(file, acpi_battery_read_##_name, PDE(inode)->data); \
+	return single_open(file, acpi_battery_read_##_name, PDE_DATA(inode)); \
 }
 
 DECLARE_FILE_FUNCTIONS(info);
@@ -1070,17 +1064,6 @@ static int battery_notify(struct notifier_block *nb,
 	return 0;
 }
 
-static struct dmi_system_id bat_dmi_table[] = {
-	{
-		.ident = "NEC LZ750/LS",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "NEC"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "PC-LZ750LS"),
-		},
-	},
-	{},
-};
-
 static int acpi_battery_add(struct acpi_device *device)
 {
 	int result = 0;
@@ -1130,7 +1113,7 @@ fail:
 	return result;
 }
 
-static int acpi_battery_remove(struct acpi_device *device, int type)
+static int acpi_battery_remove(struct acpi_device *device)
 {
 	struct acpi_battery *battery = NULL;
 
@@ -1186,10 +1169,6 @@ static void __init acpi_battery_init_async(void *unused, async_cookie_t cookie)
 {
 	if (acpi_disabled)
 		return;
-
-	if (dmi_check_system(bat_dmi_table))
-		battery_bix_broken_package = 1;
-
 #ifdef CONFIG_ACPI_PROCFS_POWER
 	acpi_battery_dir = acpi_lock_battery_dir();
 	if (!acpi_battery_dir)

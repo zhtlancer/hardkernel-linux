@@ -146,10 +146,9 @@ static int be_queue_alloc(struct be_adapter *adapter, struct be_queue_info *q,
 	q->entry_size = entry_size;
 	mem->size = len * entry_size;
 	mem->va = dma_alloc_coherent(&adapter->pdev->dev, mem->size, &mem->dma,
-				     GFP_KERNEL);
+				     GFP_KERNEL | __GFP_ZERO);
 	if (!mem->va)
 		return -ENOMEM;
-	memset(mem->va, 0, mem->size);
 	return 0;
 }
 
@@ -652,13 +651,8 @@ static inline u16 be_get_tx_vlan_tag(struct be_adapter *adapter,
 	return vlan_tag;
 }
 
-static int be_vlan_tag_chk(struct be_adapter *adapter, struct sk_buff *skb)
-{
-	return vlan_tx_tag_present(skb) || adapter->pvid;
-}
-
 static void wrb_fill_hdr(struct be_adapter *adapter, struct be_eth_hdr_wrb *hdr,
-		struct sk_buff *skb, u32 wrb_cnt, u32 len)
+		struct sk_buff *skb, u32 wrb_cnt, u32 len, bool skip_hw_vlan)
 {
 	u16 vlan_tag;
 
@@ -685,8 +679,9 @@ static void wrb_fill_hdr(struct be_adapter *adapter, struct be_eth_hdr_wrb *hdr,
 		AMAP_SET_BITS(struct amap_eth_hdr_wrb, vlan_tag, hdr, vlan_tag);
 	}
 
+	/* To skip HW VLAN tagging: evt = 1, compl = 0 */
+	AMAP_SET_BITS(struct amap_eth_hdr_wrb, complete, hdr, !skip_hw_vlan);
 	AMAP_SET_BITS(struct amap_eth_hdr_wrb, event, hdr, 1);
-	AMAP_SET_BITS(struct amap_eth_hdr_wrb, complete, hdr, 1);
 	AMAP_SET_BITS(struct amap_eth_hdr_wrb, num_wrb, hdr, wrb_cnt);
 	AMAP_SET_BITS(struct amap_eth_hdr_wrb, len, hdr, len);
 }
@@ -709,7 +704,8 @@ static void unmap_tx_frag(struct device *dev, struct be_eth_wrb *wrb,
 }
 
 static int make_tx_wrbs(struct be_adapter *adapter, struct be_queue_info *txq,
-		struct sk_buff *skb, u32 wrb_cnt, bool dummy_wrb)
+		struct sk_buff *skb, u32 wrb_cnt, bool dummy_wrb,
+		bool skip_hw_vlan)
 {
 	dma_addr_t busaddr;
 	int i, copied = 0;
@@ -758,7 +754,7 @@ static int make_tx_wrbs(struct be_adapter *adapter, struct be_queue_info *txq,
 		queue_head_inc(txq);
 	}
 
-	wrb_fill_hdr(adapter, hdr, first_skb, wrb_cnt, copied);
+	wrb_fill_hdr(adapter, hdr, first_skb, wrb_cnt, copied, skip_hw_vlan);
 	be_dws_cpu_to_le(hdr, sizeof(*hdr));
 
 	return copied;
@@ -775,7 +771,8 @@ dma_err:
 }
 
 static struct sk_buff *be_insert_vlan_in_pkt(struct be_adapter *adapter,
-					     struct sk_buff *skb)
+					     struct sk_buff *skb,
+					     bool *skip_hw_vlan)
 {
 	u16 vlan_tag = 0;
 
@@ -783,14 +780,70 @@ static struct sk_buff *be_insert_vlan_in_pkt(struct be_adapter *adapter,
 	if (unlikely(!skb))
 		return skb;
 
-	if (vlan_tx_tag_present(skb)) {
+	if (vlan_tx_tag_present(skb))
 		vlan_tag = be_get_tx_vlan_tag(adapter, skb);
-		skb = __vlan_put_tag(skb, vlan_tag);
-		if (skb)
-			skb->vlan_tci = 0;
+
+	if (qnq_async_evt_rcvd(adapter) && adapter->pvid) {
+		if (!vlan_tag)
+			vlan_tag = adapter->pvid;
+		/* f/w workaround to set skip_hw_vlan = 1, informs the F/W to
+		 * skip VLAN insertion
+		 */
+		if (skip_hw_vlan)
+			*skip_hw_vlan = true;
+	}
+
+	if (vlan_tag) {
+		skb = __vlan_put_tag(skb, htons(ETH_P_8021Q), vlan_tag);
+		if (unlikely(!skb))
+			return skb;
+		skb->vlan_tci = 0;
+	}
+
+	/* Insert the outer VLAN, if any */
+	if (adapter->qnq_vid) {
+		vlan_tag = adapter->qnq_vid;
+		skb = __vlan_put_tag(skb, htons(ETH_P_8021Q), vlan_tag);
+		if (unlikely(!skb))
+			return skb;
+		if (skip_hw_vlan)
+			*skip_hw_vlan = true;
 	}
 
 	return skb;
+}
+
+static bool be_ipv6_exthdr_check(struct sk_buff *skb)
+{
+	struct ethhdr *eh = (struct ethhdr *)skb->data;
+	u16 offset = ETH_HLEN;
+
+	if (eh->h_proto == htons(ETH_P_IPV6)) {
+		struct ipv6hdr *ip6h = (struct ipv6hdr *)(skb->data + offset);
+
+		offset += sizeof(struct ipv6hdr);
+		if (ip6h->nexthdr != NEXTHDR_TCP &&
+		    ip6h->nexthdr != NEXTHDR_UDP) {
+			struct ipv6_opt_hdr *ehdr =
+				(struct ipv6_opt_hdr *) (skb->data + offset);
+
+			/* offending pkt: 2nd byte following IPv6 hdr is 0xff */
+			if (ehdr->hdrlen == 0xff)
+				return true;
+		}
+	}
+	return false;
+}
+
+static int be_vlan_tag_tx_chk(struct be_adapter *adapter, struct sk_buff *skb)
+{
+	return vlan_tx_tag_present(skb) || adapter->pvid || adapter->qnq_vid;
+}
+
+static int be_ipv6_tx_stall_chk(struct be_adapter *adapter, struct sk_buff *skb)
+{
+	return BE3_chip(adapter) &&
+		be_ipv6_exthdr_check(skb);
 }
 
 static netdev_tx_t be_xmit(struct sk_buff *skb,
@@ -803,33 +856,64 @@ static netdev_tx_t be_xmit(struct sk_buff *skb,
 	u32 wrb_cnt = 0, copied = 0;
 	u32 start = txq->head, eth_hdr_len;
 	bool dummy_wrb, stopped = false;
+	bool skip_hw_vlan = false;
+	struct vlan_ethhdr *veh = (struct vlan_ethhdr *)skb->data;
 
 	eth_hdr_len = ntohs(skb->protocol) == ETH_P_8021Q ?
 		VLAN_ETH_HLEN : ETH_HLEN;
 
-	/* HW has a bug which considers padding bytes as legal
-	 * and modifies the IPv4 hdr's 'tot_len' field
+	/* For padded packets, BE HW modifies tot_len field in IP header
+	 * incorrecly when VLAN tag is inserted by HW.
 	 */
-	if (skb->len <= 60 && be_vlan_tag_chk(adapter, skb) &&
-			is_ipv4_pkt(skb)) {
+	if (skb->len <= 60 && vlan_tx_tag_present(skb) && is_ipv4_pkt(skb)) {
 		ip = (struct iphdr *)ip_hdr(skb);
 		pskb_trim(skb, eth_hdr_len + ntohs(ip->tot_len));
 	}
+
+	/* If vlan tag is already inlined in the packet, skip HW VLAN
+	 * tagging in UMC mode
+	 */
+	if ((adapter->function_mode & UMC_ENABLED) &&
+	    veh->h_vlan_proto == htons(ETH_P_8021Q))
+			skip_hw_vlan = true;
 
 	/* HW has a bug wherein it will calculate CSUM for VLAN
 	 * pkts even though it is disabled.
 	 * Manually insert VLAN in pkt.
 	 */
 	if (skb->ip_summed != CHECKSUM_PARTIAL &&
-			be_vlan_tag_chk(adapter, skb)) {
-		skb = be_insert_vlan_in_pkt(adapter, skb);
+			vlan_tx_tag_present(skb)) {
+		skb = be_insert_vlan_in_pkt(adapter, skb, &skip_hw_vlan);
+		if (unlikely(!skb))
+			goto tx_drop;
+	}
+
+	/* HW may lockup when VLAN HW tagging is requested on
+	 * certain ipv6 packets. Drop such pkts if the HW workaround to
+	 * skip HW tagging is not enabled by FW.
+	 */
+	if (unlikely(be_ipv6_tx_stall_chk(adapter, skb) &&
+		     (adapter->pvid || adapter->qnq_vid) &&
+		     !qnq_async_evt_rcvd(adapter)))
+		goto tx_drop;
+
+	/* Manual VLAN tag insertion to prevent:
+	 * ASIC lockup when the ASIC inserts VLAN tag into
+	 * certain ipv6 packets. Insert VLAN tags in driver,
+	 * and set event, completion, vlan bits accordingly
+	 * in the Tx WRB.
+	 */
+	if (be_ipv6_tx_stall_chk(adapter, skb) &&
+	    be_vlan_tag_tx_chk(adapter, skb)) {
+		skb = be_insert_vlan_in_pkt(adapter, skb, &skip_hw_vlan);
 		if (unlikely(!skb))
 			goto tx_drop;
 	}
 
 	wrb_cnt = wrb_cnt_for_skb(adapter, skb, &dummy_wrb);
 
-	copied = make_tx_wrbs(adapter, txq, skb, wrb_cnt, dummy_wrb);
+	copied = make_tx_wrbs(adapter, txq, skb, wrb_cnt, dummy_wrb,
+			      skip_hw_vlan);
 	if (copied) {
 		int gso_segs = skb_shinfo(skb)->gso_segs;
 
@@ -917,7 +1001,7 @@ set_vlan_promisc:
 	return status;
 }
 
-static int be_vlan_add_vid(struct net_device *netdev, u16 vid)
+static int be_vlan_add_vid(struct net_device *netdev, __be16 proto, u16 vid)
 {
 	struct be_adapter *adapter = netdev_priv(netdev);
 	int status = 0;
@@ -943,7 +1027,7 @@ ret:
 	return status;
 }
 
-static int be_vlan_rem_vid(struct net_device *netdev, u16 vid)
+static int be_vlan_rem_vid(struct net_device *netdev, __be16 proto, u16 vid)
 {
 	struct be_adapter *adapter = netdev_priv(netdev);
 	int status = 0;
@@ -1398,7 +1482,7 @@ static void be_rx_compl_process(struct be_rx_obj *rxo,
 
 
 	if (rxcp->vlanf)
-		__vlan_hwaccel_put_tag(skb, rxcp->vlan_tag);
+		__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q), rxcp->vlan_tag);
 
 	netif_receive_skb(skb);
 }
@@ -1454,7 +1538,7 @@ void be_rx_compl_process_gro(struct be_rx_obj *rxo, struct napi_struct *napi,
 		skb->rxhash = rxcp->rss_hash;
 
 	if (rxcp->vlanf)
-		__vlan_hwaccel_put_tag(skb, rxcp->vlan_tag);
+		__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q), rxcp->vlan_tag);
 
 	napi_gro_frags(napi);
 }
@@ -1521,6 +1605,8 @@ static void be_parse_rx_compl_v0(struct be_eth_rx_compl *compl,
 					       compl);
 	}
 	rxcp->port = AMAP_GET_BITS(struct amap_eth_rx_compl_v0, port, compl);
+	rxcp->ip_frag = AMAP_GET_BITS(struct amap_eth_rx_compl_v0,
+				      ip_frag, compl);
 }
 
 static struct be_rx_compl_info *be_rx_compl_get(struct be_rx_obj *rxo)
@@ -1541,6 +1627,9 @@ static struct be_rx_compl_info *be_rx_compl_get(struct be_rx_obj *rxo)
 		be_parse_rx_compl_v1(compl, rxcp);
 	else
 		be_parse_rx_compl_v0(compl, rxcp);
+
+	if (rxcp->ip_frag)
+		rxcp->l4_csum = 0;
 
 	if (rxcp->vlanf) {
 		/* vlanf could be wrongly set in some cards.
@@ -1741,7 +1830,7 @@ static void be_rx_cq_clean(struct be_rx_obj *rxo)
 			mdelay(1);
 		} else {
 			be_rx_compl_discard(rxo, rxcp);
-			be_cq_notify(adapter, rx_cq->id, true, 1);
+			be_cq_notify(adapter, rx_cq->id, false, 1);
 			if (rxcp->num_rcvd == 0)
 				break;
 		}
@@ -2090,7 +2179,7 @@ static irqreturn_t be_msix(int irq, void *dev)
 
 static inline bool do_gro(struct be_rx_compl_info *rxcp)
 {
-	return (rxcp->tcpf && !rxcp->err) ? true : false;
+	return (rxcp->tcpf && !rxcp->err && rxcp->l4_csum) ? true : false;
 }
 
 static int be_process_rx(struct be_rx_obj *rxo, struct napi_struct *napi,
@@ -2447,11 +2536,6 @@ static void be_rx_qs_destroy(struct be_adapter *adapter)
 		q = &rxo->q;
 		if (q->created) {
 			be_cmd_rxq_destroy(adapter, q);
-			/* After the rxq is invalidated, wait for a grace time
-			 * of 1ms for all dma to end and the flush compl to
-			 * arrive
-			 */
-			mdelay(1);
 			be_rx_cq_clean(rxo);
 		}
 		be_queue_free(adapter, q);
@@ -2478,6 +2562,7 @@ static int be_close(struct net_device *netdev)
 	 * all tx skbs are freed.
 	 */
 	be_tx_compl_clean(adapter);
+	netif_tx_disable(netdev);
 
 	be_rx_qs_destroy(adapter);
 
@@ -2586,6 +2671,7 @@ static int be_open(struct net_device *netdev)
 	if (!status)
 		be_link_status_update(adapter, link_status);
 
+	netif_tx_start_all_queues(netdev);
 	be_roce_dev_open(adapter);
 	return 0;
 err:
@@ -2603,10 +2689,9 @@ static int be_setup_wol(struct be_adapter *adapter, bool enable)
 
 	cmd.size = sizeof(struct be_cmd_req_acpi_wol_magic_config);
 	cmd.va = dma_alloc_coherent(&adapter->pdev->dev, cmd.size, &cmd.dma,
-				    GFP_KERNEL);
+				    GFP_KERNEL | __GFP_ZERO);
 	if (cmd.va == NULL)
 		return -1;
-	memset(cmd.va, 0, cmd.size);
 
 	if (enable) {
 		status = pci_write_config_dword(adapter->pdev,
@@ -2698,6 +2783,8 @@ static void be_vf_clear(struct be_adapter *adapter)
 		goto done;
 	}
 
+	pci_disable_sriov(adapter->pdev);
+
 	for_all_vfs(adapter, vf_cfg, vf) {
 		if (lancer_chip(adapter))
 			be_cmd_set_mac_list(adapter, NULL, 0, vf + 1);
@@ -2707,7 +2794,6 @@ static void be_vf_clear(struct be_adapter *adapter)
 
 		be_cmd_if_destroy(adapter, vf_cfg->if_handle, vf + 1);
 	}
-	pci_disable_sriov(adapter->pdev);
 done:
 	kfree(adapter->vf_cfg);
 	adapter->num_vfs = 0;
@@ -2804,13 +2890,8 @@ static int be_vf_setup(struct be_adapter *adapter)
 			dev_info(dev, "Device supports %d VFs and not %d\n",
 				 adapter->dev_num_vfs, num_vfs);
 		adapter->num_vfs = min_t(u16, num_vfs, adapter->dev_num_vfs);
-
-		status = pci_enable_sriov(adapter->pdev, num_vfs);
-		if (status) {
-			dev_err(dev, "SRIOV enable failed\n");
-			adapter->num_vfs = 0;
+		if (!adapter->num_vfs)
 			return 0;
-		}
 	}
 
 	status = be_vf_setup_init(adapter);
@@ -2858,6 +2939,15 @@ static int be_vf_setup(struct be_adapter *adapter)
 		vf_cfg->def_vid = def_vlan;
 
 		be_cmd_enable_vf(adapter, vf + 1);
+	}
+
+	if (!old_vfs) {
+		status = pci_enable_sriov(adapter->pdev, adapter->num_vfs);
+		if (status) {
+			dev_err(dev, "SRIOV enable failed\n");
+			adapter->num_vfs = 0;
+			goto err;
+		}
 	}
 	return 0;
 err:
@@ -3113,7 +3203,7 @@ static int be_setup(struct be_adapter *adapter)
 		be_cmd_set_flow_control(adapter, adapter->tx_fc,
 					adapter->rx_fc);
 
-	if (be_physfn(adapter) && num_vfs) {
+	if (be_physfn(adapter)) {
 		if (adapter->dev_num_vfs)
 			be_vf_setup(adapter);
 		else
@@ -3507,11 +3597,9 @@ static int lancer_fw_download(struct be_adapter *adapter,
 	flash_cmd.size = sizeof(struct lancer_cmd_req_write_object)
 				+ LANCER_FW_DOWNLOAD_CHUNK;
 	flash_cmd.va = dma_alloc_coherent(&adapter->pdev->dev, flash_cmd.size,
-						&flash_cmd.dma, GFP_KERNEL);
+					  &flash_cmd.dma, GFP_KERNEL);
 	if (!flash_cmd.va) {
 		status = -ENOMEM;
-		dev_err(&adapter->pdev->dev,
-			"Memory allocation failure while flashing\n");
 		goto lancer_fw_exit;
 	}
 
@@ -3616,8 +3704,6 @@ static int be_fw_download(struct be_adapter *adapter, const struct firmware* fw)
 					  &flash_cmd.dma, GFP_KERNEL);
 	if (!flash_cmd.va) {
 		status = -ENOMEM;
-		dev_err(&adapter->pdev->dev,
-			"Memory allocation failure while flashing\n");
 		goto be_fw_exit;
 	}
 
@@ -3729,12 +3815,12 @@ static void be_netdev_init(struct net_device *netdev)
 
 	netdev->hw_features |= NETIF_F_SG | NETIF_F_TSO | NETIF_F_TSO6 |
 		NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM | NETIF_F_RXCSUM |
-		NETIF_F_HW_VLAN_TX;
+		NETIF_F_HW_VLAN_CTAG_TX;
 	if (be_multi_rxq(adapter))
 		netdev->hw_features |= NETIF_F_RXHASH;
 
 	netdev->features |= netdev->hw_features |
-		NETIF_F_HW_VLAN_RX | NETIF_F_HW_VLAN_FILTER;
+		NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_HW_VLAN_CTAG_FILTER;
 
 	netdev->vlan_features |= NETIF_F_SG | NETIF_F_TSO | NETIF_F_TSO6 |
 		NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM;
@@ -3858,12 +3944,13 @@ static int be_ctrl_init(struct be_adapter *adapter)
 
 	rx_filter->size = sizeof(struct be_cmd_req_rx_filter);
 	rx_filter->va = dma_alloc_coherent(&adapter->pdev->dev, rx_filter->size,
-					&rx_filter->dma, GFP_KERNEL);
+					   &rx_filter->dma,
+					   GFP_KERNEL | __GFP_ZERO);
 	if (rx_filter->va == NULL) {
 		status = -ENOMEM;
 		goto free_mbox;
 	}
-	memset(rx_filter->va, 0, rx_filter->size);
+
 	mutex_init(&adapter->mbox_lock);
 	spin_lock_init(&adapter->mcc_lock);
 	spin_lock_init(&adapter->mcc_cq_lock);
@@ -3905,10 +3992,9 @@ static int be_stats_init(struct be_adapter *adapter)
 		cmd->size = sizeof(struct be_cmd_req_get_stats_v1);
 
 	cmd->va = dma_alloc_coherent(&adapter->pdev->dev, cmd->size, &cmd->dma,
-				     GFP_KERNEL);
+				     GFP_KERNEL | __GFP_ZERO);
 	if (cmd->va == NULL)
 		return -1;
-	memset(cmd->va, 0, cmd->size);
 	return 0;
 }
 
@@ -4018,6 +4104,7 @@ static int be_get_initial_config(struct be_adapter *adapter)
 
 static int lancer_recover_func(struct be_adapter *adapter)
 {
+	struct device *dev = &adapter->pdev->dev;
 	int status;
 
 	status = lancer_test_and_set_rdy_state(adapter);
@@ -4029,8 +4116,7 @@ static int lancer_recover_func(struct be_adapter *adapter)
 
 	be_clear(adapter);
 
-	adapter->hw_error = false;
-	adapter->fw_timeout = false;
+	be_clear_all_error(adapter);
 
 	status = be_setup(adapter);
 	if (status)
@@ -4042,13 +4128,13 @@ static int lancer_recover_func(struct be_adapter *adapter)
 			goto err;
 	}
 
-	dev_err(&adapter->pdev->dev,
-		"Adapter SLIPORT recovery succeeded\n");
+	dev_err(dev, "Error recovery successful\n");
 	return 0;
 err:
-	if (adapter->eeh_error)
-		dev_err(&adapter->pdev->dev,
-			"Adapter SLIPORT recovery failed\n");
+	if (status == -EAGAIN)
+		dev_err(dev, "Waiting for resource provisioning\n");
+	else
+		dev_err(dev, "Error recovery failed\n");
 
 	return status;
 }
@@ -4057,28 +4143,27 @@ static void be_func_recovery_task(struct work_struct *work)
 {
 	struct be_adapter *adapter =
 		container_of(work, struct be_adapter,  func_recovery_work.work);
-	int status;
+	int status = 0;
 
 	be_detect_error(adapter);
 
 	if (adapter->hw_error && lancer_chip(adapter)) {
-
-		if (adapter->eeh_error)
-			goto out;
 
 		rtnl_lock();
 		netif_device_detach(adapter->netdev);
 		rtnl_unlock();
 
 		status = lancer_recover_func(adapter);
-
 		if (!status)
 			netif_device_attach(adapter->netdev);
 	}
 
-out:
-	schedule_delayed_work(&adapter->func_recovery_work,
-			      msecs_to_jiffies(1000));
+	/* In Lancer, for all errors other than provisioning error (-EAGAIN),
+	 * no need to attempt further recovery.
+	 */
+	if (!status || status == -EAGAIN)
+		schedule_delayed_work(&adapter->func_recovery_work,
+				      msecs_to_jiffies(1000));
 }
 
 static void be_worker(struct work_struct *work)
@@ -4183,6 +4268,9 @@ static int be_probe(struct pci_dev *pdev, const struct pci_device_id *pdev_id)
 		netdev->features |= NETIF_F_HIGHDMA;
 	} else {
 		status = dma_set_mask(&pdev->dev, DMA_BIT_MASK(32));
+		if (!status)
+			status = dma_set_coherent_mask(&pdev->dev,
+						       DMA_BIT_MASK(32));
 		if (status) {
 			dev_err(&pdev->dev, "Could not set PCI DMA Mask\n");
 			goto free_netdev;
@@ -4361,20 +4449,19 @@ static pci_ers_result_t be_eeh_err_detected(struct pci_dev *pdev,
 
 	dev_err(&adapter->pdev->dev, "EEH error detected\n");
 
-	adapter->eeh_error = true;
+	if (!adapter->eeh_error) {
+		adapter->eeh_error = true;
 
-	cancel_delayed_work_sync(&adapter->func_recovery_work);
+		cancel_delayed_work_sync(&adapter->func_recovery_work);
 
-	rtnl_lock();
-	netif_device_detach(netdev);
-	rtnl_unlock();
-
-	if (netif_running(netdev)) {
 		rtnl_lock();
-		be_close(netdev);
+		netif_device_detach(netdev);
+		if (netif_running(netdev))
+			be_close(netdev);
 		rtnl_unlock();
+
+		be_clear(adapter);
 	}
-	be_clear(adapter);
 
 	if (state == pci_channel_io_perm_failure)
 		return PCI_ERS_RESULT_DISCONNECT;
@@ -4399,7 +4486,6 @@ static pci_ers_result_t be_eeh_reset(struct pci_dev *pdev)
 	int status;
 
 	dev_info(&adapter->pdev->dev, "EEH reset\n");
-	be_clear_all_error(adapter);
 
 	status = pci_enable_device(pdev);
 	if (status)
@@ -4417,6 +4503,7 @@ static pci_ers_result_t be_eeh_reset(struct pci_dev *pdev)
 		return PCI_ERS_RESULT_DISCONNECT;
 
 	pci_cleanup_aer_uncorrect_error_status(pdev);
+	be_clear_all_error(adapter);
 	return PCI_ERS_RESULT_RECOVERED;
 }
 

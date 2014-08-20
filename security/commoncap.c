@@ -31,6 +31,10 @@
 #include <linux/binfmts.h>
 #include <linux/personality.h>
 
+#ifdef CONFIG_ANDROID_PARANOID_NETWORK
+#include <linux/android_aid.h>
+#endif
+
 /*
  * If a non-root user executes a setuid-root binary in
  * !secure(SECURE_NOROOT) mode, then we raise capabilities.
@@ -77,6 +81,13 @@ int cap_capable(const struct cred *cred, struct user_namespace *targ_ns,
 		int cap, int audit)
 {
 	struct user_namespace *ns = targ_ns;
+
+#ifdef CONFIG_ANDROID_PARANOID_NETWORK
+	if (cap == CAP_NET_RAW && in_egroup_p(AID_NET_RAW))
+		return 0;
+	if (cap == CAP_NET_ADMIN && in_egroup_p(AID_NET_ADMIN))
+		return 0;
+#endif
 
 	/* See if cred has the capability in the target user namespace
 	 * by examining the target user namespace and all of the target
@@ -440,7 +451,7 @@ static int get_file_caps(struct linux_binprm *bprm, bool *effective, bool *has_c
 	if (!file_caps_enabled)
 		return 0;
 
-	if (bprm->file->f_vfsmnt->mnt_flags & MNT_NOSUID)
+	if (bprm->file->f_path.mnt->mnt_flags & MNT_NOSUID)
 		return 0;
 
 	dentry = dget(bprm->file->f_dentry);
@@ -988,11 +999,9 @@ int cap_mmap_addr(unsigned long addr)
 	}
 	return ret;
 }
-EXPORT_SYMBOL(cap_mmap_addr);
 
 int cap_mmap_file(struct file *file, unsigned long reqprot,
 		  unsigned long prot, unsigned long flags)
 {
 	return 0;
 }
-EXPORT_SYMBOL(cap_mmap_file);

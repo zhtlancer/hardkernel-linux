@@ -464,7 +464,7 @@ static void random_work(struct work_struct *work)
 		hci_le_start_enc(hcon, ediv, rand, stk);
 		hcon->enc_key_size = smp->enc_key_size;
 	} else {
-		u8 stk[16], r[16], rand[8], auth;
+		u8 stk[16], r[16], rand[8];
 		__le16 ediv;
 
 		memset(rand, 0, sizeof(rand));
@@ -479,13 +479,8 @@ static void random_work(struct work_struct *work)
 		memset(stk + smp->enc_key_size, 0,
 				SMP_MAX_ENC_KEY_SIZE - smp->enc_key_size);
 
-		if (hcon->pending_sec_level == BT_SECURITY_HIGH)
-			auth = 1;
-		else
-			auth = 0;
-
 		hci_add_ltk(hcon->hdev, conn->dst, hcon->dst_type,
-			    HCI_SMP_STK_SLAVE, 0, auth, stk, smp->enc_key_size,
+			    HCI_SMP_STK_SLAVE, 0, 0, stk, smp->enc_key_size,
 			    ediv, rand);
 	}
 
@@ -527,7 +522,7 @@ void smp_chan_destroy(struct l2cap_conn *conn)
 	kfree(smp);
 	conn->smp_chan = NULL;
 	conn->hcon->smp_conn = NULL;
-	hci_conn_put(conn->hcon);
+	hci_conn_drop(conn->hcon);
 }
 
 int smp_user_confirm_reply(struct hci_conn *hcon, u16 mgmt_op, __le32 passkey)
@@ -775,7 +770,7 @@ int smp_conn_security(struct hci_conn *hcon, __u8 sec_level)
 
 	BT_DBG("conn %p hcon %p level 0x%2.2x", conn, hcon, sec_level);
 
-	if (!lmp_host_le_capable(hcon->hdev))
+	if (!test_bit(HCI_LE_ENABLED, &hcon->hdev->dev_flags))
 		return 1;
 
 	if (sec_level == BT_SECURITY_LOW)
@@ -856,7 +851,7 @@ int smp_sig_channel(struct l2cap_conn *conn, struct sk_buff *skb)
 	__u8 reason;
 	int err = 0;
 
-	if (!lmp_host_le_capable(conn->hcon->hdev)) {
+	if (!test_bit(HCI_LE_ENABLED, &conn->hcon->hdev->dev_flags)) {
 		err = -ENOTSUPP;
 		reason = SMP_PAIRING_NOTSUPP;
 		goto done;

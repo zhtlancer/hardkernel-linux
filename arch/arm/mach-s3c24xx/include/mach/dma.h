@@ -24,7 +24,6 @@
 */
 
 enum dma_ch {
-	DMACH_DT_PROP = -1,	/* not yet supported, do not use */
 	DMACH_XD0 = 0,
 	DMACH_XD1,
 	DMACH_SDI,
@@ -61,6 +60,11 @@ static inline bool samsung_dma_has_circular(void)
 }
 
 static inline bool samsung_dma_is_dmadev(void)
+{
+	return false;
+}
+
+static inline bool samsung_dma_has_infiniteloop(void)
 {
 	return false;
 }

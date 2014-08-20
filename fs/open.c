@@ -30,11 +30,9 @@
 #include <linux/fs_struct.h>
 #include <linux/ima.h>
 #include <linux/dnotify.h>
+#include <linux/compat.h>
 
 #include "internal.h"
-
-#define CREATE_TRACE_POINTS
-#include <trace/events/fs.h>
 
 int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
 	struct file *filp)
@@ -63,7 +61,6 @@ int do_truncate(struct dentry *dentry, loff_t length, unsigned int time_attrs,
 	mutex_unlock(&dentry->d_inode->i_mutex);
 	return ret;
 }
-EXPORT_SYMBOL(do_truncate);
 
 long vfs_truncate(struct path *path, loff_t length)
 {
@@ -144,6 +141,13 @@ SYSCALL_DEFINE2(truncate, const char __user *, path, long, length)
 	return do_sys_truncate(path, length);
 }
 
+#ifdef CONFIG_COMPAT
+COMPAT_SYSCALL_DEFINE2(truncate, const char __user *, path, compat_off_t, length)
+{
+	return do_sys_truncate(path, length);
+}
+#endif
+
 static long do_sys_ftruncate(unsigned int fd, loff_t length, int small)
 {
 	struct inode *inode;
@@ -193,46 +197,33 @@ out:
 
 SYSCALL_DEFINE2(ftruncate, unsigned int, fd, unsigned long, length)
 {
-	long ret = do_sys_ftruncate(fd, length, 1);
-	/* avoid REGPARM breakage on x86: */
-	asmlinkage_protect(2, ret, fd, length);
-	return ret;
+	return do_sys_ftruncate(fd, length, 1);
 }
+
+#ifdef CONFIG_COMPAT
+COMPAT_SYSCALL_DEFINE2(ftruncate, unsigned int, fd, compat_ulong_t, length)
+{
+	return do_sys_ftruncate(fd, length, 1);
+}
+#endif
 
 /* LFS versions of truncate are only needed on 32 bit machines */
 #if BITS_PER_LONG == 32
-SYSCALL_DEFINE(truncate64)(const char __user * path, loff_t length)
+SYSCALL_DEFINE2(truncate64, const char __user *, path, loff_t, length)
 {
 	return do_sys_truncate(path, length);
 }
-#ifdef CONFIG_HAVE_SYSCALL_WRAPPERS
-asmlinkage long SyS_truncate64(long path, loff_t length)
-{
-	return SYSC_truncate64((const char __user *) path, length);
-}
-SYSCALL_ALIAS(sys_truncate64, SyS_truncate64);
-#endif
 
-SYSCALL_DEFINE(ftruncate64)(unsigned int fd, loff_t length)
+SYSCALL_DEFINE2(ftruncate64, unsigned int, fd, loff_t, length)
 {
-	long ret = do_sys_ftruncate(fd, length, 0);
-	/* avoid REGPARM breakage on x86: */
-	asmlinkage_protect(2, ret, fd, length);
-	return ret;
+	return do_sys_ftruncate(fd, length, 0);
 }
-#ifdef CONFIG_HAVE_SYSCALL_WRAPPERS
-asmlinkage long SyS_ftruncate64(long fd, loff_t length)
-{
-	return SYSC_ftruncate64((unsigned int) fd, length);
-}
-SYSCALL_ALIAS(sys_ftruncate64, SyS_ftruncate64);
-#endif
 #endif /* BITS_PER_LONG == 32 */
 
 
 int do_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 {
-	struct inode *inode = file->f_path.dentry->d_inode;
+	struct inode *inode = file_inode(file);
 	long ret;
 
 	if (offset < 0 || len <= 0)
@@ -288,7 +279,7 @@ int do_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 	return ret;
 }
 
-SYSCALL_DEFINE(fallocate)(int fd, int mode, loff_t offset, loff_t len)
+SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
 {
 	struct fd f = fdget(fd);
 	int error = -EBADF;
@@ -299,14 +290,6 @@ SYSCALL_DEFINE(fallocate)(int fd, int mode, loff_t offset, loff_t len)
 	}
 	return error;
 }
-
-#ifdef CONFIG_HAVE_SYSCALL_WRAPPERS
-asmlinkage long SyS_fallocate(long fd, long mode, loff_t offset, loff_t len)
-{
-	return SYSC_fallocate((int)fd, (int)mode, offset, len);
-}
-SYSCALL_ALIAS(sys_fallocate, SyS_fallocate);
-#endif
 
 /*
  * access() needs to use the real uid/gid, not the effective uid/gid.
@@ -430,7 +413,7 @@ SYSCALL_DEFINE1(fchdir, unsigned int, fd)
 	if (!f.file)
 		goto out;
 
-	inode = f.file->f_path.dentry->d_inode;
+	inode = file_inode(f.file);
 
 	error = -ENOTDIR;
 	if (!S_ISDIR(inode->i_mode))
@@ -645,12 +628,23 @@ out:
 static inline int __get_file_write_access(struct inode *inode,
 					  struct vfsmount *mnt)
 {
-	int error = get_write_access(inode);
+	int error;
+	error = get_write_access(inode);
 	if (error)
 		return error;
-	error = __mnt_want_write(mnt);
-	if (error)
-		put_write_access(inode);
+	/*
+	 * Do not take mount writer counts on
+	 * special files since no writes to
+	 * the mount itself will occur.
+	 */
+	if (!special_file(inode->i_mode)) {
+		/*
+		 * Balanced in __fput()
+		 */
+		error = __mnt_want_write(mnt);
+		if (error)
+			put_write_access(inode);
+	}
 	return error;
 }
 
@@ -682,16 +676,16 @@ static int do_dentry_open(struct file *f,
 		f->f_mode = FMODE_PATH;
 
 	path_get(&f->f_path);
-	inode = f->f_path.dentry->d_inode;
-	if (f->f_mode & FMODE_WRITE && !special_file(inode->i_mode)) {
+	inode = f->f_inode = f->f_path.dentry->d_inode;
+	if (f->f_mode & FMODE_WRITE) {
 		error = __get_file_write_access(inode, f->f_path.mnt);
 		if (error)
 			goto cleanup_file;
-		file_take_write(f);
+		if (!special_file(inode->i_mode))
+			file_take_write(f);
 	}
 
 	f->f_mapping = inode->i_mapping;
-	f->f_pos = 0;
 	file_sb_list_add(f, inode->i_sb);
 
 	if (unlikely(f->f_mode & FMODE_PATH)) {
@@ -729,6 +723,7 @@ cleanup_all:
 	fops_put(f->f_op);
 	file_sb_list_del(f);
 	if (f->f_mode & FMODE_WRITE) {
+		put_write_access(inode);
 		if (!special_file(inode->i_mode)) {
 			/*
 			 * We don't consider this a real
@@ -736,7 +731,6 @@ cleanup_all:
 			 * because it all happenend right
 			 * here, so just reset the state.
 			 */
-			put_write_access(inode);
 			file_reset_write(f);
 			__mnt_drop_write(f->f_path.mnt);
 		}
@@ -745,6 +739,7 @@ cleanup_file:
 	path_put(&f->f_path);
 	f->f_path.mnt = NULL;
 	f->f_path.dentry = NULL;
+	f->f_inode = NULL;
 	return error;
 }
 
@@ -802,46 +797,26 @@ struct file *dentry_open(const struct path *path, int flags,
 	/* We must always pass in a valid mount pointer. */
 	BUG_ON(!path->mnt);
 
-	error = -ENFILE;
 	f = get_empty_filp();
-	if (f == NULL)
-		return ERR_PTR(error);
-
-	f->f_flags = flags;
-	error = vfs_open(path, f, cred);
-	if (!error) {
-		error = open_check_o_direct(f);
-		if (error) {
-			fput(f);
+	if (!IS_ERR(f)) {
+		f->f_flags = flags;
+		f->f_path = *path;
+		error = do_dentry_open(f, NULL, cred);
+		if (!error) {
+			/* from now on we need fput() to dispose of f */
+			error = open_check_o_direct(f);
+			if (error) {
+				fput(f);
+				f = ERR_PTR(error);
+			}
+		} else { 
+			put_filp(f);
 			f = ERR_PTR(error);
 		}
-	} else { 
-		put_filp(f);
-		f = ERR_PTR(error);
 	}
 	return f;
 }
 EXPORT_SYMBOL(dentry_open);
-
-/**
- * vfs_open - open the file at the given path
- * @path: path to open
- * @filp: newly allocated file with f_flag initialized
- * @cred: credentials to use
- */
-int vfs_open(const struct path *path, struct file *filp,
-	     const struct cred *cred)
-{
-	struct inode *inode = path->dentry->d_inode;
-
-	if (inode->i_op->dentry_open)
-		return inode->i_op->dentry_open(path->dentry, filp, cred);
-	else {
-		filp->f_path = *path;
-		return do_dentry_open(filp, NULL, cred);
-	}
-}
-EXPORT_SYMBOL(vfs_open);
 
 static inline int build_open_flags(int flags, umode_t mode, struct open_flags *op)
 {
@@ -971,7 +946,6 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 			} else {
 				fsnotify_open(f);
 				fd_install(fd, f);
-				trace_do_sys_open(tmp->name, flags, mode);
 			}
 		}
 		putname(tmp);
@@ -981,29 +955,19 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
-	long ret;
-
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
 
-	ret = do_sys_open(AT_FDCWD, filename, flags, mode);
-	/* avoid REGPARM breakage on x86: */
-	asmlinkage_protect(3, ret, filename, flags, mode);
-	return ret;
+	return do_sys_open(AT_FDCWD, filename, flags, mode);
 }
 
 SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags,
 		umode_t, mode)
 {
-	long ret;
-
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
 
-	ret = do_sys_open(dfd, filename, flags, mode);
-	/* avoid REGPARM breakage on x86: */
-	asmlinkage_protect(4, ret, dfd, filename, flags, mode);
-	return ret;
+	return do_sys_open(dfd, filename, flags, mode);
 }
 
 #ifndef __alpha__

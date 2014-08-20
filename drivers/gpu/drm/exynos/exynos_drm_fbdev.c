@@ -16,7 +16,6 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_crtc_helper.h>
-#include <linux/dma-buf.h>
 
 #include "exynos_drm_drv.h"
 #include "exynos_drm_fb.h"
@@ -25,16 +24,6 @@
 
 #define MAX_CONNECTOR		4
 #define PREFERRED_BPP		32
-
-struct fb_dmabuf_export
-{
-        __u32 fd;
-        __u32 flags;
-};
-#define FBIOGET_DMABUF       _IOR('F', 0x21, struct fb_dmabuf_export)
-
-
-#define NUM_BUFFERS 3
 
 #define to_exynos_fbdev(x)	container_of(x, struct exynos_drm_fbdev,\
 				drm_fb_helper)
@@ -73,51 +62,6 @@ static int exynos_drm_fb_mmap(struct fb_info *info,
 	return 0;
 }
 
-static u32 exynos_fb_get_dma_buf( struct fb_info *info)
-{
-    int fd = -1;
-    struct drm_fb_helper *helper = info->par;
-    struct drm_device *dev = helper->dev;
-    struct exynos_drm_fbdev *exynos_fbd = to_exynos_fbdev(helper);
-    struct exynos_drm_gem_obj *exynos_gem_obj = exynos_fbd->exynos_gem_obj;
-
-    if( dev->driver->gem_prime_export )
-    {
-        struct dma_buf *buf = NULL;
-        buf = dev->driver->gem_prime_export( dev, &exynos_gem_obj->base, O_RDWR);
-        if(buf)
-            fd = dma_buf_fd(buf, O_RDWR);
-    }
-
-    return fd;
-}
-
-static int fb_ioctl(struct fb_info *info, unsigned int cmd,
-            unsigned long arg)
-{
-    int ret;
-
-   switch (cmd) {
-      case FBIOGET_DMABUF:
-      {
-              struct fb_dmabuf_export __user *out_ptr = (struct fb_dmabuf_export *)arg;
-              u32 buf_fd = exynos_fb_get_dma_buf(info);
-              if(buf_fd == -1)
-              {
-                      ret = -ENOMEM;
-                      break;
-              }
-               ret = put_user(buf_fd, &out_ptr->fd);
-               break;
-       }
-
-    default:
-        ret = -ENOTTY;
-    }
-
-    return ret;
-}
-
 static struct fb_ops exynos_drm_fb_ops = {
 	.owner		= THIS_MODULE,
 	.fb_mmap        = exynos_drm_fb_mmap,
@@ -129,7 +73,6 @@ static struct fb_ops exynos_drm_fb_ops = {
 	.fb_blank	= drm_fb_helper_blank,
 	.fb_pan_display	= drm_fb_helper_pan_display,
 	.fb_setcmap	= drm_fb_helper_setcmap,
-	.fb_ioctl	= fb_ioctl,
 };
 
 static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
@@ -138,13 +81,13 @@ static int exynos_drm_fbdev_update(struct drm_fb_helper *helper,
 	struct fb_info *fbi = helper->fbdev;
 	struct drm_device *dev = helper->dev;
 	struct exynos_drm_gem_buf *buffer;
-	unsigned int size = fb->width * fb->height * (fb->bits_per_pixel >> 3) * NUM_BUFFERS;
+	unsigned int size = fb->width * fb->height * (fb->bits_per_pixel >> 3);
 	unsigned long offset;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	drm_fb_helper_fill_fix(fbi, fb->pitches[0], fb->depth);
-	drm_fb_helper_fill_var(fbi, helper, fb->width, fb->height / NUM_BUFFERS);
+	drm_fb_helper_fill_var(fbi, helper, fb->width, fb->height);
 
 	/* RGB formats use only one buffer */
 	buffer = exynos_drm_fb_buffer(fb, 0);
@@ -212,7 +155,7 @@ static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
 			sizes->surface_bpp);
 
 	mode_cmd.width = sizes->surface_width;
-	mode_cmd.height = sizes->surface_height * NUM_BUFFERS;
+	mode_cmd.height = sizes->surface_height;
 	mode_cmd.pitches[0] = sizes->surface_width * (sizes->surface_bpp >> 3);
 	mode_cmd.pixel_format = drm_mode_legacy_fb_format(sizes->surface_bpp,
 							  sizes->surface_depth);
@@ -239,7 +182,7 @@ static int exynos_drm_fbdev_create(struct drm_fb_helper *helper,
 
 	helper->fb = exynos_drm_framebuffer_init(dev, &mode_cmd,
 			&exynos_gem_obj->base);
-	if (IS_ERR_OR_NULL(helper->fb)) {
+	if (IS_ERR(helper->fb)) {
 		DRM_ERROR("failed to create drm framebuffer.\n");
 		ret = PTR_ERR(helper->fb);
 		goto err_destroy_gem;
@@ -283,36 +226,8 @@ out:
 	return ret;
 }
 
-static int exynos_drm_fbdev_probe(struct drm_fb_helper *helper,
-				   struct drm_fb_helper_surface_size *sizes)
-{
-	int ret = 0;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
-	/*
-	 * with !helper->fb, it means that this funcion is called first time
-	 * and after that, the helper->fb would be used as clone mode.
-	 */
-	if (!helper->fb) {
-		ret = exynos_drm_fbdev_create(helper, sizes);
-		if (ret < 0) {
-			DRM_ERROR("failed to create fbdev.\n");
-			return ret;
-		}
-
-		/*
-		 * fb_helper expects a value more than 1 if succeed
-		 * because register_framebuffer() should be called.
-		 */
-		ret = 1;
-	}
-
-	return ret;
-}
-
 static struct drm_fb_helper_funcs exynos_drm_fb_helper_funcs = {
-	.fb_probe =	exynos_drm_fbdev_probe,
+	.fb_probe =	exynos_drm_fbdev_create,
 };
 
 int exynos_drm_fbdev_init(struct drm_device *dev)
@@ -352,6 +267,9 @@ int exynos_drm_fbdev_init(struct drm_device *dev)
 
 	}
 
+	/* disable all the possible outputs/crtcs before entering KMS mode */
+	drm_helper_disable_unused_functions(dev);
+
 	ret = drm_fb_helper_initial_config(helper, PREFERRED_BPP);
 	if (ret < 0) {
 		DRM_ERROR("failed to set up hw configuration.\n");
@@ -383,8 +301,10 @@ static void exynos_drm_fbdev_destroy(struct drm_device *dev,
 	/* release drm framebuffer and real buffer */
 	if (fb_helper->fb && fb_helper->fb->funcs) {
 		fb = fb_helper->fb;
-		if (fb)
+		if (fb) {
+			drm_framebuffer_unregister_private(fb);
 			drm_framebuffer_remove(fb);
+		}
 	}
 
 	/* release linux framebuffer */
@@ -431,5 +351,7 @@ void exynos_drm_fbdev_restore_mode(struct drm_device *dev)
 	if (!private || !private->fb_helper)
 		return;
 
+	drm_modeset_lock_all(dev);
 	drm_fb_helper_restore_fbdev_mode(private->fb_helper);
+	drm_modeset_unlock_all(dev);
 }

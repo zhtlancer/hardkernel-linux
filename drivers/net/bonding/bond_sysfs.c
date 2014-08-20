@@ -316,6 +316,9 @@ static ssize_t bonding_store_mode(struct device *d,
 	int new_value, ret = count;
 	struct bonding *bond = to_bond(d);
 
+	if (!rtnl_trylock())
+		return restart_syscall();
+
 	if (bond->dev->flags & IFF_UP) {
 		pr_err("unable to update mode of %s because interface is up.\n",
 		       bond->dev->name);
@@ -352,6 +355,7 @@ static ssize_t bonding_store_mode(struct device *d,
 		bond->dev->name, bond_mode_tbl[new_value].modename,
 		new_value);
 out:
+	rtnl_unlock();
 	return ret;
 }
 static DEVICE_ATTR(mode, S_IRUGO | S_IWUSR,
@@ -533,9 +537,8 @@ static ssize_t bonding_store_arp_interval(struct device *d,
 		goto out;
 	}
 	if (bond->params.mode == BOND_MODE_ALB ||
-	    bond->params.mode == BOND_MODE_TLB ||
-	    bond->params.mode == BOND_MODE_8023AD) {
-		pr_info("%s: ARP monitoring cannot be used with ALB/TLB/802.3ad. Only MII monitoring is supported on %s.\n",
+	    bond->params.mode == BOND_MODE_TLB) {
+		pr_info("%s: ARP monitoring cannot be used with ALB/TLB. Only MII monitoring is supported on %s.\n",
 			bond->dev->name, bond->dev->name);
 		ret = -EINVAL;
 		goto out;
@@ -693,8 +696,6 @@ static ssize_t bonding_store_downdelay(struct device *d,
 	int new_value, ret = count;
 	struct bonding *bond = to_bond(d);
 
-	if (!rtnl_trylock())
-		return restart_syscall();
 	if (!(bond->params.miimon)) {
 		pr_err("%s: Unable to set down delay as MII monitoring is disabled\n",
 		       bond->dev->name);
@@ -728,7 +729,6 @@ static ssize_t bonding_store_downdelay(struct device *d,
 	}
 
 out:
-	rtnl_unlock();
 	return ret;
 }
 static DEVICE_ATTR(downdelay, S_IRUGO | S_IWUSR,
@@ -751,8 +751,6 @@ static ssize_t bonding_store_updelay(struct device *d,
 	int new_value, ret = count;
 	struct bonding *bond = to_bond(d);
 
-	if (!rtnl_trylock())
-		return restart_syscall();
 	if (!(bond->params.miimon)) {
 		pr_err("%s: Unable to set up delay as MII monitoring is disabled\n",
 		       bond->dev->name);
@@ -786,7 +784,6 @@ static ssize_t bonding_store_updelay(struct device *d,
 	}
 
 out:
-	rtnl_unlock();
 	return ret;
 }
 static DEVICE_ATTR(updelay, S_IRUGO | S_IWUSR,
@@ -1322,7 +1319,6 @@ static ssize_t bonding_show_mii_status(struct device *d,
 }
 static DEVICE_ATTR(mii_status, S_IRUGO, bonding_show_mii_status, NULL);
 
-
 /*
  * Show current 802.3ad aggregator ID.
  */
@@ -1336,7 +1332,7 @@ static ssize_t bonding_show_ad_aggregator(struct device *d,
 	if (bond->params.mode == BOND_MODE_8023AD) {
 		struct ad_info ad_info;
 		count = sprintf(buf, "%d\n",
-				(bond_3ad_get_active_agg_info(bond, &ad_info))
+				bond_3ad_get_active_agg_info(bond, &ad_info)
 				?  0 : ad_info.aggregator_id);
 	}
 
@@ -1358,7 +1354,7 @@ static ssize_t bonding_show_ad_num_ports(struct device *d,
 	if (bond->params.mode == BOND_MODE_8023AD) {
 		struct ad_info ad_info;
 		count = sprintf(buf, "%d\n",
-				(bond_3ad_get_active_agg_info(bond, &ad_info))
+				bond_3ad_get_active_agg_info(bond, &ad_info)
 				?  0 : ad_info.ports);
 	}
 
@@ -1380,7 +1376,7 @@ static ssize_t bonding_show_ad_actor_key(struct device *d,
 	if (bond->params.mode == BOND_MODE_8023AD) {
 		struct ad_info ad_info;
 		count = sprintf(buf, "%d\n",
-				(bond_3ad_get_active_agg_info(bond, &ad_info))
+				bond_3ad_get_active_agg_info(bond, &ad_info)
 				?  0 : ad_info.actor_key);
 	}
 
@@ -1402,7 +1398,7 @@ static ssize_t bonding_show_ad_partner_key(struct device *d,
 	if (bond->params.mode == BOND_MODE_8023AD) {
 		struct ad_info ad_info;
 		count = sprintf(buf, "%d\n",
-				(bond_3ad_get_active_agg_info(bond, &ad_info))
+				bond_3ad_get_active_agg_info(bond, &ad_info)
 				?  0 : ad_info.partner_key);
 	}
 

@@ -36,8 +36,7 @@ struct files_stat_struct files_stat = {
 	.max_files = NR_FILE
 };
 
-DEFINE_LGLOCK(files_lglock);
-EXPORT_SYMBOL(files_lglock);
+DEFINE_STATIC_LGLOCK(files_lglock);
 
 /* SLAB cache for file structures */
 static struct kmem_cache *filp_cachep __read_mostly;
@@ -95,8 +94,8 @@ int proc_nr_files(ctl_table *table, int write,
 #endif
 
 /* Find an unused file structure and return a pointer to it.
- * Returns NULL, if there are no more free file structures or
- * we run out of memory.
+ * Returns an error pointer if some error happend e.g. we over file
+ * structures limit, run out of memory or operation is not permitted.
  *
  * Be very careful using this.  You are responsible for
  * getting write access to any mount that you might assign
@@ -108,7 +107,8 @@ struct file *get_empty_filp(void)
 {
 	const struct cred *cred = current_cred();
 	static long old_max;
-	struct file * f;
+	struct file *f;
+	int error;
 
 	/*
 	 * Privileged users can go above max_files
@@ -123,13 +123,16 @@ struct file *get_empty_filp(void)
 	}
 
 	f = kmem_cache_zalloc(filp_cachep, GFP_KERNEL);
-	if (f == NULL)
-		goto fail;
+	if (unlikely(!f))
+		return ERR_PTR(-ENOMEM);
 
 	percpu_counter_inc(&nr_files);
 	f->f_cred = get_cred(cred);
-	if (security_file_alloc(f))
-		goto fail_sec;
+	error = security_file_alloc(f);
+	if (unlikely(error)) {
+		file_free(f);
+		return ERR_PTR(error);
+	}
 
 	INIT_LIST_HEAD(&f->f_u.fu_list);
 	atomic_long_set(&f->f_count, 1);
@@ -145,12 +148,7 @@ over:
 		pr_info("VFS: file-max limit %lu reached\n", get_max_files());
 		old_max = get_nr_files();
 	}
-	goto fail;
-
-fail_sec:
-	file_free(f);
-fail:
-	return NULL;
+	return ERR_PTR(-ENFILE);
 }
 
 /**
@@ -174,10 +172,11 @@ struct file *alloc_file(struct path *path, fmode_t mode,
 	struct file *file;
 
 	file = get_empty_filp();
-	if (!file)
-		return NULL;
+	if (IS_ERR(file))
+		return file;
 
 	file->f_path = *path;
+	file->f_inode = path->dentry->d_inode;
 	file->f_mapping = path->dentry->d_inode->i_mapping;
 	file->f_mode = mode;
 	file->f_op = fop;
@@ -212,10 +211,10 @@ static void drop_file_write_access(struct file *file)
 	struct dentry *dentry = file->f_path.dentry;
 	struct inode *inode = dentry->d_inode;
 
+	put_write_access(inode);
+
 	if (special_file(inode->i_mode))
 		return;
-
-	put_write_access(inode);
 	if (file_check_writeable(file) != 0)
 		return;
 	__mnt_drop_write(mnt);
@@ -260,6 +259,7 @@ static void __fput(struct file *file)
 		drop_file_write_access(file);
 	file->f_path.dentry = NULL;
 	file->f_path.mnt = NULL;
+	file->f_inode = NULL;
 	file_free(file);
 	dput(dentry);
 	mntput(mnt);
@@ -306,17 +306,18 @@ void fput(struct file *file)
 {
 	if (atomic_long_dec_and_test(&file->f_count)) {
 		struct task_struct *task = current;
+		unsigned long flags;
+
 		file_sb_list_del(file);
-		if (unlikely(in_interrupt() || task->flags & PF_KTHREAD)) {
-			unsigned long flags;
-			spin_lock_irqsave(&delayed_fput_lock, flags);
-			list_add(&file->f_u.fu_list, &delayed_fput_list);
-			schedule_work(&delayed_fput_work);
-			spin_unlock_irqrestore(&delayed_fput_lock, flags);
-			return;
+		if (likely(!in_interrupt() && !(task->flags & PF_KTHREAD))) {
+			init_task_work(&file->f_u.fu_rcuhead, ____fput);
+			if (!task_work_add(task, &file->f_u.fu_rcuhead, true))
+				return;
 		}
-		init_task_work(&file->f_u.fu_rcuhead, ____fput);
-		task_work_add(task, &file->f_u.fu_rcuhead, true);
+		spin_lock_irqsave(&delayed_fput_lock, flags);
+		list_add(&file->f_u.fu_list, &delayed_fput_list);
+		schedule_work(&delayed_fput_work);
+		spin_unlock_irqrestore(&delayed_fput_lock, flags);
 	}
 }
 
@@ -404,8 +405,6 @@ void file_sb_list_del(struct file *file)
 	}
 }
 
-EXPORT_SYMBOL(file_sb_list_del);
-
 #ifdef CONFIG_SMP
 
 /*
@@ -450,7 +449,7 @@ void mark_files_ro(struct super_block *sb)
 
 	lg_global_lock(&files_lglock);
 	do_file_list_for_each_entry(sb, f) {
-		if (!S_ISREG(f->f_path.dentry->d_inode->i_mode))
+		if (!S_ISREG(file_inode(f)->i_mode))
 		       continue;
 		if (!file_count(f))
 			continue;

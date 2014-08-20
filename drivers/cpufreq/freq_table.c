@@ -45,13 +45,6 @@ int cpufreq_frequency_table_cpuinfo(struct cpufreq_policy *policy,
 	policy->min = policy->cpuinfo.min_freq = min_freq;
 	policy->max = policy->cpuinfo.max_freq = max_freq;
 
-#if defined(CONFIG_ODROID_X)
-	policy->max = 1500000;
-#elif defined(CONFIG_ODROID_X2) || defined(CONFIG_ODROID_U2)
-	policy->max = 1704000;
-#endif
-	policy->min = 200000;
-
 	if (policy->min == ~0)
 		return -EINVAL;
 	else
@@ -69,9 +62,6 @@ int cpufreq_frequency_table_verify(struct cpufreq_policy *policy,
 
 	pr_debug("request for verification of policy (%u - %u kHz) for cpu %u\n",
 					policy->min, policy->max, policy->cpu);
-
-	if (!cpu_online(policy->cpu))
-		return -EINVAL;
 
 	cpufreq_verify_within_limits(policy, policy->cpuinfo.min_freq,
 				     policy->cpuinfo.max_freq);
@@ -127,9 +117,6 @@ int cpufreq_frequency_table_target(struct cpufreq_policy *policy,
 		optimal.frequency = ~0;
 		break;
 	}
-
-	if (!cpu_online(policy->cpu))
-		return -EINVAL;
 
 	for (i = 0; (table[i].frequency != CPUFREQ_TABLE_END); i++) {
 		unsigned int freq = table[i].frequency;
@@ -233,6 +220,15 @@ void cpufreq_frequency_table_put_attr(unsigned int cpu)
 	per_cpu(cpufreq_show_table, cpu) = NULL;
 }
 EXPORT_SYMBOL_GPL(cpufreq_frequency_table_put_attr);
+
+void cpufreq_frequency_table_update_policy_cpu(struct cpufreq_policy *policy)
+{
+	pr_debug("Updating show_table for new_cpu %u from last_cpu %u\n",
+			policy->cpu, policy->last_cpu);
+	per_cpu(cpufreq_show_table, policy->cpu) = per_cpu(cpufreq_show_table,
+			policy->last_cpu);
+	per_cpu(cpufreq_show_table, policy->last_cpu) = NULL;
+}
 
 struct cpufreq_frequency_table *cpufreq_frequency_get_table(unsigned int cpu)
 {

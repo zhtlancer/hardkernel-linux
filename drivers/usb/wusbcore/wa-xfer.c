@@ -90,8 +90,7 @@
 #include "wusbhc.h"
 
 enum {
-	/* [WUSB] section 8.3.3 allocates 7 bits for the segment index. */
-	WA_SEGS_MAX = 128,
+	WA_SEGS_MAX = 255,
 };
 
 enum wa_seg_status {
@@ -445,7 +444,7 @@ static ssize_t __wa_xfer_setup_sizes(struct wa_xfer *xfer,
 	xfer->seg_size = (xfer->seg_size / maxpktsize) * maxpktsize;
 	xfer->segs = (urb->transfer_buffer_length + xfer->seg_size - 1)
 		/ xfer->seg_size;
-	if (xfer->segs > WA_SEGS_MAX) {
+	if (xfer->segs >= WA_SEGS_MAX) {
 		dev_err(dev, "BUG? ops, number of segments %d bigger than %d\n",
 			(int)(urb->transfer_buffer_length / xfer->seg_size),
 			WA_SEGS_MAX);
@@ -696,9 +695,9 @@ error_dto_alloc:
 	cnt--;
 error_seg_kzalloc:
 	/* use the fact that cnt is left at were it failed */
-	for (; cnt > 0; cnt--) {
-		if (xfer->is_inbound == 0)
-			kfree(xfer->seg[cnt]->dto_urb);
+	for (; cnt >= 0; cnt--) {
+		if (xfer->seg[cnt] && xfer->is_inbound == 0)
+			usb_free_urb(xfer->seg[cnt]->dto_urb);
 		kfree(xfer->seg[cnt]);
 	}
 error_segs_kzalloc:
@@ -1111,6 +1110,12 @@ int wa_urb_dequeue(struct wahc *wa, struct urb *urb)
 	}
 	spin_lock_irqsave(&xfer->lock, flags);
 	rpipe = xfer->ep->hcpriv;
+	if (rpipe == NULL) {
+		pr_debug("%s: xfer id 0x%08X has no RPIPE.  %s",
+			__func__, wa_xfer_id(xfer),
+			"Probably already aborted.\n" );
+		goto out_unlock;
+	}
 	/* Check the delayed list -> if there, release and complete */
 	spin_lock_irqsave(&wa->xfer_list_lock, flags2);
 	if (!list_empty(&xfer->list_node) && xfer->seg == NULL)
@@ -1494,8 +1499,7 @@ static void wa_xfer_result_cb(struct urb *urb)
 			break;
 		}
 		usb_status = xfer_result->bTransferStatus & 0x3f;
-		if (usb_status == WA_XFER_STATUS_ABORTED
-		    || usb_status == WA_XFER_STATUS_NOT_FOUND)
+		if (usb_status == WA_XFER_STATUS_NOT_FOUND)
 			/* taken care of already */
 			break;
 		xfer_id = xfer_result->dwTransferID;

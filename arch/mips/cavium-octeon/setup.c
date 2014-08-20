@@ -7,6 +7,7 @@
  * Copyright (C) 2008, 2009 Wind River Systems
  *   written by Ralf Baechle <ralf@linux-mips.org>
  */
+#include <linux/compiler.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/console.h>
@@ -174,7 +175,10 @@ static int octeon_kexec_prepare(struct kimage *image)
 
 static void octeon_generic_shutdown(void)
 {
-	int cpu, i;
+	int i;
+#ifdef CONFIG_SMP
+	int cpu;
+#endif
 	struct cvmx_bootmem_desc *bootmem_desc;
 	void *named_block_array_ptr;
 
@@ -319,7 +323,7 @@ EXPORT_SYMBOL(octeon_get_io_clock_rate);
  * exists on most Cavium evaluation boards. If it doesn't exist, then
  * this function doesn't do anything.
  *
- * @s:      String to write
+ * @s:	    String to write
  */
 void octeon_write_lcd(const char *s)
 {
@@ -341,7 +345,7 @@ void octeon_write_lcd(const char *s)
 /**
  * Return the console uart passed by the bootloader
  *
- * Returns uart   (0 or 1)
+ * Returns uart	  (0 or 1)
  */
 int octeon_get_boot_uart(void)
 {
@@ -425,13 +429,16 @@ static void octeon_restart(char *command)
  */
 static void octeon_kill_core(void *arg)
 {
-	mb();
-	if (octeon_is_simulation()) {
-		/* The simulator needs the watchdog to stop for dead cores */
-		cvmx_write_csr(CVMX_CIU_WDOGX(cvmx_get_core_num()), 0);
+	if (octeon_is_simulation())
 		/* A break instruction causes the simulator stop a core */
-		asm volatile ("sync\nbreak");
-	}
+		asm volatile ("break" ::: "memory");
+
+	local_irq_disable();
+	/* Disable watchdog on this core. */
+	cvmx_write_csr(CVMX_CIU_WDOGX(cvmx_get_core_num()), 0);
+	/* Spin in a low power mode. */
+	while (true)
+		asm volatile ("wait" ::: "memory");
 }
 
 
@@ -706,7 +713,7 @@ void __init prom_init(void)
 	if (cvmx_read_csr(CVMX_L2D_FUS3) & (3ull << 34)) {
 		pr_info("Skipping L2 locking due to reduced L2 cache size\n");
 	} else {
-		uint32_t ebase = read_c0_ebase() & 0x3ffff000;
+		uint32_t __maybe_unused ebase = read_c0_ebase() & 0x3ffff000;
 #ifdef CONFIG_CAVIUM_OCTEON_LOCK_L2_TLB
 		/* TLB refill */
 		cvmx_l2c_lock_mem_region(ebase, 0x100);
@@ -805,7 +812,7 @@ void __init prom_init(void)
 			/*
 			 * To do: switch parsing to new style, something like:
 			 * parse_crashkernel(arg, sysinfo->system_dram_size,
-			 * 		  &crashk_size, &crashk_base);
+			 *		  &crashk_size, &crashk_base);
 			 */
 #endif
 		} else if (strlen(arcs_cmdline) + strlen(arg) + 1 <
@@ -1013,7 +1020,7 @@ void __init plat_mem_setup(void)
 }
 
 /*
- * Emit one character to the boot UART.  Exported for use by the
+ * Emit one character to the boot UART.	 Exported for use by the
  * watchdog timer.
  */
 int prom_putchar(char c)

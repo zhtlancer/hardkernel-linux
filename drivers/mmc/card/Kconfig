@@ -50,8 +50,45 @@ config MMC_BLOCK_BOUNCE
 
 	  If unsure, say Y here.
 
+config MMC_SLOTINDEX
+	bool "Use host index for enumerating mmxblkN"
+	depends on MMC_BLOCK
+	default n
+	help
+	  On embedded devices, often there is a combination of
+	  removable mmc devices (e.g. MMC/SD cards) and hard
+	  wired ones (e.g. eMMC). Depending on the hardware
+	  configuration, the 'mmcblkN' node might change if
+	  the removable device is available or not at boot time.
+	  
+	  E.g. if the removable device is attached at boot time,
+	  it might become mmxblk0. And the hard wired one mmcblk1.
+	  But if the removable device isn't there at boot time,
+	  the hard wired one will become mmcblk0. This makes it
+	  somehow difficult to hard code the root device to the
+	  non-removable device and boot fast.
+	  
+	  Enabling this option will simply associating 'N' of
+	  'mmcblkN' with the slot index instead of the dynamic
+	  name index. The slot index is always the same, ensuring
+	  that the non-removable mmc device is associated always
+	  with the same mmcblkN. Independent of the availability of
+	  the removable one.
+	  
+	  If unsure, say N here.
+
+config MMC_BLOCK_DEFERRED_RESUME
+	bool "Deferr MMC layer resume until I/O is requested"
+	depends on MMC_BLOCK
+	default n
+	help
+	  Say Y here to enable deferred MMC resume until I/O
+	  is requested. This will reduce overall resume latency and
+	  save power when theres an SD card inserted but not being used.
+
 config SDIO_UART
 	tristate "SDIO UART/GPS class support"
+	depends on TTY
 	help
 	  SDIO function driver for SDIO cards that implements the UART
 	  class, as well as the GPS class which appears like a UART.
@@ -67,3 +104,9 @@ config MMC_TEST
 
 	  This driver is only of interest to those developing or
 	  testing a host driver. Most people should say N here.
+
+config MMC_SUPPORT_BKOPS_MODE
+	tristate "Support the bkops mode of eMMC 5.0"
+	help
+	  Say Y here to enable the bkops mode
+

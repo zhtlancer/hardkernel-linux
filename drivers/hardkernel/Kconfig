@@ -1,27 +1,53 @@
-menu "Hardkernel Specific Hardware"
+menu "ODROID Specific Hardware"
 
-config ODROID_U2_FAN
-	bool "Enable the PWM Controlled FAN on ODROID-U2"
-	depends on ODROID_U2
-	default y
-	---help---
-		Enables the PWM Controlled FAN on ODROID-U2
-
-
-config VIDEO_SAMSUNG_S5P_HDMI_CEC
-        tristate "Enable CEC support for HDMI Driver"
-        default n
-        help
-          Enables CEC over the HDMI driver.
-          CEC enables tv-control, and reception of tv-remote
-          control commands over the HDMI interface
-
-config ODROID_IOBOARD
-    tristate "Enable the ODROID-U3+ & I/O Shield2 SPI Test"
-	depends on (ODROID_U2 && SPI_S3C64XX)
+config ODROID_EXYNOS5_TOUCH
+	bool "Solomon 10.1\" WXGA(TC358764) multi touch panel (I2C Driver)"
+	depends on MACH_ODROIDXU3
 	default n
 	---help---
-		Enables the I/O Shield2 SPI Drivers
+	  This enables support for ODROID 10.1\" WXGA(TC358764) Touch panel (Multi-Touch)
+
+config ODROID_EXYNOS5_BACKLIGHT
+	bool "Enable the PWM Controlled Backlight(TC358764) on ODROID-EXYNOS5"
+	depends on MACH_ODROIDXU3
+	default n
+	---help---
+		Enables the PWM Controlled Backlight(TC358764) on ODROID-EXYNOS5
+
+config ODROID_EXYNOS5_FAN
+	bool "Enable the PWM Controlled FAN on ODROID-EXYNOS5"
+	depends on MACH_ODROIDXU3
+	default y
+	---help---
+		Enables the PWM Controlled FAN on ODROID-EXYNOS5
+
+config ODROID_EXYNOS5_SYSFS
+	bool "Enable the SYSFS driver on ODROID-EXYNOS5"
+	depends on MACH_ODROIDXU3
+	default n
+	---help---
+		Enables the SYSFS driver on ODROID-EXYNOS5
+
+config ODROID_EXYNOS5_SP
+	bool "Enable the INA231 Sensor on ODROID-EXYNOS5"
+	depends on MACH_ODROIDXU3
+	default n
+	---help---
+		Enables the INA231 Sensor on ODROID-EXYNOS5
+
+config ODROID_EXYNOS5_IOBOARD
+    bool "Enable the ODROID EXYNOS5 IOBOARD Drivers"
+	depends on MACH_ODROIDXU3
+	default n
+	---help---
+		Enables the IOBOARD Drivers
+
+config ODROID_EXYNOS5_IOBOARD_DEBUG
+    bool "Enable the ODROIDXU IOBOARD DEBUG Enable"
+	depends on ODROID_EXYNOS5_IOBOARD
+	default n
+	---help---
+		Enables the IOBOARD Debug Message
 
 endmenu
 

@@ -21,8 +21,8 @@
 #ifndef __MXL111SF_TUNER_H__
 #define __MXL111SF_TUNER_H__
 
+#include <linux/kconfig.h>
 #include "dvb_frontend.h"
-
 #include "mxl111sf.h"
 
 enum mxl_if_freq {
@@ -60,8 +60,7 @@ struct mxl111sf_tuner_config {
 
 /* ------------------------------------------------------------------------ */
 
-#if defined(CONFIG_DVB_USB_MXL111SF) || \
-	(defined(CONFIG_DVB_USB_MXL111SF_MODULE) && defined(MODULE))
+#if IS_ENABLED(CONFIG_DVB_USB_MXL111SF)
 extern
 struct dvb_frontend *mxl111sf_tuner_attach(struct dvb_frontend *fe,
 					   struct mxl111sf_state *mxl_state,
@@ -69,7 +68,7 @@ struct dvb_frontend *mxl111sf_tuner_attach(struct dvb_frontend *fe,
 #else
 static inline
 struct dvb_frontend *mxl111sf_tuner_attach(struct dvb_frontend *fe,
-					   struct mxl111sf_state *mxl_state,
+					   struct mxl111sf_state *mxl_state
 					   struct mxl111sf_tuner_config *cfg)
 {
 	printk(KERN_WARNING "%s: driver disabled by Kconfig\n", __func__);

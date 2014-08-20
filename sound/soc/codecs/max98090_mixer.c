@@ -17,6 +17,7 @@
 #include <plat/map-base.h>
 #include <mach/regs-clock.h>
 
+#include <sound/max98090.h>
 #include "max98090.h"
 
 //----------------------------------------------------------------------------------------
@@ -73,18 +74,18 @@ void max98090_set_playback_earpiece(struct snd_soc_codec *codec)
 void max98090_set_playback_speaker_headset(struct snd_soc_codec *codec)
 {
 	int reg;
-
+	
 	// 0x92 Power DAC L/R, SPLEN
 	reg = snd_soc_read(codec, M98090_03F_OUTPUT_ENABLE);
 	reg &= ~(M98090_DAREN|M98090_DALEN|M98090_RCVREN|M98090_RCVLEN|M98090_SPREN|M98090_SPLEN|M98090_HPREN|M98090_HPLEN);
 	reg |= (M98090_DAREN|M98090_DALEN|M98090_HPREN|M98090_HPLEN);
 	snd_soc_write(codec, M98090_03F_OUTPUT_ENABLE, reg);
 
-	//	// Stereo DAC to SPK_L, SPK_R Mute
-	//	reg = M98090_DACL_TO_SPKL;
-	//	snd_soc_write(codec, M98090_02E_MIX_SPK_L, reg);
-	//	reg = M98090_DACR_TO_SPKR;
-	//	snd_soc_write(codec, M98090_02F_MIX_SPK_R, reg);
+//	// Stereo DAC to SPK_L, SPK_R Mute
+//	reg = M98090_DACL_TO_SPKL;
+//	snd_soc_write(codec, M98090_02E_MIX_SPK_L, reg);
+//	reg = M98090_DACR_TO_SPKR;
+//	snd_soc_write(codec, M98090_02F_MIX_SPK_R, reg);
 
 	// DAC L/R to HP L/R
 	reg = M98090_DACL_TO_HPL;
@@ -92,15 +93,15 @@ void max98090_set_playback_speaker_headset(struct snd_soc_codec *codec)
 	reg = M98090_DACR_TO_HPR;
 	snd_soc_write(codec, M98090_02A_MIX_HP_R, reg);
 
-	//	reg = TUNNING_SPK_VOL;
-	//	snd_soc_write(codec, M98090_031_SPK_L_VOL, reg);
-	//	snd_soc_write(codec, M98090_032_SPK_R_VOL, reg);
-	//
-	//	reg = TUNNING_SPKMIX_VOL;
-	//	snd_soc_write(codec, M98090_030_MIX_SPK_CNTL, reg);
+//	reg = TUNNING_SPK_VOL;
+//	snd_soc_write(codec, M98090_031_SPK_L_VOL, reg);
+//	snd_soc_write(codec, M98090_032_SPK_R_VOL, reg);
+//
+//	reg = TUNNING_SPKMIX_VOL;
+//	snd_soc_write(codec, M98090_030_MIX_SPK_CNTL, reg);
 
 	// HPMIX L/R to HP_AMP L/R
-	//	reg = M98090_HPNORMAL;
+//	reg = M98090_HPNORMAL;
 	reg = TUNNING_HPMIX_VOL;
 	snd_soc_write(codec, M98090_02B_MIX_HP_CNTL, reg);
 

@@ -40,9 +40,10 @@ module_param(debug, int, 0644);
 #define call_qop(q, op, args...)					\
 	(((q)->ops->op) ? ((q)->ops->op(args)) : 0)
 
-#define V4L2_BUFFER_STATE_FLAGS	(V4L2_BUF_FLAG_MAPPED | V4L2_BUF_FLAG_QUEUED | \
+#define V4L2_BUFFER_MASK_FLAGS	(V4L2_BUF_FLAG_MAPPED | V4L2_BUF_FLAG_QUEUED | \
 				 V4L2_BUF_FLAG_DONE | V4L2_BUF_FLAG_ERROR | \
-				 V4L2_BUF_FLAG_PREPARED)
+				 V4L2_BUF_FLAG_PREPARED | \
+				 V4L2_BUF_FLAG_TIMESTAMP_MASK)
 
 /**
  * __vb2_buf_mem_alloc() - allocate video memory for the given buffer
@@ -51,12 +52,18 @@ static int __vb2_buf_mem_alloc(struct vb2_buffer *vb)
 {
 	struct vb2_queue *q = vb->vb2_queue;
 	void *mem_priv;
+	int write = !V4L2_TYPE_IS_OUTPUT(q->type);
 	int plane;
 
-	/* Allocate memory for all planes in this buffer */
+	/*
+	 * Allocate memory for all planes in this buffer
+	 * NOTE: mmapped areas should be page aligned
+	 */
 	for (plane = 0; plane < vb->num_planes; ++plane) {
+		unsigned long size = PAGE_ALIGN(q->plane_sizes[plane]);
+
 		mem_priv = call_memop(q, alloc, q->alloc_ctx[plane],
-				      q->plane_sizes[plane]);
+				      size, write, plane, q->gfp_flags);
 		if (IS_ERR_OR_NULL(mem_priv))
 			goto free;
 
@@ -189,6 +196,13 @@ static int __vb2_queue_alloc(struct vb2_queue *q, enum v4l2_memory memory,
 	struct vb2_buffer *vb;
 	int ret;
 
+	q->timeline_max = 0;
+	q->timeline = sw_sync_timeline_create(q->name);
+	if (!q->timeline) {
+		dprintk(1, "Failed to create timeline\n");
+		return -ENOMEM;
+	}
+
 	for (buffer = 0; buffer < num_buffers; ++buffer) {
 		/* Allocate videobuf buffer structures */
 		vb = kzalloc(q->buf_struct_size, GFP_KERNEL);
@@ -300,6 +314,11 @@ static void __vb2_queue_free(struct vb2_queue *q, unsigned int buffers)
 	if (!q->num_buffers)
 		q->memory = 0;
 	INIT_LIST_HEAD(&q->queued_list);
+
+	if (q->timeline) {
+		sync_timeline_destroy(&q->timeline->obj);
+		q->timeline = NULL;
+	}
 }
 
 /**
@@ -401,7 +420,8 @@ static void __fill_v4l2_buffer(struct vb2_buffer *vb, struct v4l2_buffer *b)
 	/*
 	 * Clear any buffer state related flags.
 	 */
-	b->flags &= ~V4L2_BUFFER_STATE_FLAGS;
+	b->flags &= ~V4L2_BUFFER_MASK_FLAGS;
+	b->flags |= q->timestamp_type;
 
 	switch (vb->state) {
 	case VB2_BUF_STATE_QUEUED:
@@ -853,7 +873,7 @@ void vb2_buffer_done(struct vb2_buffer *vb, enum vb2_buffer_state state)
 		return;
 
 	dprintk(4, "Done processing on buffer %d, state: %d\n",
-			vb->v4l2_buf.index, vb->state);
+			vb->v4l2_buf.index, state);
 
 	/* sync buffers */
 	for (plane = 0; plane < vb->num_planes; ++plane)
@@ -864,6 +884,7 @@ void vb2_buffer_done(struct vb2_buffer *vb, enum vb2_buffer_state state)
 	vb->state = state;
 	list_add_tail(&vb->done_entry, &q->done_list);
 	atomic_dec(&q->queued_count);
+	sw_sync_timeline_inc(q->timeline, 1);
 	spin_unlock_irqrestore(&q->done_lock, flags);
 
 	/* Inform any processes that may be waiting for buffers */
@@ -876,10 +897,11 @@ EXPORT_SYMBOL_GPL(vb2_buffer_done);
  * v4l2_buffer by the userspace. The caller has already verified that struct
  * v4l2_buffer has a valid number of planes.
  */
-static void __fill_vb2_buffer(struct vb2_buffer *vb, const struct v4l2_buffer *b,
+static int __fill_vb2_buffer(struct vb2_buffer *vb, const struct v4l2_buffer *b,
 				struct v4l2_plane *v4l2_planes)
 {
 	unsigned int plane;
+	int fence_fd = (int)b->reserved;
 
 	if (V4L2_TYPE_IS_MULTIPLANAR(b->type)) {
 		/* Fill in driver-provided information for OUTPUT types */
@@ -939,9 +961,20 @@ static void __fill_vb2_buffer(struct vb2_buffer *vb, const struct v4l2_buffer *b
 
 	}
 
+	if ((b->flags & V4L2_BUF_FLAG_USE_SYNC) && fence_fd >= 0) {
+		vb->acquire_fence = sync_fence_fdget(fence_fd);
+		if (!vb->acquire_fence) {
+			dprintk(1, "failed to import fence fd %d\n", fence_fd);
+			return -EINVAL;
+		}
+	}
+
 	vb->v4l2_buf.field = b->field;
+	vb->v4l2_buf.reserved2 = b->reserved2;
 	vb->v4l2_buf.timestamp = b->timestamp;
-	vb->v4l2_buf.flags = b->flags & ~V4L2_BUFFER_STATE_FLAGS;
+	vb->v4l2_buf.flags = b->flags & ~V4L2_BUFFER_MASK_FLAGS;
+
+	return 0;
 }
 
 /**
@@ -957,7 +990,9 @@ static int __qbuf_userptr(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 	int write = !V4L2_TYPE_IS_OUTPUT(q->type);
 
 	/* Copy relevant information provided by the userspace */
-	__fill_vb2_buffer(vb, b, planes);
+	ret = __fill_vb2_buffer(vb, b, planes);
+	if (ret)
+		return ret;
 
 	for (plane = 0; plane < vb->num_planes; ++plane) {
 		/* Skip the plane if already verified */
@@ -986,7 +1021,7 @@ static int __qbuf_userptr(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 		/* Acquire each plane's memory */
 		mem_priv = call_memop(q, get_userptr, q->alloc_ctx[plane],
 				      planes[plane].m.userptr,
-				      planes[plane].length, write);
+				      planes[plane].length, write, plane);
 		if (IS_ERR_OR_NULL(mem_priv)) {
 			dprintk(1, "qbuf: failed acquiring userspace "
 						"memory for plane %d\n", plane);
@@ -1032,8 +1067,7 @@ err:
  */
 static int __qbuf_mmap(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 {
-	__fill_vb2_buffer(vb, b, vb->v4l2_planes);
-	return 0;
+	return __fill_vb2_buffer(vb, b, vb->v4l2_planes);
 }
 
 /**
@@ -1049,7 +1083,9 @@ static int __qbuf_dmabuf(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 	int write = !V4L2_TYPE_IS_OUTPUT(q->type);
 
 	/* Verify and copy relevant information provided by the userspace */
-	__fill_vb2_buffer(vb, b, planes);
+	ret = __fill_vb2_buffer(vb, b, planes);
+	if (ret)
+		return ret;
 
 	for (plane = 0; plane < vb->num_planes; ++plane) {
 		struct dma_buf *dbuf = dma_buf_get(planes[plane].m.fd);
@@ -1103,7 +1139,8 @@ static int __qbuf_dmabuf(struct vb2_buffer *vb, const struct v4l2_buffer *b)
 	 * the buffer(s)..
 	 */
 	for (plane = 0; plane < vb->num_planes; ++plane) {
-		ret = call_memop(q, map_dmabuf, vb->planes[plane].mem_priv);
+		ret = call_memop(q, map_dmabuf, vb->planes[plane].mem_priv,
+				 plane);
 		if (ret) {
 			dprintk(1, "qbuf: failed to map dmabuf for plane %d\n",
 				plane);
@@ -1357,6 +1394,24 @@ int vb2_qbuf(struct vb2_queue *q, struct v4l2_buffer *b)
 	if (q->streaming)
 		__enqueue_in_driver(vb);
 
+	q->timeline_max++;
+	if (b->flags & V4L2_BUF_FLAG_USE_SYNC) {
+		struct sync_pt *pt;
+		struct sync_fence *fence;
+		int fd;
+
+		fd = get_unused_fd();
+		if (fd >= 0) {
+			pt = sw_sync_pt_create(q->timeline, q->timeline_max);
+			fence = sync_fence_create("vb2", pt);
+			sync_fence_install(fence, fd);
+			vb->v4l2_buf.reserved = fd;
+		} else {
+			dprintk(1, "qbuf: failed to get unused fd\n");
+			vb->v4l2_buf.reserved = -1;
+		}
+	}
+
 	/* Fill buffer information for the userspace */
 	__fill_v4l2_buffer(vb, b);
 
@@ -1593,6 +1648,7 @@ EXPORT_SYMBOL_GPL(vb2_dqbuf);
  */
 static void __vb2_queue_cancel(struct vb2_queue *q)
 {
+	struct vb2_buffer *vb;
 	unsigned int i;
 
 	/*
@@ -1606,12 +1662,20 @@ static void __vb2_queue_cancel(struct vb2_queue *q)
 	/*
 	 * Remove all buffers from videobuf's list...
 	 */
+	list_for_each_entry(vb, &q->queued_list, queued_entry) {
+		if (vb->acquire_fence) {
+			sync_fence_put(vb->acquire_fence);
+			vb->acquire_fence = NULL;
+		}
+	}
 	INIT_LIST_HEAD(&q->queued_list);
 	/*
 	 * ...and done list; userspace will not receive any buffers it
 	 * has not already dequeued before initiating cancel.
 	 */
 	INIT_LIST_HEAD(&q->done_list);
+	if (q->timeline)
+		sw_sync_timeline_inc(q->timeline, atomic_read(&q->queued_count));
 	atomic_set(&q->queued_count, 0);
 	wake_up_all(&q->done_wq);
 
@@ -1850,6 +1914,7 @@ int vb2_mmap(struct vb2_queue *q, struct vm_area_struct *vma)
 	struct vb2_buffer *vb;
 	unsigned int buffer, plane;
 	int ret;
+	unsigned long length;
 
 	if (q->memory != V4L2_MEMORY_MMAP) {
 		dprintk(1, "Queue is not currently set up for mmap\n");
@@ -1883,6 +1948,18 @@ int vb2_mmap(struct vb2_queue *q, struct vm_area_struct *vma)
 		return ret;
 
 	vb = q->bufs[buffer];
+
+	/*
+	 * MMAP requires page_aligned buffers.
+	 * The buffer length was page_aligned at __vb2_buf_mem_alloc(),
+	 * so, we need to do the same here.
+	 */
+	length = PAGE_ALIGN(vb->v4l2_planes[plane].length);
+	if (length < (vma->vm_end - vma->vm_start)) {
+		dprintk(1,
+			"MMAP invalid, as it would overflow buffer length\n");
+		return -EINVAL;
+	}
 
 	ret = call_memop(q, mmap, vb->planes[plane].mem_priv, vma);
 	if (ret)
@@ -1963,6 +2040,11 @@ unsigned int vb2_poll(struct vb2_queue *q, struct file *file, poll_table *wait)
 			poll_wait(file, &fh->wait, wait);
 	}
 
+	if (!V4L2_TYPE_IS_OUTPUT(q->type) && !(req_events & (POLLIN | POLLRDNORM)))
+		return res;
+	if (V4L2_TYPE_IS_OUTPUT(q->type) && !(req_events & (POLLOUT | POLLWRNORM)))
+		return res;
+
 	/*
 	 * Start file I/O emulator only if streaming API has not been used yet.
 	 */
@@ -1989,7 +2071,8 @@ unsigned int vb2_poll(struct vb2_queue *q, struct file *file, poll_table *wait)
 	if (list_empty(&q->queued_list))
 		return res | POLLERR;
 
-	poll_wait(file, &q->done_wq, wait);
+	if (list_empty(&q->done_list))
+		poll_wait(file, &q->done_wq, wait);
 
 	/*
 	 * Take first buffer available for dequeuing.
@@ -2032,13 +2115,20 @@ int vb2_queue_init(struct vb2_queue *q)
 	    WARN_ON(!q->type)		  ||
 	    WARN_ON(!q->io_modes)	  ||
 	    WARN_ON(!q->ops->queue_setup) ||
-	    WARN_ON(!q->ops->buf_queue))
+	    WARN_ON(!q->ops->buf_queue)   ||
+	    WARN_ON(q->timestamp_type & ~V4L2_BUF_FLAG_TIMESTAMP_MASK))
 		return -EINVAL;
+
+	/* Warn that the driver should choose an appropriate timestamp type */
+	WARN_ON(q->timestamp_type == V4L2_BUF_FLAG_TIMESTAMP_UNKNOWN);
 
 	INIT_LIST_HEAD(&q->queued_list);
 	INIT_LIST_HEAD(&q->done_list);
 	spin_lock_init(&q->done_lock);
 	init_waitqueue_head(&q->done_wq);
+
+	if (!q->name)
+		q->name = "vb2";
 
 	if (q->buf_struct_size == 0)
 		q->buf_struct_size = sizeof(struct vb2_buffer);

@@ -497,20 +497,9 @@ void bpf_jit_compile(struct sk_filter *fp)
 			case BPF_S_ALU_MUL_K:	/* A *= K */
 				emit_alu_K(MUL, K);
 				break;
-			case BPF_S_ALU_DIV_K:	/* A /= K with K != 0*/
-				if (K == 1)
-					break;
-				emit_write_y(G0);
-#ifdef CONFIG_SPARC32
-				/* The Sparc v8 architecture requires
-				 * three instructions between a %y
-				 * register write and the first use.
-				 */
-				emit_nop();
-				emit_nop();
-				emit_nop();
-#endif
-				emit_alu_K(DIV, K);
+			case BPF_S_ALU_DIV_K:	/* A /= K */
+				emit_alu_K(MUL, K);
+				emit_read_y(r_A);
 				break;
 			case BPF_S_ALU_DIV_X:	/* A /= X; */
 				emit_cmpi(r_X, 0);
@@ -806,13 +795,9 @@ cond_branch:			f_offset = addrs[i + filter[i].jf];
 	}
 
 	if (bpf_jit_enable > 1)
-		pr_err("flen=%d proglen=%u pass=%d image=%p\n",
-		       flen, proglen, pass, image);
+		bpf_jit_dump(flen, proglen, pass, image);
 
 	if (image) {
-		if (bpf_jit_enable > 1)
-			print_hex_dump(KERN_ERR, "JIT code: ", DUMP_PREFIX_ADDRESS,
-				       16, 1, image, proglen, false);
 		bpf_flush_icache(image, image + proglen);
 		fp->bpf_func = (void *)image;
 	}

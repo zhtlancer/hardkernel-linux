@@ -98,6 +98,8 @@ struct ast_private {
 
 	struct drm_gem_object *cursor_cache;
 	uint64_t cursor_cache_gpu_addr;
+	/* Acces to this cache is protected by the crtc->mutex of the only crtc
+	 * we have. */
 	struct ttm_bo_kmap_obj cache_kmap;
 	int next_cursor;
 };
@@ -175,7 +177,7 @@ uint8_t ast_get_index_reg_mask(struct ast_private *ast,
 
 static inline void ast_open_key(struct ast_private *ast)
 {
-	ast_set_index_reg(ast, AST_IO_CRTC_PORT, 0x80, 0xA8);
+	ast_set_index_reg_mask(ast, AST_IO_CRTC_PORT, 0xA1, 0xFF, 0x04);
 }
 
 #define AST_VIDMEM_SIZE_8M    0x00800000

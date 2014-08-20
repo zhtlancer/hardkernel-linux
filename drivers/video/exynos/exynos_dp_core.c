@@ -20,6 +20,10 @@
 #include <linux/delay.h>
 #include <linux/of.h>
 
+#if defined(CONFIG_MACH_ODROIDXU3)
+    #include <linux/of_gpio.h>
+#endif
+
 #include <video/exynos_dp.h>
 
 #include "exynos_dp_core.h"
@@ -735,14 +739,20 @@ static int exynos_dp_config_video(struct exynos_dp_device *dp)
 	int retval = 0;
 	int timeout_loop = 0;
 	int done_count = 0;
+    int pll_tries = 0;
 
 	exynos_dp_config_video_slave_mode(dp);
 
 	exynos_dp_set_video_color_format(dp);
 
-	if (exynos_dp_get_pll_lock_status(dp) == PLL_UNLOCKED) {
-		dev_err(dp->dev, "PLL is not locked yet.\n");
-		return -EINVAL;
+	while (exynos_dp_get_pll_lock_status(dp) == PLL_UNLOCKED) {
+		if (pll_tries == DP_TIMEOUT_LOOP_COUNT) {
+			dev_err(dp->dev, "Wait for PLL lock timed out\n");
+    		return -EINVAL;
+		}
+
+		pll_tries++;
+		usleep_range(90, 120);
 	}
 
 	for (;;) {
@@ -829,10 +839,15 @@ static irqreturn_t exynos_dp_irq_handler(int irq, void *arg)
 	enum dp_irq_type irq_type;
 
 	irq_type = exynos_dp_get_irq_type(dp);
+	
 	switch (irq_type) {
 	case DP_IRQ_TYPE_HP_CABLE_IN:
 		dev_dbg(dp->dev, "Received irq - cable in\n");
-		schedule_work(&dp->hotplug_work);
+        #if defined(CONFIG_MACH_ODROIDXU3)
+            schedule_delayed_work(&dp->hotplug_work, msecs_to_jiffies(500));
+        #else
+    		schedule_work(&dp->hotplug_work);
+        #endif		
 		exynos_dp_clear_hotplug_interrupts(dp);
 		break;
 	case DP_IRQ_TYPE_HP_CABLE_OUT:
@@ -859,6 +874,9 @@ static void exynos_dp_hotplug(struct work_struct *work)
 {
 	struct exynos_dp_device *dp;
 	int ret;
+#if defined(CONFIG_MACH_ODROIDXU3)
+    static  unsigned int    retry = 0;
+#endif
 
 	dp = container_of(work, struct exynos_dp_device, hotplug_work);
 
@@ -892,6 +910,19 @@ static void exynos_dp_hotplug(struct work_struct *work)
 	ret = exynos_dp_config_video(dp);
 	if (ret)
 		dev_err(dp->dev, "unable to config video\n");
+
+#if defined(CONFIG_MACH_ODROIDXU3)
+    if(ret && retry < 5)    {
+        schedule_delayed_work(&dp->hotplug_work, msecs_to_jiffies(500));
+        retry ++;
+    }
+    else    {
+        if(retry >= 5)
+    	    dev_err(dp->dev, "DP LT exceeds max retry count");
+        retry = 0;
+    }
+#endif
+		
 }
 
 #ifdef CONFIG_OF
@@ -965,33 +996,40 @@ static struct exynos_dp_platdata *exynos_dp_dt_parse_pdata(struct device *dev)
 
 static int exynos_dp_dt_parse_phydata(struct exynos_dp_device *dp)
 {
-	struct device_node *dp_phy_node;
+	struct device_node *dp_phy_node = of_node_get(dp->dev->of_node);
 	u32 phy_base;
+	int ret = 0;
 
-	dp_phy_node = of_find_node_by_name(dp->dev->of_node, "dptx-phy");
+	dp_phy_node = of_find_node_by_name(dp_phy_node, "dptx-phy");
 	if (!dp_phy_node) {
 		dev_err(dp->dev, "could not find dptx-phy node\n");
 		return -ENODEV;
 	}
 
 	if (of_property_read_u32(dp_phy_node, "reg", &phy_base)) {
-		dev_err(dp->dev, "faild to get reg for dptx-phy\n");
-		return -EINVAL;
+		dev_err(dp->dev, "failed to get reg for dptx-phy\n");
+		ret = -EINVAL;
+		goto err;
 	}
 
 	if (of_property_read_u32(dp_phy_node, "samsung,enable-mask",
 				&dp->enable_mask)) {
-		dev_err(dp->dev, "faild to get enable-mask for dptx-phy\n");
-		return -EINVAL;
+		dev_err(dp->dev, "failed to get enable-mask for dptx-phy\n");
+		ret = -EINVAL;
+		goto err;
 	}
 
 	dp->phy_addr = ioremap(phy_base, SZ_4);
 	if (!dp->phy_addr) {
 		dev_err(dp->dev, "failed to ioremap dp-phy\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto err;
 	}
 
-	return 0;
+err:
+	of_node_put(dp_phy_node);
+
+	return ret;
 }
 
 static void exynos_dp_phy_init(struct exynos_dp_device *dp)
@@ -1033,11 +1071,44 @@ static void exynos_dp_phy_exit(struct exynos_dp_device *dp)
 }
 #endif /* CONFIG_OF */
 
+#if defined(CONFIG_MACH_ODROIDXU3)
+struct exynos_dp_device *gDP;
+
+void exynos_dp_poweron(void)
+{
+    struct exynos_dp_device *dp = gDP;
+
+	clk_prepare_enable(dp->clock);
+	exynos_dp_phy_init(dp);
+	exynos_dp_init_dp(dp);
+    schedule_delayed_work(&dp->hotplug_work, msecs_to_jiffies(500));
+	enable_irq(dp->irq);
+}
+
+void exynos_dp_poweroff(void)
+{
+    struct exynos_dp_device *dp = gDP;
+
+	disable_irq(dp->irq);
+	exynos_dp_reset(dp);
+	exynos_dp_set_pll_power_down(dp, 1);
+	exynos_dp_set_analog_power_down(dp, POWER_ALL, 1);
+	exynos_dp_phy_exit(dp);
+	clk_disable_unprepare(dp->clock);
+}
+
+EXPORT_SYMBOL(exynos_dp_poweron);
+EXPORT_SYMBOL(exynos_dp_poweroff);
+#endif
+
 static int exynos_dp_probe(struct platform_device *pdev)
 {
 	struct resource *res;
 	struct exynos_dp_device *dp;
 	struct exynos_dp_platdata *pdata;
+#if defined(CONFIG_MACH_ODROIDXU3)	
+	unsigned int irq_flags = 0;
+#endif	
 
 	int ret = 0;
 
@@ -1076,19 +1147,48 @@ static int exynos_dp_probe(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 
-	dp->reg_base = devm_request_and_ioremap(&pdev->dev, res);
-	if (!dp->reg_base) {
-		dev_err(&pdev->dev, "failed to ioremap\n");
-		return -ENOMEM;
-	}
+	dp->reg_base = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(dp->reg_base))
+		return PTR_ERR(dp->reg_base);
 
+#if defined(CONFIG_MACH_ODROIDXU3)
+	dp->hpd_gpio = of_get_named_gpio(pdev->dev.of_node, "samsung,hpd-gpio", 0);
+
+	if (gpio_is_valid(dp->hpd_gpio)) {
+		/*
+		 * Set up the hotplug GPIO from the device tree as an interrupt.
+		 * Simply specifying a different interrupt in the device tree
+		 * doesn't work since we handle hotplug rather differently when
+		 * using a GPIO.  We also need the actual GPIO specifier so
+		 * that we can get the current state of the GPIO.
+		 */
+		ret = devm_gpio_request_one(&pdev->dev, dp->hpd_gpio, GPIOF_IN,
+					    "hpd_gpio");
+		if (ret) {
+			dev_err(&pdev->dev, "failed to get hpd gpio\n");
+			return ret;
+		}
+		dp->irq = gpio_to_irq(dp->hpd_gpio);
+		irq_flags = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING;
+	} else {
+		dp->hpd_gpio = -ENODEV;
+		dp->irq = platform_get_irq(pdev, 0);
+		irq_flags = 0;
+	}
+#else
 	dp->irq = platform_get_irq(pdev, 0);
+#endif
+	
 	if (dp->irq == -ENXIO) {
 		dev_err(&pdev->dev, "failed to get irq\n");
 		return -ENODEV;
 	}
 
+#if defined(CONFIG_MACH_ODROIDXU3)
+	INIT_DELAYED_WORK(&dp->hotplug_work, exynos_dp_hotplug);
+#else
 	INIT_WORK(&dp->hotplug_work, exynos_dp_hotplug);
+#endif	
 
 	dp->video_info = pdata->video_info;
 
@@ -1102,12 +1202,22 @@ static int exynos_dp_probe(struct platform_device *pdev)
 
 	exynos_dp_init_dp(dp);
 
+#if defined(CONFIG_MACH_ODROIDXU3)
+	ret = devm_request_irq(&pdev->dev, dp->irq, exynos_dp_irq_handler,
+			irq_flags, "exynos-dp", dp);
+#else
 	ret = devm_request_irq(&pdev->dev, dp->irq, exynos_dp_irq_handler, 0,
 				"exynos-dp", dp);
+#endif				
 	if (ret) {
 		dev_err(&pdev->dev, "failed to request irq\n");
 		return ret;
 	}
+
+#if defined(CONFIG_MACH_ODROIDXU3)
+	disable_irq(dp->irq);
+	gDP = dp;
+#endif	
 
 	platform_set_drvdata(pdev, dp);
 
@@ -1119,10 +1229,9 @@ static int exynos_dp_remove(struct platform_device *pdev)
 	struct exynos_dp_platdata *pdata = pdev->dev.platform_data;
 	struct exynos_dp_device *dp = platform_get_drvdata(pdev);
 
-	disable_irq(dp->irq);
-
-	if (work_pending(&dp->hotplug_work))
-		flush_work(&dp->hotplug_work);
+#if !defined(CONFIG_MACH_ODROIDXU3)
+	flush_work(&dp->hotplug_work);
+#endif
 
 	if (pdev->dev.of_node) {
 		if (dp->phy_addr)
@@ -1131,9 +1240,7 @@ static int exynos_dp_remove(struct platform_device *pdev)
 		if (pdata->phy_exit)
 			pdata->phy_exit();
 	}
-
 	clk_disable_unprepare(dp->clock);
-
 
 	return 0;
 }
@@ -1144,8 +1251,11 @@ static int exynos_dp_suspend(struct device *dev)
 	struct exynos_dp_platdata *pdata = dev->platform_data;
 	struct exynos_dp_device *dp = dev_get_drvdata(dev);
 
-	if (work_pending(&dp->hotplug_work))
-		flush_work(&dp->hotplug_work);
+	disable_irq(dp->irq);
+
+#if !defined(CONFIG_MACH_ODROIDXU3)
+	flush_work(&dp->hotplug_work);
+#endif
 
 	if (dev->of_node) {
 		if (dp->phy_addr)

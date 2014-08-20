@@ -1972,7 +1972,6 @@ fst_get_iface(struct fst_card_info *card, struct fst_port_info *port,
 	}
 
 	i = port->index;
-	memset(&sync, 0, sizeof(sync));
 	sync.clock_rate = FST_RDL(card, portConfig[i].lineSpeed);
 	/* Lucky card and linux use same encoding here */
 	sync.clock_type = FST_RDB(card, portConfig[i].internalClock) ==
@@ -2449,11 +2448,9 @@ fst_add_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	/* Allocate driver private data */
-	card = kzalloc(sizeof (struct fst_card_info), GFP_KERNEL);
-	if (card == NULL) {
-		pr_err("FarSync card found but insufficient memory for driver storage\n");
+	card = kzalloc(sizeof(struct fst_card_info), GFP_KERNEL);
+	if (card == NULL)
 		return -ENOMEM;
-	}
 
 	/* Try to enable the device */
 	if ((err = pci_enable_device(pdev)) != 0) {

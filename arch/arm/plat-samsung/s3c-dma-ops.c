@@ -36,7 +36,8 @@ static void s3c_dma_cb(struct s3c2410_dma_chan *channel, void *param,
 }
 
 static unsigned s3c_dma_request(enum dma_ch dma_ch,
-					struct samsung_dma_req *param)
+				struct samsung_dma_req *param,
+				struct device *dev, char *ch_name)
 {
 	struct cb_data *data;
 
@@ -108,6 +109,12 @@ static inline int s3c_dma_started(unsigned ch)
 	return s3c2410_dma_ctrl(ch, S3C2410_DMAOP_STARTED);
 }
 
+static inline int s3c_dma_getposition(unsigned ch,
+dma_addr_t *src, dma_addr_t *dst)
+{
+	return s3c2410_dma_getposition(ch, src, dst);
+}
+
 static inline int s3c_dma_flush(unsigned ch)
 {
 	return s3c2410_dma_ctrl(ch, S3C2410_DMAOP_FLUSH);
@@ -125,6 +132,7 @@ static struct samsung_dma_ops s3c_dma_ops = {
 	.prepare	= s3c_dma_prepare,
 	.trigger	= s3c_dma_trigger,
 	.started	= s3c_dma_started,
+	.getposition	= s3c_dma_getposition,
 	.flush		= s3c_dma_flush,
 	.stop		= s3c_dma_stop,
 };

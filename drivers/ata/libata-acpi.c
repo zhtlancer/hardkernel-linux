@@ -17,7 +17,6 @@
 #include <linux/pci.h>
 #include <linux/slab.h>
 #include <linux/pm_runtime.h>
-#include <linux/pm_qos.h>
 #include <scsi/scsi_device.h>
 #include "libata.h"
 
@@ -78,7 +77,7 @@ acpi_handle ata_dev_acpi_handle(struct ata_device *dev)
 	acpi_integer adr;
 	struct ata_port *ap = dev->link->ap;
 
-	if (dev->flags & ATA_DFLAG_ACPI_DISABLED)
+	if (libata_noacpi || dev->flags & ATA_DFLAG_ACPI_DISABLED)
 		return NULL;
 
 	if (ap->flags & ATA_FLAG_ACPI_SATA) {
@@ -233,7 +232,8 @@ void ata_acpi_hotplug_init(struct ata_host *host)
 		if (handle) {
 			/* we might be on a docking station */
 			register_hotplug_dock_device(handle,
-						     &ata_acpi_ap_dock_ops, ap);
+						     &ata_acpi_ap_dock_ops, ap,
+						     NULL, NULL);
 		}
 
 		ata_for_each_dev(dev, &ap->link, ALL) {
@@ -244,7 +244,7 @@ void ata_acpi_hotplug_init(struct ata_host *host)
 			/* we might be on a docking station */
 			register_hotplug_dock_device(handle,
 						     &ata_acpi_dev_dock_ops,
-						     dev);
+						     dev, NULL, NULL);
 		}
 	}
 }
@@ -1063,48 +1063,6 @@ void ata_acpi_on_disable(struct ata_device *dev)
 	ata_acpi_clear_gtf(dev);
 }
 
-static void ata_acpi_register_power_resource(struct ata_device *dev)
-{
-	struct scsi_device *sdev = dev->sdev;
-	acpi_handle handle;
-	struct device *device;
-
-	handle = ata_dev_acpi_handle(dev);
-	if (!handle)
-		return;
-
-	device = &sdev->sdev_gendev;
-
-	acpi_power_resource_register_device(device, handle);
-}
-
-static void ata_acpi_unregister_power_resource(struct ata_device *dev)
-{
-	struct scsi_device *sdev = dev->sdev;
-	acpi_handle handle;
-	struct device *device;
-
-	handle = ata_dev_acpi_handle(dev);
-	if (!handle)
-		return;
-
-	device = &sdev->sdev_gendev;
-
-	acpi_power_resource_unregister_device(device, handle);
-}
-
-void ata_acpi_bind(struct ata_device *dev)
-{
-	ata_acpi_register_power_resource(dev);
-	if (zpodd_dev_enabled(dev))
-		dev_pm_qos_expose_flags(&dev->sdev->sdev_gendev, 0);
-}
-
-void ata_acpi_unbind(struct ata_device *dev)
-{
-	ata_acpi_unregister_power_resource(dev);
-}
-
 static int compat_pci_ata(struct ata_port *ap)
 {
 	struct device *dev = ap->tdev.parent;
@@ -1124,7 +1082,7 @@ static int compat_pci_ata(struct ata_port *ap)
 
 static int ata_acpi_bind_host(struct ata_port *ap, acpi_handle *handle)
 {
-	if (ap->flags & ATA_FLAG_ACPI_SATA)
+	if (libata_noacpi || ap->flags & ATA_FLAG_ACPI_SATA)
 		return -ENODEV;
 
 	*handle = acpi_get_child(DEVICE_ACPI_HANDLE(ap->tdev.parent),
@@ -1197,13 +1155,8 @@ static int ata_acpi_find_device(struct device *dev, acpi_handle *handle)
 		return -ENODEV;
 }
 
-static int ata_acpi_find_dummy(struct device *dev, acpi_handle *handle)
-{
-	return -ENODEV;
-}
-
 static struct acpi_bus_type ata_acpi_bus = {
-	.find_bridge = ata_acpi_find_dummy,
+	.name = "ATA",
 	.find_device = ata_acpi_find_device,
 };
 

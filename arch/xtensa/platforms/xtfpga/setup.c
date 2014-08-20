@@ -60,7 +60,9 @@ void platform_restart(void)
 			      "wsr	a2, icountlevel\n\t"
 			      "movi	a2, 0\n\t"
 			      "wsr	a2, icount\n\t"
+#if XCHAL_NUM_IBREAK > 0
 			      "wsr	a2, ibreakenable\n\t"
+#endif
 			      "wsr	a2, lcount\n\t"
 			      "movi	a2, 0x1f\n\t"
 			      "wsr	a2, ps\n\t"
@@ -100,7 +102,7 @@ static void __init update_clock_frequency(struct device_node *node)
 	}
 
 	*(u32 *)newfreq->value = cpu_to_be32(*(u32 *)XTFPGA_CLKFRQ_VADDR);
-	prom_update_property(node, newfreq);
+	of_update_property(node, newfreq);
 }
 
 #define MAC_LEN 6
@@ -128,7 +130,7 @@ static void __init update_local_mac(struct device_node *node)
 
 	memcpy(newmac->value, macaddr, MAC_LEN);
 	((u8*)newmac->value)[5] = (*(u32*)DIP_SWITCHES_VADDR) & 0x3f;
-	prom_update_property(node, newmac);
+	of_update_property(node, newmac);
 }
 
 static int __init machine_setup(void)
@@ -193,7 +195,7 @@ void platform_calibrate_ccount(void)
  *  Ethernet -- OpenCores Ethernet MAC (ethoc driver)
  */
 
-static struct resource ethoc_res[] = {
+static struct resource ethoc_res[] __initdata = {
 	[0] = { /* register space */
 		.start = OETH_REGS_PADDR,
 		.end   = OETH_REGS_PADDR + OETH_REGS_SIZE - 1,
@@ -211,7 +213,7 @@ static struct resource ethoc_res[] = {
 	},
 };
 
-static struct ethoc_platform_data ethoc_pdata = {
+static struct ethoc_platform_data ethoc_pdata __initdata = {
 	/*
 	 * The MAC address for these boards is 00:50:c2:13:6f:xx.
 	 * The last byte (here as zero) is read from the DIP switches on the
@@ -221,7 +223,7 @@ static struct ethoc_platform_data ethoc_pdata = {
 	.phy_id = -1,
 };
 
-static struct platform_device ethoc_device = {
+static struct platform_device ethoc_device __initdata = {
 	.name = "ethoc",
 	.id = -1,
 	.num_resources = ARRAY_SIZE(ethoc_res),
@@ -235,13 +237,13 @@ static struct platform_device ethoc_device = {
  *  UART
  */
 
-static struct resource serial_resource = {
+static struct resource serial_resource __initdata = {
 	.start	= DUART16552_PADDR,
 	.end	= DUART16552_PADDR + 0x1f,
 	.flags	= IORESOURCE_MEM,
 };
 
-static struct plat_serial8250_port serial_platform_data[] = {
+static struct plat_serial8250_port serial_platform_data[] __initdata = {
 	[0] = {
 		.mapbase	= DUART16552_PADDR,
 		.irq		= DUART16552_INTNUM,
@@ -254,7 +256,7 @@ static struct plat_serial8250_port serial_platform_data[] = {
 	{ },
 };
 
-static struct platform_device xtavnet_uart = {
+static struct platform_device xtavnet_uart __initdata = {
 	.name		= "serial8250",
 	.id		= PLAT8250_DEV_PLATFORM,
 	.dev		= {

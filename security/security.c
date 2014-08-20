@@ -134,6 +134,26 @@ int __init register_security(struct security_operations *ops)
 
 /* Security operations */
 
+int security_binder_set_context_mgr(struct task_struct *mgr)
+{
+	return security_ops->binder_set_context_mgr(mgr);
+}
+
+int security_binder_transaction(struct task_struct *from, struct task_struct *to)
+{
+	return security_ops->binder_transaction(from, to);
+}
+
+int security_binder_transfer_binder(struct task_struct *from, struct task_struct *to)
+{
+	return security_ops->binder_transfer_binder(from, to);
+}
+
+int security_binder_transfer_file(struct task_struct *from, struct task_struct *to, struct file *file)
+{
+	return security_ops->binder_transfer_file(from, to, file);
+}
+
 int security_ptrace_access_check(struct task_struct *child, unsigned int mode)
 {
 #ifdef CONFIG_SECURITY_YAMA_STACKED
@@ -299,10 +319,10 @@ int security_sb_set_mnt_opts(struct super_block *sb,
 }
 EXPORT_SYMBOL(security_sb_set_mnt_opts);
 
-void security_sb_clone_mnt_opts(const struct super_block *oldsb,
+int security_sb_clone_mnt_opts(const struct super_block *oldsb,
 				struct super_block *newsb)
 {
-	security_ops->sb_clone_mnt_opts(oldsb, newsb);
+	return security_ops->sb_clone_mnt_opts(oldsb, newsb);
 }
 EXPORT_SYMBOL(security_sb_clone_mnt_opts);
 
@@ -396,7 +416,6 @@ int security_path_rmdir(struct path *dir, struct dentry *dentry)
 		return 0;
 	return security_ops->path_rmdir(dir, dentry);
 }
-EXPORT_SYMBOL(security_path_rmdir);
 
 int security_path_unlink(struct path *dir, struct dentry *dentry)
 {
@@ -413,7 +432,6 @@ int security_path_symlink(struct path *dir, struct dentry *dentry,
 		return 0;
 	return security_ops->path_symlink(dir, dentry, old_name);
 }
-EXPORT_SYMBOL(security_path_symlink);
 
 int security_path_link(struct dentry *old_dentry, struct path *new_dir,
 		       struct dentry *new_dentry)
@@ -422,7 +440,6 @@ int security_path_link(struct dentry *old_dentry, struct path *new_dir,
 		return 0;
 	return security_ops->path_link(old_dentry, new_dir, new_dentry);
 }
-EXPORT_SYMBOL(security_path_link);
 
 int security_path_rename(struct path *old_dir, struct dentry *old_dentry,
 			 struct path *new_dir, struct dentry *new_dentry)
@@ -441,7 +458,6 @@ int security_path_truncate(struct path *path)
 		return 0;
 	return security_ops->path_truncate(path);
 }
-EXPORT_SYMBOL(security_path_truncate);
 
 int security_path_chmod(struct path *path, umode_t mode)
 {
@@ -449,7 +465,6 @@ int security_path_chmod(struct path *path, umode_t mode)
 		return 0;
 	return security_ops->path_chmod(path, mode);
 }
-EXPORT_SYMBOL(security_path_chmod);
 
 int security_path_chown(struct path *path, kuid_t uid, kgid_t gid)
 {
@@ -457,7 +472,6 @@ int security_path_chown(struct path *path, kuid_t uid, kgid_t gid)
 		return 0;
 	return security_ops->path_chown(path, uid, gid);
 }
-EXPORT_SYMBOL(security_path_chown);
 
 int security_path_chroot(struct path *path)
 {
@@ -534,7 +548,6 @@ int security_inode_readlink(struct dentry *dentry)
 		return 0;
 	return security_ops->inode_readlink(dentry);
 }
-EXPORT_SYMBOL(security_inode_readlink);
 
 int security_inode_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
@@ -549,7 +562,6 @@ int security_inode_permission(struct inode *inode, int mask)
 		return 0;
 	return security_ops->inode_permission(inode, mask);
 }
-EXPORT_SYMBOL(security_inode_permission);
 
 int security_inode_setattr(struct dentry *dentry, struct iattr *attr)
 {
@@ -671,7 +683,6 @@ int security_file_permission(struct file *file, int mask)
 
 	return fsnotify_perm(file, mask);
 }
-EXPORT_SYMBOL(security_file_permission);
 
 int security_file_alloc(struct file *file)
 {
@@ -732,7 +743,6 @@ int security_mmap_file(struct file *file, unsigned long prot,
 		return ret;
 	return ima_file_mmap(file, prot);
 }
-EXPORT_SYMBOL(security_mmap_file);
 
 int security_mmap_addr(unsigned long addr)
 {
@@ -1299,6 +1309,11 @@ int security_tun_dev_open(void *security)
 	return security_ops->tun_dev_open(security);
 }
 EXPORT_SYMBOL(security_tun_dev_open);
+
+void security_skb_owned_by(struct sk_buff *skb, struct sock *sk)
+{
+	security_ops->skb_owned_by(skb, sk);
+}
 
 #endif	/* CONFIG_SECURITY_NETWORK */
 

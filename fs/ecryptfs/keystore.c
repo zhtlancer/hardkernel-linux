@@ -1149,7 +1149,7 @@ decrypt_pki_encrypted_session_key(struct ecryptfs_auth_tok *auth_tok,
 	struct ecryptfs_msg_ctx *msg_ctx;
 	struct ecryptfs_message *msg = NULL;
 	char *auth_tok_sig;
-	char *payload = NULL;
+	char *payload;
 	size_t payload_len = 0;
 	int rc;
 
@@ -1168,7 +1168,7 @@ decrypt_pki_encrypted_session_key(struct ecryptfs_auth_tok *auth_tok,
 	rc = ecryptfs_send_message(payload, payload_len, &msg_ctx);
 	if (rc) {
 		ecryptfs_printk(KERN_ERR, "Error sending message to "
-				"ecryptfsd\n");
+				"ecryptfsd: %d\n", rc);
 		goto out;
 	}
 	rc = ecryptfs_wait_for_response(msg_ctx, &msg);
@@ -1203,7 +1203,6 @@ decrypt_pki_encrypted_session_key(struct ecryptfs_auth_tok *auth_tok,
 	}
 out:
 	kfree(msg);
-	kfree(payload);
 	return rc;
 }
 
@@ -1989,7 +1988,7 @@ pki_encrypt_session_key(struct key *auth_tok_key,
 	rc = ecryptfs_send_message(payload, payload_len, &msg_ctx);
 	if (rc) {
 		ecryptfs_printk(KERN_ERR, "Error sending message to "
-				"ecryptfsd\n");
+				"ecryptfsd: %d\n", rc);
 		goto out;
 	}
 	rc = ecryptfs_wait_for_response(msg_ctx, &msg);

@@ -121,6 +121,7 @@ struct ehci_hcd {			/* one per controller */
 	bool			scanning:1;
 	bool			need_rescan:1;
 	bool			intr_unlinking:1;
+	bool			iaa_in_progress:1;
 	bool			async_unlinking:1;
 	bool			shutdown:1;
 	struct ehci_qh		*qh_scan_next;
@@ -128,9 +129,8 @@ struct ehci_hcd {			/* one per controller */
 	/* async schedule support */
 	struct ehci_qh		*async;
 	struct ehci_qh		*dummy;		/* For AMD quirk use */
-	struct ehci_qh		*async_unlink;
-	struct ehci_qh		*async_unlink_last;
-	struct ehci_qh		*async_iaa;
+	struct list_head	async_unlink;
+	struct list_head	async_idle;
 	unsigned		async_unlink_cycle;
 	unsigned		async_count;	/* async activity count */
 
@@ -143,8 +143,7 @@ struct ehci_hcd {			/* one per controller */
 	unsigned		i_thresh;	/* uframes HC might cache */
 
 	union ehci_shadow	*pshadow;	/* mirror hw periodic table */
-	struct ehci_qh		*intr_unlink;
-	struct ehci_qh		*intr_unlink_last;
+	struct list_head	intr_unlink;
 	unsigned		intr_unlink_cycle;
 	unsigned		now_frame;	/* frame from HC hardware */
 	unsigned		last_iso_frame;	/* last frame scanned for iso */
@@ -200,7 +199,7 @@ struct ehci_hcd {			/* one per controller */
 	unsigned		use_dummy_qh:1;	/* AMD Frame List table quirk*/
 	unsigned		has_synopsys_hc_bug:1; /* Synopsys HC */
 	unsigned		frame_index_bug:1; /* MosChip (AKA NetMos) */
-	unsigned		imx28_write_fix:1; /* For Freescale i.MX28 */
+	unsigned		need_oc_pp_cycle:1; /* MPC834X port power */
 
 	/* required for usb32 quirk */
 	#define OHCI_CTRL_HCFS          (3 << 6)
@@ -381,11 +380,10 @@ struct ehci_qh {
 	struct list_head	qtd_list;	/* sw qtd list */
 	struct list_head	intr_node;	/* list of intr QHs */
 	struct ehci_qtd		*dummy;
-	struct ehci_qh		*unlink_next;	/* next on unlink list */
+	struct list_head	unlink_node;
 
 	unsigned		unlink_cycle;
 
-	u8			needs_rescan;	/* Dequeue during giveback */
 	u8			qh_state;
 #define	QH_STATE_LINKED		1		/* HC sees this */
 #define	QH_STATE_UNLINK		2		/* HC may still see this */
@@ -408,6 +406,9 @@ struct ehci_qh {
 	struct usb_device	*dev;		/* access to TT */
 	unsigned		is_out:1;	/* bulk or intr OUT */
 	unsigned		clearing_tt:1;	/* Clear-TT-Buf in progress */
+	unsigned		dequeue_during_giveback:1;
+	unsigned		exception:1;	/* got a fault, or an unlink
+						   was requested */
 };
 
 /*-------------------------------------------------------------------------*/
@@ -674,18 +675,6 @@ static inline unsigned int ehci_readl(const struct ehci_hcd *ehci,
 #endif
 }
 
-#ifdef CONFIG_SOC_IMX28
-static inline void imx28_ehci_writel(const unsigned int val,
-		volatile __u32 __iomem *addr)
-{
-	__asm__ ("swp %0, %0, [%1]" : : "r"(val), "r"(addr));
-}
-#else
-static inline void imx28_ehci_writel(const unsigned int val,
-		volatile __u32 __iomem *addr)
-{
-}
-#endif
 static inline void ehci_writel(const struct ehci_hcd *ehci,
 		const unsigned int val, __u32 __iomem *regs)
 {
@@ -694,10 +683,7 @@ static inline void ehci_writel(const struct ehci_hcd *ehci,
 		writel_be(val, regs) :
 		writel(val, regs);
 #else
-	if (ehci->imx28_write_fix)
-		imx28_ehci_writel(val, regs);
-	else
-		writel(val, regs);
+	writel(val, regs);
 #endif
 }
 

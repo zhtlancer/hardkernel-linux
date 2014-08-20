@@ -41,6 +41,7 @@
 #include "xfs_qm.h"
 #include "xfs_trace.h"
 #include "xfs_icache.h"
+#include "xfs_cksum.h"
 
 /*
  * The global quota manager. There is only one of these for the entire
@@ -135,11 +136,22 @@ xfs_qm_dqpurge(
 {
 	struct xfs_mount	*mp = dqp->q_mount;
 	struct xfs_quotainfo	*qi = mp->m_quotainfo;
+	struct xfs_dquot	*gdqp = NULL;
 
 	xfs_dqlock(dqp);
 	if ((dqp->dq_flags & XFS_DQ_FREEING) || dqp->q_nrefs != 0) {
 		xfs_dqunlock(dqp);
 		return EAGAIN;
+	}
+
+	/*
+	 * If this quota has a group hint attached, prepare for releasing it
+	 * now.
+	 */
+	gdqp = dqp->q_gdquot;
+	if (gdqp) {
+		xfs_dqlock(gdqp);
+		dqp->q_gdquot = NULL;
 	}
 
 	dqp->dq_flags |= XFS_DQ_FREEING;
@@ -193,40 +205,9 @@ xfs_qm_dqpurge(
 	mutex_unlock(&qi->qi_lru_lock);
 
 	xfs_qm_dqdestroy(dqp);
-	return 0;
-}
-
-/*
- * Release the group or project dquot pointers the user dquots maybe carrying
- * around as a hint, and proceed to purge the user dquot cache if requested.
-*/
-STATIC int
-xfs_qm_dqpurge_hints(
-	struct xfs_dquot	*dqp,
-	void			*data)
-{
-	struct xfs_dquot	*gdqp = NULL;
-	uint			flags = *((uint *)data);
-
-	xfs_dqlock(dqp);
-	if (dqp->dq_flags & XFS_DQ_FREEING) {
-		xfs_dqunlock(dqp);
-		return EAGAIN;
-	}
-
-	/* If this quota has a hint attached, prepare for releasing it now */
-	gdqp = dqp->q_gdquot;
-	if (gdqp)
-		dqp->q_gdquot = NULL;
-
-	xfs_dqunlock(dqp);
 
 	if (gdqp)
-		xfs_qm_dqrele(gdqp);
-
-	if (flags & XFS_QMOPT_UQUOTA)
-		return xfs_qm_dqpurge(dqp, NULL);
-
+		xfs_qm_dqput(gdqp);
 	return 0;
 }
 
@@ -238,18 +219,8 @@ xfs_qm_dqpurge_all(
 	struct xfs_mount	*mp,
 	uint			flags)
 {
-	/*
-	 * We have to release group/project dquot hint(s) from the user dquot
-	 * at first if they are there, otherwise we would run into an infinite
-	 * loop while walking through radix tree to purge other type of dquots
-	 * since their refcount is not zero if the user dquot refers to them
-	 * as hint.
-	 *
-	 * Call the special xfs_qm_dqpurge_hints() will end up go through the
-	 * general xfs_qm_dqpurge() against user dquot cache if requested.
-	 */
-	xfs_qm_dquot_walk(mp, XFS_DQ_USER, xfs_qm_dqpurge_hints, &flags);
-
+	if (flags & XFS_QMOPT_UQUOTA)
+		xfs_qm_dquot_walk(mp, XFS_DQ_USER, xfs_qm_dqpurge, NULL);
 	if (flags & XFS_QMOPT_GQUOTA)
 		xfs_qm_dquot_walk(mp, XFS_DQ_GROUP, xfs_qm_dqpurge, NULL);
 	if (flags & XFS_QMOPT_PQUOTA)
@@ -647,6 +618,20 @@ xfs_qm_dqdetach(
 	}
 }
 
+int
+xfs_qm_calc_dquots_per_chunk(
+	struct xfs_mount	*mp,
+	unsigned int		nbblks)	/* basic block units */
+{
+	unsigned int	ndquots;
+
+	ASSERT(nbblks > 0);
+	ndquots = BBTOB(nbblks);
+	do_div(ndquots, sizeof(xfs_dqblk_t));
+
+	return ndquots;
+}
+
 /*
  * This initializes all the quota information that's kept in the
  * mount structure
@@ -686,9 +671,8 @@ xfs_qm_init_quotainfo(
 
 	/* Precalc some constants */
 	qinf->qi_dqchunklen = XFS_FSB_TO_BB(mp, XFS_DQUOT_CLUSTER_SIZE_FSB);
-	ASSERT(qinf->qi_dqchunklen);
-	qinf->qi_dqperchunk = BBTOB(qinf->qi_dqchunklen);
-	do_div(qinf->qi_dqperchunk, sizeof(xfs_dqblk_t));
+	qinf->qi_dqperchunk = xfs_qm_calc_dquots_per_chunk(mp,
+							qinf->qi_dqchunklen);
 
 	mp->m_qflags |= (mp->m_sb.sb_qflags & XFS_ALL_QUOTA_CHKD);
 
@@ -856,7 +840,7 @@ xfs_qm_reset_dqcounts(
 	xfs_dqid_t	id,
 	uint		type)
 {
-	xfs_disk_dquot_t	*ddq;
+	struct xfs_dqblk	*dqb;
 	int			j;
 
 	trace_xfs_reset_dqcounts(bp, _RET_IP_);
@@ -870,8 +854,12 @@ xfs_qm_reset_dqcounts(
 	do_div(j, sizeof(xfs_dqblk_t));
 	ASSERT(mp->m_quotainfo->qi_dqperchunk == j);
 #endif
-	ddq = bp->b_addr;
+	dqb = bp->b_addr;
 	for (j = 0; j < mp->m_quotainfo->qi_dqperchunk; j++) {
+		struct xfs_disk_dquot	*ddq;
+
+		ddq = (struct xfs_disk_dquot *)&dqb[j];
+
 		/*
 		 * Do a sanity check, and if needed, repair the dqblk. Don't
 		 * output any warnings because it's perfectly possible to
@@ -888,7 +876,12 @@ xfs_qm_reset_dqcounts(
 		ddq->d_bwarns = 0;
 		ddq->d_iwarns = 0;
 		ddq->d_rtbwarns = 0;
-		ddq = (xfs_disk_dquot_t *) ((xfs_dqblk_t *)ddq + 1);
+
+		if (xfs_sb_version_hascrc(&mp->m_sb)) {
+			xfs_update_cksum((char *)&dqb[j],
+					 sizeof(struct xfs_dqblk),
+					 XFS_DQUOT_CRC_OFF);
+		}
 	}
 }
 
@@ -924,15 +917,29 @@ xfs_qm_dqiter_bufs(
 			      XFS_FSB_TO_DADDR(mp, bno),
 			      mp->m_quotainfo->qi_dqchunklen, 0, &bp,
 			      &xfs_dquot_buf_ops);
+
+		/*
+		 * CRC and validation errors will return a EFSCORRUPTED here. If
+		 * this occurs, re-read without CRC validation so that we can
+		 * repair the damage via xfs_qm_reset_dqcounts(). This process
+		 * will leave a trace in the log indicating corruption has
+		 * been detected.
+		 */
+		if (error == EFSCORRUPTED) {
+			error = xfs_trans_read_buf(mp, NULL, mp->m_ddev_targp,
+				      XFS_FSB_TO_DADDR(mp, bno),
+				      mp->m_quotainfo->qi_dqchunklen, 0, &bp,
+				      NULL);
+		}
+
 		if (error)
 			break;
 
 		xfs_qm_reset_dqcounts(mp, bp, firstid, type);
 		xfs_buf_delwri_queue(bp, buffer_list);
 		xfs_buf_relse(bp);
-		/*
-		 * goto the next block.
-		 */
+
+		/* goto the next block. */
 		bno++;
 		firstid += mp->m_quotainfo->qi_dqperchunk;
 	}
@@ -1087,7 +1094,7 @@ xfs_qm_quotacheck_dqadjust(
 	 * There are no timers for the default values set in the root dquot.
 	 */
 	if (dqp->q_core.d_id) {
-		xfs_qm_adjust_dqlimits(mp, &dqp->q_core);
+		xfs_qm_adjust_dqlimits(mp, dqp);
 		xfs_qm_adjust_dqtimers(mp, &dqp->q_core);
 	}
 
@@ -1614,10 +1621,9 @@ xfs_qm_write_sb_changes(
 	int		error;
 
 	tp = xfs_trans_alloc(mp, XFS_TRANS_QM_SBCHANGE);
-	if ((error = xfs_trans_reserve(tp, 0,
-				      mp->m_sb.sb_sectsize + 128, 0,
-				      0,
-				      XFS_DEFAULT_LOG_COUNT))) {
+	error = xfs_trans_reserve(tp, 0, XFS_QM_SBCHANGE_LOG_RES(mp),
+				  0, 0, XFS_DEFAULT_LOG_COUNT);
+	if (error) {
 		xfs_trans_cancel(tp, 0);
 		return error;
 	}

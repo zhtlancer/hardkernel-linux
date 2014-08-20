@@ -51,7 +51,7 @@ config ASYNC_TX_ENABLE_CHANNEL_SWITCH
 
 config AMBA_PL08X
 	bool "ARM PrimeCell PL080 or PL081 support"
-	depends on ARM_AMBA && EXPERIMENTAL
+	depends on ARM_AMBA
 	select DMA_ENGINE
 	select DMA_VIRTUAL_CHANNELS
 	help
@@ -63,8 +63,6 @@ config INTEL_IOATDMA
 	depends on PCI && X86
 	select DMA_ENGINE
 	select DCA
-	select ASYNC_TX_DISABLE_PQ_VAL_DMA
-	select ASYNC_TX_DISABLE_XOR_VAL_DMA
 	help
 	  Enable support for the Intel(R) I/OAT DMA engine present
 	  in recent Intel Xeon chipsets.
@@ -83,6 +81,7 @@ config INTEL_IOP_ADMA
 
 config DW_DMAC
 	tristate "Synopsys DesignWare AHB DMA support"
+	depends on GENERIC_HARDIRQS
 	select DMA_ENGINE
 	default y if CPU_AT32AP7000
 	help
@@ -123,6 +122,8 @@ config MPC512X_DMA
 	select DMA_ENGINE
 	---help---
 	  Enable support for the Freescale MPC512x built-in DMA engine.
+
+source "drivers/dma/bestcomm/Kconfig"
 
 config MV_XOR
 	bool "Marvell XOR engine support"
@@ -171,15 +172,7 @@ config TEGRA20_APB_DMA
 	  This DMA controller transfers data from memory to peripheral fifo
 	  or vice versa. It does not support memory to memory data transfer.
 
-
-
-config SH_DMAE
-	tristate "Renesas SuperH DMAC support"
-	depends on (SUPERH && SH_DMA) || (ARM && ARCH_SHMOBILE)
-	depends on !SH_DMA_API
-	select DMA_ENGINE
-	help
-	  Enable support for the Renesas SuperH DMA controllers.
+source "drivers/dma/sh/Kconfig"
 
 config COH901318
 	bool "ST-Ericsson COH901318 DMA support"
@@ -212,8 +205,8 @@ config TIMB_DMA
 	  Enable support for the Timberdale FPGA DMA engine.
 
 config SIRF_DMA
-	tristate "CSR SiRFprimaII DMA support"
-	depends on ARCH_PRIMA2
+	tristate "CSR SiRFprimaII/SiRFmarco DMA support"
+	depends on ARCH_SIRF
 	select DMA_ENGINE
 	help
 	  Enable support for the CSR SiRFprimaII DMA engine.
@@ -239,6 +232,11 @@ config PL330_DMA
 	  Select if your platform has one or more PL330 DMACs.
 	  You need to provide platform specific settings via
 	  platform_data for a dma-pl330 device.
+
+config PL330TEST_LOG
+	bool "pl330 test log"
+	default 0
+	depends on PL330_DMA
 
 config PCH_DMA
 	tristate "Intel EG20T PCH / LAPIS Semicon IOH(ML7213/ML7223/ML7831) DMA"
@@ -325,6 +323,14 @@ config DMA_ENGINE
 config DMA_VIRTUAL_CHANNELS
 	tristate
 
+config DMA_ACPI
+	def_bool y
+	depends on ACPI
+
+config DMA_OF
+	def_bool y
+	depends on OF
+
 comment "DMA Clients"
 	depends on DMA_ENGINE
 
@@ -332,7 +338,6 @@ config NET_DMA
 	bool "Network: TCP receive copy offload"
 	depends on DMA_ENGINE && NET
 	default (INTEL_IOATDMA || FSL_DMA)
-	depends on BROKEN
 	help
 	  This enables the use of DMA engines in the network stack to
 	  offload receive copy-to-user operations, freeing CPU cycles.

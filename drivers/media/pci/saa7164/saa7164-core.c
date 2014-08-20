@@ -54,7 +54,7 @@ MODULE_PARM_DESC(debug, "enable debug messages");
 
 unsigned int fw_debug;
 module_param(fw_debug, int, 0644);
-MODULE_PARM_DESC(fw_debug, "Firware debug level def:2");
+MODULE_PARM_DESC(fw_debug, "Firmware debug level def:2");
 
 unsigned int encoder_buffers = SAA7164_MAX_ENCODER_BUFFERS;
 module_param(encoder_buffers, int, 0644);
@@ -1348,11 +1348,9 @@ static int saa7164_initdev(struct pci_dev *pci_dev,
 		if (fw_debug) {
 			dev->kthread = kthread_run(saa7164_thread_function, dev,
 				"saa7164 debug");
-			if (IS_ERR(dev->kthread)) {
-				dev->kthread = NULL;
+			if (!dev->kthread)
 				printk(KERN_ERR "%s() Failed to create "
 					"debug kernel thread\n", __func__);
-			}
 		}
 
 	} /* != BOARD_UNKNOWN */

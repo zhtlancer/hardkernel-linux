@@ -2,9 +2,8 @@
 #include <linux/consolemap.h>
 #include <linux/interrupt.h>
 #include <linux/sched.h>
+#include <linux/device.h> /* for dev_warn */
 #include <linux/selection.h>
-#include <linux/workqueue.h>
-#include <asm/cmpxchg.h>
 
 #include "speakup.h"
 
@@ -15,7 +14,7 @@
 unsigned short spk_xs, spk_ys, spk_xe, spk_ye; /* our region points */
 
 /* Variables for selection control. */
-/* must not be disallocated */
+/* must not be deallocated */
 struct vc_data *spk_sel_cons;
 /* cleared by clear_selection */
 static int sel_start = -1;
@@ -97,7 +96,6 @@ int speakup_set_selection(struct tty_struct *tty)
 	/* Allocate a new buffer before freeing the old one ... */
 	bp = kmalloc((sel_end-sel_start)/2+1, GFP_ATOMIC);
 	if (!bp) {
-		dev_warn(tty->dev, "selection: kmalloc() failed\n");
 		speakup_clear_selection();
 		return -ENOMEM;
 	}
@@ -123,24 +121,20 @@ int speakup_set_selection(struct tty_struct *tty)
 	return 0;
 }
 
-struct speakup_paste_work {
-	struct work_struct work;
-	struct tty_struct *tty;
-};
-
-static void __speakup_paste_selection(struct work_struct *work)
+/* TODO: move to some helper thread, probably.  That'd fix having to check for
+ * in_atomic().  */
+int speakup_paste_selection(struct tty_struct *tty)
 {
-	struct speakup_paste_work *spw =
-		container_of(work, struct speakup_paste_work, work);
-	struct tty_struct *tty = xchg(&spw->tty, NULL);
 	struct vc_data *vc = (struct vc_data *) tty->driver_data;
 	int pasted = 0, count;
 	DECLARE_WAITQUEUE(wait, current);
-
 	add_wait_queue(&vc->paste_wait, &wait);
 	while (sel_buffer && sel_buffer_lth > pasted) {
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (test_bit(TTY_THROTTLED, &tty->flags)) {
+			if (in_atomic())
+				/* if we are in an interrupt handler, abort */
+				break;
 			schedule();
 			continue;
 		}
@@ -152,26 +146,6 @@ static void __speakup_paste_selection(struct work_struct *work)
 	}
 	remove_wait_queue(&vc->paste_wait, &wait);
 	current->state = TASK_RUNNING;
-	tty_kref_put(tty);
-}
-
-static struct speakup_paste_work speakup_paste_work = {
-	.work = __WORK_INITIALIZER(speakup_paste_work.work,
-				   __speakup_paste_selection)
-};
-
-int speakup_paste_selection(struct tty_struct *tty)
-{
-	if (cmpxchg(&speakup_paste_work.tty, NULL, tty) != NULL)
-		return -EBUSY;
-
-	tty_kref_get(tty);
-	schedule_work_on(WORK_CPU_UNBOUND, &speakup_paste_work.work);
 	return 0;
 }
 
-void speakup_cancel_paste(void)
-{
-	cancel_work_sync(&speakup_paste_work.work);
-	tty_kref_put(speakup_paste_work.tty);
-}

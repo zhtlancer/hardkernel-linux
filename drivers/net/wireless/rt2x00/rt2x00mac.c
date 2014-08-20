@@ -46,7 +46,7 @@ static int rt2x00mac_tx_rts_cts(struct rt2x00_dev *rt2x00dev,
 
 	skb = dev_alloc_skb(data_length + rt2x00dev->hw->extra_tx_headroom);
 	if (unlikely(!skb)) {
-		WARNING(rt2x00dev, "Failed to create RTS/CTS frame.\n");
+		rt2x00_warn(rt2x00dev, "Failed to create RTS/CTS frame\n");
 		return -ENOMEM;
 	}
 
@@ -90,10 +90,10 @@ static int rt2x00mac_tx_rts_cts(struct rt2x00_dev *rt2x00dev,
 				  frag_skb->data, data_length, tx_info,
 				  (struct ieee80211_rts *)(skb->data));
 
-	retval = rt2x00queue_write_tx_frame(queue, skb, NULL, true);
+	retval = rt2x00queue_write_tx_frame(queue, skb, true);
 	if (retval) {
 		dev_kfree_skb_any(skb);
-		WARNING(rt2x00dev, "Failed to send RTS/CTS frame.\n");
+		rt2x00_warn(rt2x00dev, "Failed to send RTS/CTS frame\n");
 	}
 
 	return retval;
@@ -126,9 +126,9 @@ void rt2x00mac_tx(struct ieee80211_hw *hw,
 
 	queue = rt2x00queue_get_tx_queue(rt2x00dev, qid);
 	if (unlikely(!queue)) {
-		ERROR(rt2x00dev,
-		      "Attempt to send packet over invalid queue %d.\n"
-		      "Please file bug report to %s.\n", qid, DRV_PROJECT);
+		rt2x00_err(rt2x00dev,
+			   "Attempt to send packet over invalid queue %d\n"
+			   "Please file bug report to %s\n", qid, DRV_PROJECT);
 		goto exit_free_skb;
 	}
 
@@ -151,7 +151,7 @@ void rt2x00mac_tx(struct ieee80211_hw *hw,
 			goto exit_fail;
 	}
 
-	if (unlikely(rt2x00queue_write_tx_frame(queue, skb, control->sta, false)))
+	if (unlikely(rt2x00queue_write_tx_frame(queue, skb, false)))
 		goto exit_fail;
 
 	/*
@@ -489,8 +489,6 @@ int rt2x00mac_set_key(struct ieee80211_hw *hw, enum set_key_cmd cmd,
 	crypto.cipher = rt2x00crypto_key_to_cipher(key);
 	if (crypto.cipher == CIPHER_NONE)
 		return -EOPNOTSUPP;
-	if (crypto.cipher == CIPHER_TKIP && rt2x00_is_usb(rt2x00dev))
-		return -EOPNOTSUPP;
 
 	crypto.cmd = cmd;
 
@@ -625,18 +623,20 @@ void rt2x00mac_bss_info_changed(struct ieee80211_hw *hw,
 				      bss_conf->bssid);
 
 	/*
+	 * Update the beacon. This is only required on USB devices. PCI
+	 * devices fetch beacons periodically.
+	 */
+	if (changes & BSS_CHANGED_BEACON && rt2x00_is_usb(rt2x00dev))
+		rt2x00queue_update_beacon(rt2x00dev, vif);
+
+	/*
 	 * Start/stop beaconing.
 	 */
 	if (changes & BSS_CHANGED_BEACON_ENABLED) {
 		if (!bss_conf->enable_beacon && intf->enable_beacon) {
+			rt2x00queue_clear_beacon(rt2x00dev, vif);
 			rt2x00dev->intf_beaconing--;
 			intf->enable_beacon = false;
-			/*
-			 * Clear beacon in the H/W for this vif. This is needed
-			 * to disable beaconing on this particular interface
-			 * and keep it running on other interfaces.
-			 */
-			rt2x00queue_clear_beacon(rt2x00dev, vif);
 
 			if (rt2x00dev->intf_beaconing == 0) {
 				/*
@@ -647,15 +647,11 @@ void rt2x00mac_bss_info_changed(struct ieee80211_hw *hw,
 				rt2x00queue_stop_queue(rt2x00dev->bcn);
 				mutex_unlock(&intf->beacon_skb_mutex);
 			}
+
+
 		} else if (bss_conf->enable_beacon && !intf->enable_beacon) {
 			rt2x00dev->intf_beaconing++;
 			intf->enable_beacon = true;
-			/*
-			 * Upload beacon to the H/W. This is only required on
-			 * USB devices. PCI devices fetch beacons periodically.
-			 */
-			if (rt2x00_is_usb(rt2x00dev))
-				rt2x00queue_update_beacon(rt2x00dev, vif);
 
 			if (rt2x00dev->intf_beaconing == 1) {
 				/*
@@ -735,9 +731,10 @@ int rt2x00mac_conf_tx(struct ieee80211_hw *hw,
 	queue->aifs = params->aifs;
 	queue->txop = params->txop;
 
-	INFO(rt2x00dev,
-	     "Configured TX queue %d - CWmin: %d, CWmax: %d, Aifs: %d, TXop: %d.\n",
-	     queue_idx, queue->cw_min, queue->cw_max, queue->aifs, queue->txop);
+	rt2x00_dbg(rt2x00dev,
+		   "Configured TX queue %d - CWmin: %d, CWmax: %d, Aifs: %d, TXop: %d\n",
+		   queue_idx, queue->cw_min, queue->cw_max, queue->aifs,
+		   queue->txop);
 
 	return 0;
 }
@@ -752,13 +749,10 @@ void rt2x00mac_rfkill_poll(struct ieee80211_hw *hw)
 }
 EXPORT_SYMBOL_GPL(rt2x00mac_rfkill_poll);
 
-void rt2x00mac_flush(struct ieee80211_hw *hw, bool drop)
+void rt2x00mac_flush(struct ieee80211_hw *hw, u32 queues, bool drop)
 {
 	struct rt2x00_dev *rt2x00dev = hw->priv;
 	struct data_queue *queue;
-
-	if (!test_bit(DEVICE_STATE_PRESENT, &rt2x00dev->flags))
-		return;
 
 	tx_queue_for_each(rt2x00dev, queue)
 		rt2x00queue_flush_queue(queue, drop);

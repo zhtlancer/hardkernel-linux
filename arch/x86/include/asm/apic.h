@@ -688,6 +688,4 @@ extern int default_check_phys_apicid_present(int phys_apicid);
 
 #endif /* CONFIG_X86_LOCAL_APIC */
 
-extern void ioapic_zap_locks(void);
-
 #endif /* _ASM_X86_APIC_H */

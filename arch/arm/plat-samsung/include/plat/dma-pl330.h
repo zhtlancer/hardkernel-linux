@@ -21,7 +21,6 @@
  * use these just as IDs.
  */
 enum dma_ch {
-	DMACH_DT_PROP = -1,
 	DMACH_UART0_RX = 0,
 	DMACH_UART0_TX,
 	DMACH_UART1_RX,
@@ -113,6 +112,11 @@ static inline bool samsung_dma_has_circular(void)
 }
 
 static inline bool samsung_dma_is_dmadev(void)
+{
+	return true;
+}
+
+static inline bool samsung_dma_has_infiniteloop(void)
 {
 	return true;
 }

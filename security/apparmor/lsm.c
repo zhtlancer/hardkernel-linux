@@ -32,11 +32,9 @@
 #include "include/context.h"
 #include "include/file.h"
 #include "include/ipc.h"
-#include "include/net.h"
 #include "include/path.h"
 #include "include/policy.h"
 #include "include/procattr.h"
-#include "include/mount.h"
 
 /* Flag indicating whether initialization completed */
 int apparmor_initialized __initdata;
@@ -381,7 +379,7 @@ static int apparmor_file_open(struct file *file, const struct cred *cred)
 	struct aa_profile *profile;
 	int error = 0;
 
-	if (!mediated_filesystem(file->f_path.dentry->d_inode))
+	if (!mediated_filesystem(file_inode(file)))
 		return 0;
 
 	/* If in exec, permission is handled by bprm hooks.
@@ -396,7 +394,7 @@ static int apparmor_file_open(struct file *file, const struct cred *cred)
 
 	profile = aa_cred_profile(cred);
 	if (!unconfined(profile)) {
-		struct inode *inode = file->f_path.dentry->d_inode;
+		struct inode *inode = file_inode(file);
 		struct path_cond cond = { inode->i_uid, inode->i_mode };
 
 		error = aa_path_perm(OP_OPEN, profile, &file->f_path, 0,
@@ -434,7 +432,7 @@ static int common_file_perm(int op, struct file *file, u32 mask)
 	BUG_ON(!fprofile);
 
 	if (!file->f_path.mnt ||
-	    !mediated_filesystem(file->f_path.dentry->d_inode))
+	    !mediated_filesystem(file_inode(file)))
 		return 0;
 
 	profile = __aa_current_profile();
@@ -503,60 +501,6 @@ static int apparmor_file_mprotect(struct vm_area_struct *vma,
 {
 	return common_mmap(OP_FMPROT, vma->vm_file, prot,
 			   !(vma->vm_flags & VM_SHARED) ? MAP_PRIVATE : 0);
-}
-
-static int apparmor_sb_mount(const char *dev_name, struct path *path, const char *type,
-			     unsigned long flags, void *data)
-{
-	struct aa_profile *profile;
-	int error = 0;
-
-	/* Discard magic */
-	if ((flags & MS_MGC_MSK) == MS_MGC_VAL)
-		flags &= ~MS_MGC_MSK;
-
-	flags &= ~AA_MS_IGNORE_MASK;
-
-	profile = __aa_current_profile();
-	if (!unconfined(profile)) {
-		if (flags & MS_REMOUNT)
-			error = aa_remount(profile, path, flags, data);
-		else if (flags & MS_BIND)
-			error = aa_bind_mount(profile, path, dev_name, flags);
-		else if (flags & (MS_SHARED | MS_PRIVATE | MS_SLAVE |
-				  MS_UNBINDABLE))
-			error = aa_mount_change_type(profile, path, flags);
-		else if (flags & MS_MOVE)
-			error = aa_move_mount(profile, path, dev_name);
-		else
-			error = aa_new_mount(profile, dev_name, path, type,
-					     flags, data);
-	}
-	return error;
-}
-
-static int apparmor_sb_umount(struct vfsmount *mnt, int flags)
-{
-	struct aa_profile *profile;
-	int error = 0;
-
-	profile = __aa_current_profile();
-	if (!unconfined(profile))
-		error = aa_umount(profile, mnt, flags);
-
-	return error;
-}
-
-static int apparmor_sb_pivotroot(struct path *old_path, struct path *new_path)
-{
-	struct aa_profile *profile;
-	int error = 0;
-
-	profile = __aa_current_profile();
-	if (!unconfined(profile))
-		error = aa_pivotroot(profile, old_path, new_path);
-
-	return error;
 }
 
 static int apparmor_getprocattr(struct task_struct *task, char *name,
@@ -670,104 +614,6 @@ static int apparmor_task_setrlimit(struct task_struct *task,
 	return error;
 }
 
-static int apparmor_socket_create(int family, int type, int protocol, int kern)
-{
-	struct aa_profile *profile;
-	int error = 0;
-
-	if (kern)
-		return 0;
-
-	profile = __aa_current_profile();
-	if (!unconfined(profile))
-		error = aa_net_perm(OP_CREATE, profile, family, type, protocol,
-				    NULL);
-	return error;
-}
-
-static int apparmor_socket_bind(struct socket *sock,
-				struct sockaddr *address, int addrlen)
-{
-	struct sock *sk = sock->sk;
-
-	return aa_revalidate_sk(OP_BIND, sk);
-}
-
-static int apparmor_socket_connect(struct socket *sock,
-				   struct sockaddr *address, int addrlen)
-{
-	struct sock *sk = sock->sk;
-
-	return aa_revalidate_sk(OP_CONNECT, sk);
-}
-
-static int apparmor_socket_listen(struct socket *sock, int backlog)
-{
-	struct sock *sk = sock->sk;
-
-	return aa_revalidate_sk(OP_LISTEN, sk);
-}
-
-static int apparmor_socket_accept(struct socket *sock, struct socket *newsock)
-{
-	struct sock *sk = sock->sk;
-
-	return aa_revalidate_sk(OP_ACCEPT, sk);
-}
-
-static int apparmor_socket_sendmsg(struct socket *sock,
-				   struct msghdr *msg, int size)
-{
-	struct sock *sk = sock->sk;
-
-	return aa_revalidate_sk(OP_SENDMSG, sk);
-}
-
-static int apparmor_socket_recvmsg(struct socket *sock,
-				   struct msghdr *msg, int size, int flags)
-{
-	struct sock *sk = sock->sk;
-
-	return aa_revalidate_sk(OP_RECVMSG, sk);
-}
-
-static int apparmor_socket_getsockname(struct socket *sock)
-{
-	struct sock *sk = sock->sk;
-
-	return aa_revalidate_sk(OP_GETSOCKNAME, sk);
-}
-
-static int apparmor_socket_getpeername(struct socket *sock)
-{
-	struct sock *sk = sock->sk;
-
-	return aa_revalidate_sk(OP_GETPEERNAME, sk);
-}
-
-static int apparmor_socket_getsockopt(struct socket *sock, int level,
-				      int optname)
-{
-	struct sock *sk = sock->sk;
-
-	return aa_revalidate_sk(OP_GETSOCKOPT, sk);
-}
-
-static int apparmor_socket_setsockopt(struct socket *sock, int level,
-				      int optname)
-{
-	struct sock *sk = sock->sk;
-
-	return aa_revalidate_sk(OP_SETSOCKOPT, sk);
-}
-
-static int apparmor_socket_shutdown(struct socket *sock, int how)
-{
-	struct sock *sk = sock->sk;
-
-	return aa_revalidate_sk(OP_SOCK_SHUTDOWN, sk);
-}
-
 static struct security_operations apparmor_ops = {
 	.name =				"apparmor",
 
@@ -775,10 +621,6 @@ static struct security_operations apparmor_ops = {
 	.ptrace_traceme =		apparmor_ptrace_traceme,
 	.capget =			apparmor_capget,
 	.capable =			apparmor_capable,
-
-	.sb_mount =			apparmor_sb_mount,
-	.sb_umount =			apparmor_sb_umount,
-	.sb_pivotroot =			apparmor_sb_pivotroot,
 
 	.path_link =			apparmor_path_link,
 	.path_unlink =			apparmor_path_unlink,
@@ -803,19 +645,6 @@ static struct security_operations apparmor_ops = {
 
 	.getprocattr =			apparmor_getprocattr,
 	.setprocattr =			apparmor_setprocattr,
-
-	.socket_create =		apparmor_socket_create,
-	.socket_bind =			apparmor_socket_bind,
-	.socket_connect =		apparmor_socket_connect,
-	.socket_listen =		apparmor_socket_listen,
-	.socket_accept =		apparmor_socket_accept,
-	.socket_sendmsg =		apparmor_socket_sendmsg,
-	.socket_recvmsg =		apparmor_socket_recvmsg,
-	.socket_getsockname =		apparmor_socket_getsockname,
-	.socket_getpeername =		apparmor_socket_getpeername,
-	.socket_getsockopt =		apparmor_socket_getsockopt,
-	.socket_setsockopt =		apparmor_socket_setsockopt,
-	.socket_shutdown =		apparmor_socket_shutdown,
 
 	.cred_alloc_blank =		apparmor_cred_alloc_blank,
 	.cred_free =			apparmor_cred_free,

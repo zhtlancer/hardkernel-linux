@@ -33,8 +33,11 @@
 #define THERMAL_MAX_TRIPS	12
 #define THERMAL_NAME_LENGTH	20
 
+/* invalid cooling state */
+#define THERMAL_CSTATE_INVALID -1UL
+
 /* No upper/lower limit requirement */
-#define THERMAL_NO_LIMIT	-1UL
+#define THERMAL_NO_LIMIT	THERMAL_CSTATE_INVALID
 
 /* Unit conversion macros */
 #define KELVIN_TO_CELSIUS(t)	(long)(((long)t-2732 >= 0) ?	\
@@ -66,7 +69,6 @@ enum thermal_device_mode {
 enum thermal_trip_type {
 	THERMAL_TRIP_ACTIVE = 0,
 	THERMAL_TRIP_PASSIVE,
-	THERMAL_TRIP_HOT,
 	THERMAL_TRIP_CRITICAL,
 };
 
@@ -74,6 +76,8 @@ enum thermal_trend {
 	THERMAL_TREND_STABLE, /* temperature is stable */
 	THERMAL_TREND_RAISING, /* temperature is raising */
 	THERMAL_TREND_DROPPING, /* temperature is dropping */
+	THERMAL_TREND_RAISE_FULL, /* apply highest cooling action */
+	THERMAL_TREND_DROP_FULL, /* apply lowest cooling action */
 };
 
 /* Events supported by Thermal Netlink */
@@ -121,10 +125,12 @@ struct thermal_zone_device_ops {
 	int (*set_trip_hyst) (struct thermal_zone_device *, int,
 			      unsigned long);
 	int (*get_crit_temp) (struct thermal_zone_device *, unsigned long *);
+	int (*set_emul_temp) (struct thermal_zone_device *, unsigned long);
 	int (*get_trend) (struct thermal_zone_device *, int,
 			  enum thermal_trend *);
 	int (*notify) (struct thermal_zone_device *, int,
 		       enum thermal_trip_type);
+	int (*throttle_cpu_hotplug) (struct thermal_zone_device *);
 };
 
 struct thermal_cooling_device_ops {
@@ -163,7 +169,9 @@ struct thermal_zone_device {
 	int polling_delay;
 	int temperature;
 	int last_temperature;
+	int emul_temperature;
 	int passive;
+	bool cooling_dev_en;
 	unsigned int forced_passive;
 	const struct thermal_zone_device_ops *ops;
 	const struct thermal_zone_params *tzp;
@@ -180,7 +188,6 @@ struct thermal_governor {
 	char name[THERMAL_NAME_LENGTH];
 	int (*throttle)(struct thermal_zone_device *tz, int trip);
 	struct list_head	governor_list;
-	struct module		*owner;
 };
 
 /* Structure that holds binding parameters for a zone */
@@ -233,20 +240,21 @@ void thermal_zone_device_update(struct thermal_zone_device *);
 struct thermal_cooling_device *thermal_cooling_device_register(char *, void *,
 		const struct thermal_cooling_device_ops *);
 void thermal_cooling_device_unregister(struct thermal_cooling_device *);
+struct thermal_zone_device *thermal_zone_get_zone_by_name(const char *name);
+int thermal_zone_get_temp(struct thermal_zone_device *tz, unsigned long *temp);
 
 int get_tz_trend(struct thermal_zone_device *, int);
 struct thermal_instance *get_thermal_instance(struct thermal_zone_device *,
 		struct thermal_cooling_device *, int);
 void thermal_cdev_update(struct thermal_cooling_device *);
-void notify_thermal_framework(struct thermal_zone_device *, int);
-
-int thermal_register_governor(struct thermal_governor *);
-void thermal_unregister_governor(struct thermal_governor *);
+void thermal_notify_framework(struct thermal_zone_device *, int);
 
 #ifdef CONFIG_NET
-extern int thermal_generate_netlink_event(u32 orig, enum events event);
+extern int thermal_generate_netlink_event(struct thermal_zone_device *tz,
+						enum events event);
 #else
-static inline int thermal_generate_netlink_event(u32 orig, enum events event)
+static inline int thermal_generate_netlink_event(struct thermal_zone_device *tz,
+						enum events event)
 {
 	return 0;
 }

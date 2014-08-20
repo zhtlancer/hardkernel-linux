@@ -13,6 +13,12 @@
 
 /*-------------------------------------------------------------------------*/
 
+static int override_alt = -1;
+module_param_named(alt, override_alt, int, 0644);
+MODULE_PARM_DESC(alt, ">= 0 to override altsetting selection");
+
+/*-------------------------------------------------------------------------*/
+
 /* FIXME make these public somewhere; usbdevfs.h? */
 struct usbtest_param {
 	/* inputs */
@@ -103,6 +109,10 @@ get_endpoints(struct usbtest_dev *dev, struct usb_interface *intf)
 		iso_in = iso_out = NULL;
 		alt = intf->altsetting + tmp;
 
+		if (override_alt >= 0 &&
+				override_alt != alt->desc.bAlternateSetting)
+			continue;
+
 		/* take the first altsetting with in-bulk + out-bulk;
 		 * ignore other endpoints and altsettings.
 		 */
@@ -144,6 +154,7 @@ try_iso:
 
 found:
 	udev = testdev_to_usbdev(dev);
+	dev->info->alt = alt->desc.bAlternateSetting;
 	if (alt->desc.bAlternateSetting != 0) {
 		tmp = usb_set_interface(udev,
 				alt->desc.bInterfaceNumber,
@@ -1138,11 +1149,6 @@ static int unlink1(struct usbtest_dev *dev, int pipe, int size, int async)
 	urb->context = &completion;
 	urb->complete = unlink1_callback;
 
-	if (usb_pipeout(urb->pipe)) {
-		simple_fill_buf(urb);
-		urb->transfer_flags |= URB_ZERO_PACKET;
-	}
-
 	/* keep the endpoint busy.  there are lots of hc/hcd-internal
 	 * states, and testing should get to all of them over time.
 	 *
@@ -1273,11 +1279,6 @@ static int unlink_queued(struct usbtest_dev *dev, int pipe, unsigned num,
 				unlink_queued_callback, &ctx);
 		ctx.urbs[i]->transfer_dma = buf_dma;
 		ctx.urbs[i]->transfer_flags = URB_NO_TRANSFER_DMA_MAP;
-
-		if (usb_pipeout(ctx.urbs[i]->pipe)) {
-			simple_fill_buf(ctx.urbs[i]);
-			ctx.urbs[i]->transfer_flags |= URB_ZERO_PACKET;
-		}
 	}
 
 	/* Submit all the URBs and then unlink URBs num - 4 and num - 2. */
@@ -2290,7 +2291,7 @@ usbtest_probe(struct usb_interface *intf, const struct usb_device_id *id)
 			wtest = " intr-out";
 		}
 	} else {
-		if (info->autoconf) {
+		if (override_alt >= 0 || info->autoconf) {
 			int status;
 
 			status = get_endpoints(dev, intf);

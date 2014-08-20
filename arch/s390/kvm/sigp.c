@@ -130,7 +130,6 @@ unlock:
 static int __inject_sigp_stop(struct kvm_s390_local_interrupt *li, int action)
 {
 	struct kvm_s390_interrupt_info *inti;
-	int rc = SIGP_CC_ORDER_CODE_ACCEPTED;
 
 	inti = kzalloc(sizeof(*inti), GFP_ATOMIC);
 	if (!inti)
@@ -140,8 +139,6 @@ static int __inject_sigp_stop(struct kvm_s390_local_interrupt *li, int action)
 	spin_lock_bh(&li->lock);
 	if ((atomic_read(li->cpuflags) & CPUSTAT_STOPPED)) {
 		kfree(inti);
-		if ((action & ACTION_STORE_ON_STOP) != 0)
-			rc = -ESHUTDOWN;
 		goto out;
 	}
 	list_add_tail(&inti->list, &li->list);
@@ -153,7 +150,7 @@ static int __inject_sigp_stop(struct kvm_s390_local_interrupt *li, int action)
 out:
 	spin_unlock_bh(&li->lock);
 
-	return rc;
+	return SIGP_CC_ORDER_CODE_ACCEPTED;
 }
 
 static int __sigp_stop(struct kvm_vcpu *vcpu, u16 cpu_addr, int action)
@@ -177,16 +174,6 @@ static int __sigp_stop(struct kvm_vcpu *vcpu, u16 cpu_addr, int action)
 unlock:
 	spin_unlock(&fi->lock);
 	VCPU_EVENT(vcpu, 4, "sent sigp stop to cpu %x", cpu_addr);
-
-	if ((action & ACTION_STORE_ON_STOP) != 0 && rc == -ESHUTDOWN) {
-		/* If the CPU has already been stopped, we still have
-		 * to save the status when doing stop-and-store. This
-		 * has to be done after unlocking all spinlocks. */
-		struct kvm_vcpu *dst_vcpu = kvm_get_vcpu(vcpu->kvm, cpu_addr);
-		rc = kvm_s390_store_status_unloaded(dst_vcpu,
-						KVM_S390_STORE_STATUS_NOADDR);
-	}
-
 	return rc;
 }
 
@@ -339,8 +326,6 @@ int kvm_s390_handle_sigp(struct kvm_vcpu *vcpu)
 {
 	int r1 = (vcpu->arch.sie_block->ipa & 0x00f0) >> 4;
 	int r3 = vcpu->arch.sie_block->ipa & 0x000f;
-	int base2 = vcpu->arch.sie_block->ipb >> 28;
-	int disp2 = ((vcpu->arch.sie_block->ipb & 0x0fff0000) >> 16);
 	u32 parameter;
 	u16 cpu_addr = vcpu->run->s.regs.gprs[r3];
 	u8 order_code;
@@ -351,9 +336,7 @@ int kvm_s390_handle_sigp(struct kvm_vcpu *vcpu)
 		return kvm_s390_inject_program_int(vcpu,
 						   PGM_PRIVILEGED_OPERATION);
 
-	order_code = disp2;
-	if (base2)
-		order_code += vcpu->run->s.regs.gprs[base2];
+	order_code = kvm_s390_get_base_disp_rs(vcpu);
 
 	if (r1 % 2)
 		parameter = vcpu->run->s.regs.gprs[r1];

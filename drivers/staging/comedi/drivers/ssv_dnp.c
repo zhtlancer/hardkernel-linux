@@ -87,11 +87,11 @@ static int dnp_dio_insn_bits(struct comedi_device *dev,
 
 	/* on return, data[1] contains the value of the digital input lines. */
 	outb(PADR, CSCIR);
-	data[1] = inb(CSCDR);
+	data[0] = inb(CSCDR);
 	outb(PBDR, CSCIR);
-	data[1] += inb(CSCDR) << 8;
+	data[0] += inb(CSCDR) << 8;
 	outb(PCDR, CSCIR);
-	data[1] += ((inb(CSCDR) & 0xF0) << 12);
+	data[0] += ((inb(CSCDR) & 0xF0) << 12);
 
 	return insn->n;
 
@@ -166,8 +166,6 @@ static int dnp_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 {
 	struct comedi_subdevice *s;
 	int ret;
-
-	dev->board_name = dev->driver->driver_name;
 
 	ret = comedi_alloc_subdevices(dev, 1);
 	if (ret)

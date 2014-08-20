@@ -61,9 +61,6 @@ struct ports_driver_data {
 	/* List of all the devices we're handling */
 	struct list_head portdevs;
 
-	/* Number of devices this driver is handling */
-	unsigned int index;
-
 	/*
 	 * This is used to keep track of the number of hvc consoles
 	 * spawned by this driver.  This number is given as the first
@@ -81,8 +78,8 @@ struct ports_driver_data {
 };
 static struct ports_driver_data pdrvdata;
 
-DEFINE_SPINLOCK(pdrvdata_lock);
-DECLARE_COMPLETION(early_console_added);
+static DEFINE_SPINLOCK(pdrvdata_lock);
+static DECLARE_COMPLETION(early_console_added);
 
 /* This struct holds information that's relevant only for console ports */
 struct console {
@@ -169,9 +166,6 @@ struct ports_device {
 
 	/* Array of per-port IO virtqueues */
 	struct virtqueue **in_vqs, **out_vqs;
-
-	/* Used for numbering devices for sysfs and debugfs */
-	unsigned int drv_index;
 
 	/* Major number for this device.  Ports will be created as minors. */
 	int chr_major;
@@ -512,7 +506,7 @@ static int add_inbuf(struct virtqueue *vq, struct port_buffer *buf)
 
 	sg_init_one(sg, buf->buf, buf->size);
 
-	ret = virtqueue_add_buf(vq, sg, 0, 1, buf, GFP_ATOMIC);
+	ret = virtqueue_add_inbuf(vq, sg, 1, buf, GFP_ATOMIC);
 	virtqueue_kick(vq);
 	if (!ret)
 		ret = vq->num_free;
@@ -581,7 +575,7 @@ static ssize_t __send_control_msg(struct ports_device *portdev, u32 port_id,
 	sg_init_one(sg, &cpkt, sizeof(cpkt));
 
 	spin_lock(&portdev->c_ovq_lock);
-	if (virtqueue_add_buf(vq, sg, 1, 0, &cpkt, GFP_ATOMIC) == 0) {
+	if (virtqueue_add_outbuf(vq, sg, 1, &cpkt, GFP_ATOMIC) == 0) {
 		virtqueue_kick(vq);
 		while (!virtqueue_get_buf(vq, &len))
 			cpu_relax();
@@ -631,7 +625,7 @@ static ssize_t __send_to_port(struct port *port, struct scatterlist *sg,
 
 	reclaim_consumed_buffers(port);
 
-	err = virtqueue_add_buf(out_vq, sg, nents, 0, data, GFP_ATOMIC);
+	err = virtqueue_add_outbuf(out_vq, sg, nents, data, GFP_ATOMIC);
 
 	/* Tell Host to go! */
 	virtqueue_kick(out_vq);
@@ -1070,7 +1064,7 @@ static int port_fops_open(struct inode *inode, struct file *filp)
 	spin_lock_irq(&port->inbuf_lock);
 	if (port->guest_connected) {
 		spin_unlock_irq(&port->inbuf_lock);
-		ret = -EMFILE;
+		ret = -EBUSY;
 		goto out;
 	}
 
@@ -1232,7 +1226,7 @@ int __init virtio_cons_early_init(int (*put_chars)(u32, const char *, int))
 	return hvc_instantiate(0, 0, &hv_ops);
 }
 
-int init_port_console(struct port *port)
+static int init_port_console(struct port *port)
 {
 	int ret;
 
@@ -1443,7 +1437,7 @@ static int add_port(struct ports_device *portdev, u32 id)
 	}
 	port->dev = device_create(pdrvdata.class, &port->portdev->vdev->dev,
 				  devt, port, "vport%up%u",
-				  port->portdev->drv_index, id);
+				  port->portdev->vdev->index, id);
 	if (IS_ERR(port->dev)) {
 		err = PTR_ERR(port->dev);
 		dev_err(&port->portdev->vdev->dev,
@@ -1498,7 +1492,7 @@ static int add_port(struct ports_device *portdev, u32 id)
 		 * inspect a port's state at any time
 		 */
 		sprintf(debugfs_name, "vport%up%u",
-			port->portdev->drv_index, id);
+			port->portdev->vdev->index, id);
 		port->debugfs_file = debugfs_create_file(debugfs_name, 0444,
 							 pdrvdata.debugfs_dir,
 							 port,
@@ -1788,13 +1782,23 @@ static void in_intr(struct virtqueue *vq)
 	port->inbuf = get_inbuf(port);
 
 	/*
-	 * Don't queue up data when port is closed.  This condition
+	 * Normally the port should not accept data when the port is
+	 * closed. For generic serial ports, the host won't (shouldn't)
+	 * send data till the guest is connected. But this condition
 	 * can be reached when a console port is not yet connected (no
-	 * tty is spawned) and the host sends out data to console
-	 * ports.  For generic serial ports, the host won't
-	 * (shouldn't) send data till the guest is connected.
+	 * tty is spawned) and the other side sends out data over the
+	 * vring, or when a remote devices start sending data before
+	 * the ports are opened.
+	 *
+	 * A generic serial port will discard data if not connected,
+	 * while console ports and rproc-serial ports accepts data at
+	 * any time. rproc-serial is initiated with guest_connected to
+	 * false because port_fops_open expects this. Console ports are
+	 * hooked up with an HVC console and is initialized with
+	 * guest_connected to true.
 	 */
-	if (!port->guest_connected)
+
+	if (!port->guest_connected && !is_rproc_serial(port->portdev->vdev))
 		discard_port_data(port);
 
 	spin_unlock_irqrestore(&port->inbuf_lock, flags);
@@ -1988,16 +1992,12 @@ static int virtcons_probe(struct virtio_device *vdev)
 	portdev->vdev = vdev;
 	vdev->priv = portdev;
 
-	spin_lock_irq(&pdrvdata_lock);
-	portdev->drv_index = pdrvdata.index++;
-	spin_unlock_irq(&pdrvdata_lock);
-
 	portdev->chr_major = register_chrdev(0, "virtio-portsdev",
 					     &portdev_fops);
 	if (portdev->chr_major < 0) {
 		dev_err(&vdev->dev,
 			"Error %d registering chrdev for device %u\n",
-			portdev->chr_major, portdev->drv_index);
+			portdev->chr_major, vdev->index);
 		err = portdev->chr_major;
 		goto free;
 	}

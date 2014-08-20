@@ -399,7 +399,6 @@ struct sctp_stream {
 struct sctp_ssnmap {
 	struct sctp_stream in;
 	struct sctp_stream out;
-	int malloced;
 };
 
 struct sctp_ssnmap *sctp_ssnmap_new(__u16 in, __u16 out,
@@ -715,8 +714,7 @@ struct sctp_packet {
 	    has_sack:1,		/* This packet contains a SACK chunk. */
 	    has_auth:1,		/* This packet contains an AUTH chunk */
 	    has_data:1,		/* This packet contains at least 1 DATA chunk */
-	    ipfragok:1,		/* So let ip fragment this packet */
-	    malloced:1;		/* Is it malloced? */
+	    ipfragok:1;		/* So let ip fragment this packet */
 };
 
 struct sctp_packet *sctp_packet_init(struct sctp_packet *,
@@ -780,10 +778,7 @@ struct sctp_transport {
 		hb_sent:1,
 
 		/* Is the Path MTU update pending on this tranport */
-		pmtu_pending:1,
-
-		/* Is this structure kfree()able? */
-		malloced:1;
+		pmtu_pending:1;
 
 	/* Has this transport moved the ctsn since we last sacked */
 	__u32 sack_generation;
@@ -992,8 +987,6 @@ struct sctp_inq {
 	 * messages.
 	 */
 	struct work_struct immediate;
-
-	int malloced;	     /* Is this structure kfree()able?	*/
 };
 
 void sctp_inq_init(struct sctp_inq *);
@@ -1062,9 +1055,6 @@ struct sctp_outq {
 
 	/* Is this structure empty?  */
 	char empty;
-
-	/* Are we kfree()able? */
-	char malloced;
 };
 
 void sctp_outq_init(struct sctp_association *, struct sctp_outq *);
@@ -1102,8 +1092,6 @@ struct sctp_bind_addr {
 	 *	peer(s) in INIT and INIT ACK chunks.
 	 */
 	struct list_head address_list;
-
-	int malloced;	     /* Are we kfree()able?  */
 };
 
 void sctp_bind_addr_init(struct sctp_bind_addr *, __u16 port);
@@ -1174,11 +1162,9 @@ struct sctp_ep_common {
 	/* Some fields to help us manage this object.
 	 *   refcnt   - Reference count access to this object.
 	 *   dead     - Do not attempt to use this object.
-	 *   malloced - Do we need to kfree this object?
 	 */
 	atomic_t    refcnt;
-	char	    dead;
-	char	    malloced;
+	bool	    dead;
 
 	/* What socket does this endpoint belong to?  */
 	struct sock *sk;
@@ -1236,10 +1222,7 @@ struct sctp_endpoint {
 	 *	      Discussion in [RFC1750] can be helpful in
 	 *	      selection of the key.
 	 */
-	__u8 secret_key[SCTP_HOW_MANY_SECRETS][SCTP_SECRET_SIZE];
-	int current_key;
-	int last_key;
-	int key_changed_at;
+	__u8 secret_key[SCTP_SECRET_SIZE];
 
  	/* digest:  This is a digest of the sctp cookie.  This field is
  	 * 	    only used on the receive path when we try to validate
@@ -1269,7 +1252,6 @@ struct sctp_endpoint {
 	/* SCTP-AUTH: endpoint shared keys */
 	struct list_head endpoint_shared_keys;
 	__u16 active_key_id;
-	__u8  auth_enable;
 };
 
 /* Recover the outter endpoint structure. */
@@ -1298,8 +1280,7 @@ struct sctp_endpoint *sctp_endpoint_is_match(struct sctp_endpoint *,
 int sctp_has_association(struct net *net, const union sctp_addr *laddr,
 			 const union sctp_addr *paddr);
 
-int sctp_verify_init(struct net *net, const struct sctp_endpoint *ep,
-		     const struct sctp_association *asoc,
+int sctp_verify_init(struct net *net, const struct sctp_association *asoc,
 		     sctp_cid_t, sctp_init_chunk_t *peer_init,
 		     struct sctp_chunk *chunk, struct sctp_chunk **err_chunk);
 int sctp_process_init(struct sctp_association *, struct sctp_chunk *chunk,

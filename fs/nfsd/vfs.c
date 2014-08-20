@@ -297,12 +297,41 @@ commit_metadata(struct svc_fh *fhp)
 }
 
 /*
- * Go over the attributes and take care of the small differences between
- * NFS semantics and what Linux expects.
+ * Set various file attributes.
+ * N.B. After this call fhp needs an fh_put
  */
-static void
-nfsd_sanitize_attrs(struct inode *inode, struct iattr *iap)
+__be32
+nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap,
+	     int check_guard, time_t guardtime)
 {
+	struct dentry	*dentry;
+	struct inode	*inode;
+	int		accmode = NFSD_MAY_SATTR;
+	umode_t		ftype = 0;
+	__be32		err;
+	int		host_err;
+	int		size_change = 0;
+
+	if (iap->ia_valid & (ATTR_ATIME | ATTR_MTIME | ATTR_SIZE))
+		accmode |= NFSD_MAY_WRITE|NFSD_MAY_OWNER_OVERRIDE;
+	if (iap->ia_valid & ATTR_SIZE)
+		ftype = S_IFREG;
+
+	/* Get inode */
+	err = fh_verify(rqstp, fhp, ftype, accmode);
+	if (err)
+		goto out;
+
+	dentry = fhp->fh_dentry;
+	inode = dentry->d_inode;
+
+	/* Ignore any mode updates on symlinks */
+	if (S_ISLNK(inode->i_mode))
+		iap->ia_valid &= ~ATTR_MODE;
+
+	if (!iap->ia_valid)
+		goto out;
+
 	/*
 	 * NFSv2 does not differentiate between "set-[ac]time-to-now"
 	 * which only requires access, and "set-[ac]time-to-X" which
@@ -312,7 +341,8 @@ nfsd_sanitize_attrs(struct inode *inode, struct iattr *iap)
 	 * convert to "set to now" instead of "set to explicit time"
 	 *
 	 * We only call inode_change_ok as the last test as technically
-	 * it is not an interface that we should be using.
+	 * it is not an interface that we should be using.  It is only
+	 * valid if the filesystem does not define it's own i_op->setattr.
 	 */
 #define BOTH_TIME_SET (ATTR_ATIME_SET | ATTR_MTIME_SET)
 #define	MAX_TOUCH_TIME_ERROR (30*60)
@@ -338,6 +368,30 @@ nfsd_sanitize_attrs(struct inode *inode, struct iattr *iap)
 			iap->ia_valid &= ~BOTH_TIME_SET;
 		}
 	}
+	    
+	/*
+	 * The size case is special.
+	 * It changes the file as well as the attributes.
+	 */
+	if (iap->ia_valid & ATTR_SIZE) {
+		if (iap->ia_size < inode->i_size) {
+			err = nfsd_permission(rqstp, fhp->fh_export, dentry,
+					NFSD_MAY_TRUNC|NFSD_MAY_OWNER_OVERRIDE);
+			if (err)
+				goto out;
+		}
+
+		host_err = get_write_access(inode);
+		if (host_err)
+			goto out_nfserr;
+
+		size_change = 1;
+		host_err = locks_verify_truncate(inode, NULL, iap->ia_size);
+		if (host_err) {
+			put_write_access(inode);
+			goto out_nfserr;
+		}
+	}
 
 	/* sanitize the mode change */
 	if (iap->ia_valid & ATTR_MODE) {
@@ -347,8 +401,8 @@ nfsd_sanitize_attrs(struct inode *inode, struct iattr *iap)
 
 	/* Revoke setuid/setgid on chown */
 	if (!S_ISDIR(inode->i_mode) &&
-	    (((iap->ia_valid & ATTR_UID) && iap->ia_uid != inode->i_uid) ||
-	     ((iap->ia_valid & ATTR_GID) && iap->ia_gid != inode->i_gid))) {
+	    (((iap->ia_valid & ATTR_UID) && !uid_eq(iap->ia_uid, inode->i_uid)) ||
+	     ((iap->ia_valid & ATTR_GID) && !gid_eq(iap->ia_gid, inode->i_gid)))) {
 		iap->ia_valid |= ATTR_KILL_PRIV;
 		if (iap->ia_valid & ATTR_MODE) {
 			/* we're setting mode too, just clear the s*id bits */
@@ -360,120 +414,32 @@ nfsd_sanitize_attrs(struct inode *inode, struct iattr *iap)
 			iap->ia_valid |= (ATTR_KILL_SUID | ATTR_KILL_SGID);
 		}
 	}
-}
 
-static __be32
-nfsd_get_write_access(struct svc_rqst *rqstp, struct svc_fh *fhp,
-		struct iattr *iap)
-{
-	struct inode *inode = fhp->fh_dentry->d_inode;
-	int host_err;
-
-	if (iap->ia_size < inode->i_size) {
-		__be32 err;
-
-		err = nfsd_permission(rqstp, fhp->fh_export, fhp->fh_dentry,
-				NFSD_MAY_TRUNC | NFSD_MAY_OWNER_OVERRIDE);
-		if (err)
-			return err;
-	}
-
-	host_err = get_write_access(inode);
-	if (host_err)
-		goto out_nfserrno;
-
-	host_err = locks_verify_truncate(inode, NULL, iap->ia_size);
-	if (host_err)
-		goto out_put_write_access;
-	return 0;
-
-out_put_write_access:
-	put_write_access(inode);
-out_nfserrno:
-	return nfserrno(host_err);
-}
-
-/*
- * Set various file attributes.  After this call fhp needs an fh_put.
- */
-__be32
-nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap,
-	     int check_guard, time_t guardtime)
-{
-	struct dentry	*dentry;
-	struct inode	*inode;
-	int		accmode = NFSD_MAY_SATTR;
-	umode_t		ftype = 0;
-	__be32		err;
-	int		host_err;
-	bool		get_write_count;
-	int		size_change = 0;
-
-	if (iap->ia_valid & (ATTR_ATIME | ATTR_MTIME | ATTR_SIZE))
-		accmode |= NFSD_MAY_WRITE|NFSD_MAY_OWNER_OVERRIDE;
-	if (iap->ia_valid & ATTR_SIZE)
-		ftype = S_IFREG;
-
-	/* Callers that do fh_verify should do the fh_want_write: */
-	get_write_count = !fhp->fh_dentry;
-
-	/* Get inode */
-	err = fh_verify(rqstp, fhp, ftype, accmode);
-	if (err)
-		goto out;
-	if (get_write_count) {
-		host_err = fh_want_write(fhp);
-		if (host_err)
-			return nfserrno(host_err);
-	}
-
-	dentry = fhp->fh_dentry;
-	inode = dentry->d_inode;
-
-	/* Ignore any mode updates on symlinks */
-	if (S_ISLNK(inode->i_mode))
-		iap->ia_valid &= ~ATTR_MODE;
-
-	if (!iap->ia_valid)
-		goto out;
-
-	nfsd_sanitize_attrs(inode, iap);
-
-	/*
-	 * The size case is special, it changes the file in addition to the
-	 * attributes.
-	 */
-	if (iap->ia_valid & ATTR_SIZE) {
-		err = nfsd_get_write_access(rqstp, fhp, iap);
-		if (err)
-			goto out;
-		size_change = 1;
-	}
+	/* Change the attributes. */
 
 	iap->ia_valid |= ATTR_CTIME;
 
-	if (check_guard && guardtime != inode->i_ctime.tv_sec) {
-		err = nfserr_notsync;
-		goto out_put_write_access;
+	err = nfserr_notsync;
+	if (!check_guard || guardtime == inode->i_ctime.tv_sec) {
+		host_err = nfsd_break_lease(inode);
+		if (host_err)
+			goto out_nfserr;
+		fh_lock(fhp);
+
+		host_err = notify_change(dentry, iap);
+		err = nfserrno(host_err);
+		fh_unlock(fhp);
 	}
-
-	host_err = nfsd_break_lease(inode);
-	if (host_err)
-		goto out_put_write_access_nfserror;
-
-	fh_lock(fhp);
-	host_err = notify_change(dentry, iap);
-	fh_unlock(fhp);
-
-out_put_write_access_nfserror:
-	err = nfserrno(host_err);
-out_put_write_access:
 	if (size_change)
 		put_write_access(inode);
 	if (!err)
 		commit_metadata(fhp);
 out:
 	return err;
+
+out_nfserr:
+	err = nfserrno(host_err);
+	goto out;
 }
 
 #if defined(CONFIG_NFSD_V2_ACL) || \
@@ -1014,7 +980,7 @@ static void kill_suid(struct dentry *dentry)
  */
 static int wait_for_concurrent_writes(struct file *file)
 {
-	struct inode *inode = file->f_path.dentry->d_inode;
+	struct inode *inode = file_inode(file);
 	static ino_t last_ino;
 	static dev_t last_dev;
 	int err = 0;
@@ -1106,7 +1072,7 @@ __be32 nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (err)
 		return err;
 
-	inode = file->f_path.dentry->d_inode;
+	inode = file_inode(file);
 
 	/* Get readahead parameters */
 	ra = nfsd_get_raparms(inode->i_sb->s_dev, inode->i_ino);
@@ -1241,7 +1207,7 @@ nfsd_create_setattr(struct svc_rqst *rqstp, struct svc_fh *resfhp,
 	 * send along the gid on create when it tries to implement
 	 * setgid directories via NFS:
 	 */
-	if (current_fsuid() != 0)
+	if (!uid_eq(current_fsuid(), GLOBAL_ROOT_UID))
 		iap->ia_valid &= ~(ATTR_UID|ATTR_GID);
 	if (iap->ia_valid)
 		return nfsd_setattr(rqstp, resfhp, iap, 0, (time_t)0);
@@ -1793,10 +1759,6 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	tdentry = tfhp->fh_dentry;
 	tdir = tdentry->d_inode;
 
-	err = (rqstp->rq_vers == 2) ? nfserr_acces : nfserr_xdev;
-	if (ffhp->fh_export != tfhp->fh_export)
-		goto out;
-
 	err = nfserr_perm;
 	if (!flen || isdotent(fname, flen) || !tlen || isdotent(tname, tlen))
 		goto out;
@@ -1836,6 +1798,8 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 
 	host_err = -EXDEV;
 	if (ffhp->fh_export->ex_path.mnt != tfhp->fh_export->ex_path.mnt)
+		goto out_dput_new;
+	if (ffhp->fh_export->ex_path.dentry != tfhp->fh_export->ex_path.dentry)
 		goto out_dput_new;
 
 	host_err = nfsd_break_lease(odentry->d_inode);
@@ -1993,7 +1957,7 @@ static __be32 nfsd_buffered_readdir(struct file *file, filldir_t func,
 	offset = *offsetp;
 
 	while (1) {
-		struct inode *dir_inode = file->f_path.dentry->d_inode;
+		struct inode *dir_inode = file_inode(file);
 		unsigned int reclen;
 
 		cdp->err = nfserr_eof; /* will be cleared on successful read */
@@ -2186,7 +2150,7 @@ nfsd_permission(struct svc_rqst *rqstp, struct svc_export *exp,
 	 * with NFSv3.
 	 */
 	if ((acc & NFSD_MAY_OWNER_OVERRIDE) &&
-	    inode->i_uid == current_fsuid())
+	    uid_eq(inode->i_uid, current_fsuid()))
 		return 0;
 
 	/* This assumes  NFSD_MAY_{READ,WRITE,EXEC} == MAY_{READ,WRITE,EXEC} */
