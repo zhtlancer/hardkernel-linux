@@ -102,8 +102,8 @@ static int vidio_set_fmt_ticks=0;
 
 extern int disable_sp2518;
 
-static int sp2518_h_active=1600;//800;
-static int sp2518_v_active=1198;//600;
+static int sp2518_h_active=1568;//800;
+static int sp2518_v_active=1176;//600;
 
 static int sp2518_have_open=0;
 static struct v4l2_fract sp2518_frmintervals_active = {
