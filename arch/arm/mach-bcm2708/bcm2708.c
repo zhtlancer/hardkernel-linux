@@ -98,6 +98,8 @@ static unsigned disk_led_active_low = 1;
 static unsigned reboot_part = 0;
 static unsigned w1_gpio_pin = W1_GPIO;
 static unsigned w1_gpio_pullup = W1_PULLUP;
+static unsigned bcm2835_mmc = 1;
+static bool vc_i2c_override = false;
 
 static void __init bcm2708_init_led(void);
 
@@ -460,6 +462,34 @@ struct platform_device bcm2708_emmc_device = {
 };
 #endif /* CONFIG_MMC_SDHCI_BCM2708 */
 
+#ifdef CONFIG_MMC_BCM2835	/* Arasan emmc SD (new) */
+static struct resource bcm2835_emmc_resources[] = {
+	[0] = {
+	       .start = EMMC_BASE,
+	       .end = EMMC_BASE + SZ_256 - 1,	/* we only need this area */
+	       /* the memory map actually makes SZ_4K available  */
+	       .flags = IORESOURCE_MEM,
+	       },
+	[1] = {
+	       .start = IRQ_ARASANSDIO,
+	       .end = IRQ_ARASANSDIO,
+	       .flags = IORESOURCE_IRQ,
+	       },
+};
+
+static u64 bcm2835_emmc_dmamask = 0xffffffffUL;
+
+struct platform_device bcm2835_emmc_device = {
+	.name = "mmc-bcm2835",
+	.id = 0,
+	.num_resources = ARRAY_SIZE(bcm2835_emmc_resources),
+	.resource = bcm2835_emmc_resources,
+	.dev = {
+		.dma_mask = &bcm2835_emmc_dmamask,
+		.coherent_dma_mask = 0xffffffffUL},
+};
+#endif /* CONFIG_MMC_BCM2835 */
+
 static struct resource bcm2708_powerman_resources[] = {
 	[0] = {
 	       .start = PM_BASE,
@@ -659,6 +689,20 @@ static struct platform_device snd_pcm5102a_codec_device = {
 };
 #endif
 
+#if defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_DACPLUS) || defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_DACPLUS_MODULE)
+static struct platform_device snd_rpi_hifiberry_dacplus_device = {
+        .name = "snd-rpi-hifiberry-dacplus",
+        .id = 0,
+        .num_resources = 0,
+};
+
+static struct i2c_board_info __initdata snd_pcm512x_hbdacplus_i2c_devices[] = {
+        {
+                I2C_BOARD_INFO("pcm5122", 0x4d)
+        },
+};
+#endif
+
 #if defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_DIGI) || defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_DIGI_MODULE)
 static struct platform_device snd_hifiberry_digi_device = {
         .name = "snd-hifiberry-digi",
@@ -672,6 +716,20 @@ static struct i2c_board_info __initdata snd_wm8804_i2c_devices[] = {
         },
 };
 
+#endif
+
+#if defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_AMP) || defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_AMP_MODULE)
+static struct platform_device snd_hifiberry_amp_device = {
+        .name = "snd-hifiberry-amp",
+        .id = 0,
+        .num_resources = 0,
+};
+
+static struct i2c_board_info __initdata snd_tas5713_i2c_devices[] = {
+        {
+                I2C_BOARD_INFO("tas5713", 0x1b)
+        },
+};
 #endif
 
 #if defined(CONFIG_SND_BCM2708_SOC_RPI_DAC) || defined(CONFIG_SND_BCM2708_SOC_RPI_DAC_MODULE)
@@ -1058,15 +1116,27 @@ void __init bcm2708_init(void)
 	bcm_register_device(&bcm2708_powerman_device);
 
 #ifdef CONFIG_MMC_SDHCI_BCM2708
-	bcm_register_device(&bcm2708_emmc_device);
+	if (!bcm2835_mmc)
+		bcm_register_device(&bcm2708_emmc_device);
+#endif
+#ifdef CONFIG_MMC_BCM2835
+	if (bcm2835_mmc)
+		bcm_register_device(&bcm2835_emmc_device);
 #endif
 	bcm2708_init_led();
 	for (i = 0; i < ARRAY_SIZE(bcm2708_alsa_devices); i++)
 		bcm_register_device(&bcm2708_alsa_devices[i]);
 
 	bcm_register_device(&bcm2708_spi_device);
-	bcm_register_device(&bcm2708_bsc0_device);
-	bcm_register_device(&bcm2708_bsc1_device);
+
+	if (vc_i2c_override) {
+		bcm_register_device(&bcm2708_bsc0_device);
+		bcm_register_device(&bcm2708_bsc1_device);
+	} else if ((boardrev & 0xffffff) == 0x2 || (boardrev & 0xffffff) == 0x3) {
+		bcm_register_device(&bcm2708_bsc0_device);
+	} else {
+		bcm_register_device(&bcm2708_bsc1_device);
+	}
 
 	bcm_register_device(&bcm2835_hwmon_device);
 	bcm_register_device(&bcm2835_thermal_device);
@@ -1080,10 +1150,21 @@ void __init bcm2708_init(void)
         bcm_register_device(&snd_pcm5102a_codec_device);
 #endif
 
+#if defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_DACPLUS) || defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_DACPLUS_MODULE)
+        bcm_register_device(&snd_rpi_hifiberry_dacplus_device);
+        i2c_register_board_info(1, snd_pcm512x_hbdacplus_i2c_devices, ARRAY_SIZE(snd_pcm512x_hbdacplus_i2c_devices));
+#endif
+
 #if defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_DIGI) || defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_DIGI_MODULE)
         bcm_register_device(&snd_hifiberry_digi_device);
         i2c_register_board_info(1, snd_wm8804_i2c_devices, ARRAY_SIZE(snd_wm8804_i2c_devices));
 #endif
+
+#if defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_AMP) || defined(CONFIG_SND_BCM2708_SOC_HIFIBERRY_AMP_MODULE)
+        bcm_register_device(&snd_hifiberry_amp_device);
+        i2c_register_board_info(1, snd_tas5713_i2c_devices, ARRAY_SIZE(snd_tas5713_i2c_devices));
+#endif
+
 
 #if defined(CONFIG_SND_BCM2708_SOC_RPI_DAC) || defined(CONFIG_SND_BCM2708_SOC_RPI_DAC_MODULE)
         bcm_register_device(&snd_rpi_dac_device);
@@ -1285,3 +1366,6 @@ module_param(disk_led_active_low, uint, 0644);
 module_param(reboot_part, uint, 0644);
 module_param(w1_gpio_pin, uint, 0644);
 module_param(w1_gpio_pullup, uint, 0644);
+module_param(bcm2835_mmc, uint, 0644);
+module_param(vc_i2c_override, bool, 0644);
+MODULE_PARM_DESC(vc_i2c_override, "Allow the use of VC's I2C peripheral.");
