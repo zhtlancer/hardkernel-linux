@@ -148,7 +148,7 @@ EXPORT_SYMBOL(odroid_get_wifi_irqnum);
 
 //[*]--------------------------------------------------------------------------------------------------[*]
 #if defined(CONFIG_BOARD_ODROID_X)||defined(CONFIG_BOARD_ODROID_X2)||defined(CONFIG_BOARD_ODROID_U)
-static  unsigned char   HdmiBootArgs[5];
+static  unsigned char   HdmiBootArgs[10];
 static  unsigned char   VOutArgs[5];
 static  unsigned char   AInArgs[5];
 
@@ -177,9 +177,11 @@ __setup("audio_in=", audio_in_setup);
 int odroid_get_hdmi_resolution  (void)
 {
     // Bootarg setup 1080p
-    if(!strncmp("1080", HdmiBootArgs, 4))   return   3;
-    else if(!strncmp("720", HdmiBootArgs, 4))   return   2;
-    else if(!strncmp("480", HdmiBootArgs, 4))   return   1;
+    if(!strncmp("1080p50", HdmiBootArgs, 7))    return   5;
+    if(!strncmp("720p50" , HdmiBootArgs, 6))    return   4;
+    if(!strncmp("1080"   , HdmiBootArgs, 4))    return   3;
+    if(!strncmp("720"    , HdmiBootArgs, 4))    return   2;
+    if(!strncmp("480"    , HdmiBootArgs, 4))    return   1;
         
     return  (gpio_get_value(EXYNOS4_GPX2(2)) || gpio_get_value(EXYNOS4_GPX0(3)));
 }
