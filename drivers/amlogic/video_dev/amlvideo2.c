@@ -2191,6 +2191,10 @@ static int  amlvideo2_thread_tick(struct amlvideo2_fh *fh)
 	if(no_frame)
 		goto unlock;
 	if(frame_inittime == 1){
+		if(tmp_vf){
+			vf_inqueue(tmp_vf,node->recv.name);
+			tmp_vf = NULL;
+		}
 		frameInv_adjust = 0;
 		frameInv = 0;
 		thread_ts1.tv_sec = vf->pts_us64& 0xFFFFFFFF;
@@ -2207,6 +2211,10 @@ static int  amlvideo2_thread_tick(struct amlvideo2_fh *fh)
 #else
 	int active_duration = 0;
 	if(frame_inittime == 1){
+		if(tmp_vf){
+			vf_inqueue(tmp_vf,node->recv.name);
+			tmp_vf = NULL;
+		}
 	   	if(no_frame)
 			goto unlock;
 		frameInv_adjust = 0;
@@ -2381,6 +2389,7 @@ static int amlvideo2_thread(void *data)
 	while(!kthread_should_stop()){
 		msleep(10);
 	}
+	tmp_vf = NULL;
 	dprintk(node->vid_dev, 1, "thread: exit\n");
 	return ret;
 }
@@ -3000,11 +3009,11 @@ static int vidioc_streamon(struct file *file, void *priv, enum v4l2_buf_type i)
 	vops->start_tvin_service(node->vdin_device_num,&para);
 
 start:
-	fh->is_streamed_on = 1;
-	frameInv_adjust = 0;
-	frameInv = 0;
-	tmp_vf = NULL;
 	frame_inittime = 1;
+	fh->is_streamed_on = 1;
+	//frameInv_adjust = 0;
+	//frameInv = 0;
+	//tmp_vf = NULL;
 	do_gettimeofday( &thread_ts1);
 #ifdef TEST_LATENCY
 	cur_time  = cur_time_out = thread_ts1.tv_sec;
