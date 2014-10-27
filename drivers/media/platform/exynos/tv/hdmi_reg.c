@@ -1803,6 +1803,15 @@ static const u8 *hdmiphy_timing2conf(struct v4l2_dv_timings *timings)
 	return  hdmiphy_conf[i].data;
 }
 
+// Config Enable : Device Drivers -> Hardkernel
+#if defined(CONFIG_ODROID_EXYNOS5_HDMI_PHY_TUNE)
+    // hdmi_conf_28nm.c
+    extern  void hdmi_phy_tune(unsigned char *);
+    #if defined(CONFIG_ODROID_EXYNOS5_HDMI_PHY_TUNE)
+        extern  void hdmi_phy_tune_info(unsigned char *);
+    #endif
+#endif
+
 int hdmi_conf_apply(struct hdmi_device *hdmi_dev)
 {
 	struct device *dev = hdmi_dev->dev;
@@ -1826,6 +1835,14 @@ int hdmi_conf_apply(struct hdmi_device *hdmi_dev)
 		}
 
 		memcpy(buffer, data, 32);
+
+#if defined(CONFIG_ODROID_EXYNOS5_HDMI_PHY_TUNE)
+        hdmi_phy_tune(buffer);
+    #if defined(CONFIG_ODROID_EXYNOS5_HDMI_PHY_TUNE_DEBUG)
+        // Current HDMI-PHY Info Display
+        hdmi_phy_tune_info(buffer);
+    #endif
+#endif
 		hdmiphy_set_mode(hdmi_dev, 0);
 		hdmiphy_conf_store(hdmi_dev, buffer);
 		hdmiphy_set_mode(hdmi_dev, 1);
