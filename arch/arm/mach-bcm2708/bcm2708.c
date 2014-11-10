@@ -101,7 +101,7 @@ static unsigned w1_gpio_pin = W1_GPIO;
 static unsigned w1_gpio_pullup = W1_PULLUP;
 static int pps_gpio_pin = -1;
 static unsigned bcm2835_mmc = 1;
-static bool vc_i2c_override = false;
+static bool vc_i2c_override = true;
 
 static void __init bcm2708_init_led(void);
 

@@ -74,7 +74,7 @@ static unsigned int baudrate = CONFIG_I2C_BCM2708_BAUDRATE;
 module_param(baudrate, uint, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 MODULE_PARM_DESC(baudrate, "The I2C baudrate");
 
-static bool combined = false;
+static bool combined = true;
 module_param(combined, bool, 0644);
 MODULE_PARM_DESC(combined, "Use combined transactions");
 
