@@ -1074,7 +1074,13 @@ static const struct hid_device_id mt_devices[] = {
     { .driver_data = MT_CLS_DEFAULT,
     	HID_USB_DEVICE(USB_VENDOR_ID_FOCALTECH, 
     	    USB_DEVICE_ID_FOCALTECH_TOUCH) },
+    	    
+    /* Chalkboard Electronics 7" and 10" */
+    { .driver_data = MT_CLS_DEFAULT, HID_USB_DEVICE(0x04D8,0xF724) },
 
+    /* Chalkboard Electronics 14" */
+    { .driver_data = MT_CLS_DEFAULT, HID_USB_DEVICE(0x0EEF,0xA107) },
+    
     /* Elitegroup Computer Systems */
     { .driver_data = MT_CLS_DEFAULT,
     	HID_USB_DEVICE(USB_VENDOR_ID_ELITEGROUP, 
