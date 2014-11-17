@@ -480,6 +480,10 @@
                         "usb1_to_ddr";
 	};
 
+	odroid_sysfs {
+		compatible = "odroid-sysfs";
+	};
+
 	dwc2_a {
 		compatible = "amlogic,dwc2";
 		reg = <0x0 0xc9000000 0x0 0x40000>;
