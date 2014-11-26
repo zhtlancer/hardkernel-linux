@@ -38,7 +38,7 @@
  * however when loading firmware a higher value is
  * required. In that case we use the REGISTER_TIMEOUT_FIRMWARE.
  */
-#define REGISTER_TIMEOUT		500
+#define REGISTER_TIMEOUT		100
 #define REGISTER_TIMEOUT_FIRMWARE	1000
 
 /**
