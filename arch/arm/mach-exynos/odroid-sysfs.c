@@ -180,8 +180,8 @@ int odroid_get_hdmi_resolution  (void)
     if(!strncmp("1080p50", HdmiBootArgs, 7))    return   5;
     if(!strncmp("720p50" , HdmiBootArgs, 6))    return   4;
     if(!strncmp("1080"   , HdmiBootArgs, 4))    return   3;
-    if(!strncmp("720"    , HdmiBootArgs, 4))    return   2;
-    if(!strncmp("480"    , HdmiBootArgs, 4))    return   1;
+    if(!strncmp("720"    , HdmiBootArgs, 3))    return   2;
+    if(!strncmp("480"    , HdmiBootArgs, 3))    return   1;
         
     return  (gpio_get_value(EXYNOS4_GPX2(2)) || gpio_get_value(EXYNOS4_GPX0(3)));
 }
