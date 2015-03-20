@@ -792,3 +792,7 @@
 #define USB_VENDOR_ID_FOCALTECH 0x2808
 #define USB_DEVICE_ID_FOCALTECH_TOUCH   0x81C9
 #endif
+
+/* Silicon Integrated Systems Corp */
+#define USB_VENDOR_ID_SILICON     0x0457
+#define USB_DEVICE_ID_SILICON_TOUCH     0x1057

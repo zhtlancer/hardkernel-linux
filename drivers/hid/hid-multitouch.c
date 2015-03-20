@@ -1177,6 +1177,11 @@ static const struct hid_device_id mt_devices[] = {
 		HID_USB_DEVICE(USB_VENDOR_ID_ZYTRONIC,
 			USB_DEVICE_ID_ZYTRONIC_ZXY100) },
 
+	 /* Silicon Integrated Systems Corp */
+  	{ .driver_data = MT_CLS_DEFAULT,
+        HID_USB_DEVICE(USB_VENDOR_ID_SILICON,
+            USB_DEVICE_ID_SILICON_TOUCH) },
+
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, mt_devices);
