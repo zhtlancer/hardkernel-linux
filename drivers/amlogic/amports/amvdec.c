@@ -914,6 +914,8 @@ EXPORT_SYMBOL(amvdec_disable);
 #ifdef CONFIG_PM
 EXPORT_SYMBOL(amvdec_suspend);
 EXPORT_SYMBOL(amvdec_resume);
+EXPORT_SYMBOL(amhevc_suspend);
+EXPORT_SYMBOL(amhevc_resume);
 #endif
 
 MODULE_DESCRIPTION("Amlogic Video Decoder Utility Driver");
