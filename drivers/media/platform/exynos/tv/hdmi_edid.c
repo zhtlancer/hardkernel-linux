@@ -192,6 +192,8 @@ static int edid_i2c_read(struct hdmi_device *hdev, u8 segment, u8 offset,
 		}
 	};
 
+	msleep(25);
+
 	if (!i2c)
 		return -ENODEV;
 
@@ -494,6 +496,11 @@ int edid_update(struct hdmi_device *hdev)
 	int block_cnt = 0;
 	int ret = 0;
 	int i;
+
+#ifdef CONFIG_MACH_ODROIDXU3
+	if (HdmiEDIDBootArgs == 0)
+		goto out;
+#endif
 
 	edid_misc = 0;
 
