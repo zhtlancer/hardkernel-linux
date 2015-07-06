@@ -5470,6 +5470,13 @@ F:	include/linux/mei_cl_bus.h
 F:	drivers/misc/mei/*
 F:	Documentation/misc-devices/mei/*
 
+INTEL PMC IPC DRIVER
+M:	Zha Qipeng<qipeng.zha@intel.com>
+L:	platform-driver-x86@vger.kernel.org
+S:	Maintained
+F:	drivers/platform/x86/intel_pmc_ipc.c
+F:	arch/x86/include/asm/intel_pmc_ipc.h
+
 IOC3 ETHERNET DRIVER
 M:	Ralf Baechle <ralf@linux-mips.org>
 L:	linux-mips@linux-mips.org
@@ -7212,15 +7219,25 @@ F:	drivers/power/bq27x00_battery.c
 F:	drivers/power/isp1704_charger.c
 F:	drivers/power/rx51_battery.c
 
-NTB DRIVER
+NTB DRIVER CORE
 M:	Jon Mason <jdmason@kudzu.us>
 M:	Dave Jiang <dave.jiang@intel.com>
+M:	Allen Hubbe <Allen.Hubbe@emc.com>
 S:	Supported
 W:	https://github.com/jonmason/ntb/wiki
 T:	git git://github.com/jonmason/ntb.git
 F:	drivers/ntb/
 F:	drivers/net/ntb_netdev.c
 F:	include/linux/ntb.h
+F:	include/linux/ntb_transport.h
+
+NTB INTEL DRIVER
+M:	Jon Mason <jdmason@kudzu.us>
+M:	Dave Jiang <dave.jiang@intel.com>
+S:	Supported
+W:	https://github.com/jonmason/ntb/wiki
+T:	git git://github.com/jonmason/ntb.git
+F:	drivers/ntb/hw/intel/
 
 NTFS FILESYSTEM
 M:	Anton Altaparmakov <anton@tuxera.com>
@@ -7364,7 +7381,6 @@ M:	Ohad Ben-Cohen <ohad@wizery.com>
 L:	linux-omap@vger.kernel.org
 S:	Maintained
 F:	drivers/hwspinlock/omap_hwspinlock.c
-F:	arch/arm/mach-omap2/hwspinlock.c
 
 OMAP MMC SUPPORT
 M:	Jarkko Lavinen <jarkko.lavinen@nokia.com>
