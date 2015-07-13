@@ -145,7 +145,7 @@
         compatible = "amlogic,ppmgr";
         dev_name = "ppmgr";
         status = "okay";
-        reserve-memory = <0x01000000>; // 16M
+        reserve-memory = <0x02000000>; // 32M
     };
 
     amvenc_avc {
@@ -162,7 +162,7 @@
         status = "ok";
         share-memory-name = "ppmgr0";
         share-memory-offset = <0>;
-        share-memory-size = <0x01000000>; //16M
+        share-memory-size = <0x02000000>; //32M
     };
 
     mesonvout {
