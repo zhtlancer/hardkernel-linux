@@ -1182,6 +1182,16 @@ static const struct hid_device_id mt_devices[] = {
         HID_USB_DEVICE(USB_VENDOR_ID_SILICON,
             USB_DEVICE_ID_SILICON_TOUCH) },
 
+	 /* Chalkboard Electronics 10" HDMI/USB Multitouch Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_ELECTRONICS,
+				USB_DEVICE_ID_CHALKBOARD_TOUCH) },
+
+	 /* Acer UT220HQL tbmjz HDMI/USB Multitouch Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_ACER,
+				USB_DEVICE_ID_UT220HQL_TOUCH) },
+
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, mt_devices);
