@@ -923,3 +923,7 @@
 /* Acer UT220HQL tbmjz HDMI/USB Multitouch Screen */
 #define USB_VENDOR_ID_ACER 0x25AA
 #define USB_DEVICE_ID_UT220HQL_TOUCH 0x8882
+
+/* Xenarc 700CSH with eGalax Capacitive Multi-touch Screen */
+#define USB_VENDOR_ID_XENARC 0x0EEF
+#define USB_DEVICE_ID_700CSH_TOUCH 0x7200
