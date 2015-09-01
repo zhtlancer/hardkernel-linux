@@ -3017,7 +3017,7 @@ void osd_init_hw(u32 logo_loaded)
 	osd_hw.color_info[OSD1] = NULL;
 	osd_hw.color_info[OSD2] = NULL;
 	osd_hw.color_key[OSD1] = osd_hw.color_key[OSD2] = 0xffffffff;
-	osd_hw.free_scale_enable[OSD1] = osd_hw.free_scale_enable[OSD2] = 0;
+	osd_hw.free_scale_enable[OSD1] = osd_hw.free_scale_enable[OSD2] = 1;
 	osd_hw.scale[OSD1].h_enable = osd_hw.scale[OSD1].v_enable = 0;
 	osd_hw.scale[OSD2].h_enable = osd_hw.scale[OSD2].v_enable = 0;
 	osd_hw.mode_3d[OSD2].enable = osd_hw.mode_3d[OSD1].enable = 0;
