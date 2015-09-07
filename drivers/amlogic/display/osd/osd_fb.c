@@ -2245,6 +2245,13 @@ static int osd_probe(struct platform_device *pdev)
 		/* create device attribute files */
 		for (i = 0; i < ARRAY_SIZE(osd_attrs); i++)
 			ret = device_create_file(fbi->dev, &osd_attrs[i]);
+
+		/* Linux Setup */
+		if(index == DEV_OSD0) {
+			osd_set_free_scale_enable_hw(fbi->node, 0);
+			osd_set_free_scale_mode_hw(fbi->node, 1);
+		}
+
 	}
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	early_suspend.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING;
