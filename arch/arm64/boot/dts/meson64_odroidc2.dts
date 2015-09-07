@@ -133,13 +133,13 @@
 		memory-region = <&fb_reserved>;
 		dev_name = "meson-fb";
 		status = "okay";
-                interrupts = <0 3 1
-                        0 89 1>;
+		interrupts = <0 3 1 0 89 1>;
 		interrupt-names = "viu-vsync", "rdma";
 		mem_size = <0x01800000 0x00100000>; /* fb0/fb1 memory size */
-                vmode = <3>;
-		scale_mode = <1>;
-		display_size_default = <1920 1080 1920 3240 32>;
+		vmode = <3>; /* VMODE_1080P */
+		scale_mode = <0>; /* 1:1 Scale */
+		4k2k_fb = <1>;
+		display_size_default = <1920 1080 1920 2160 32>;
 	};
 
 	ge2d {
