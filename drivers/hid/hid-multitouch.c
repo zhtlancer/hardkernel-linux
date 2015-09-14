@@ -1409,17 +1409,34 @@ static const struct hid_device_id mt_devices[] = {
 	 /* Chalkboard Electronics 10" HDMI/USB Multitouch Screen */
 	{ .driver_data = MT_CLS_DEFAULT,
 		HID_USB_DEVICE(USB_VENDOR_ID_ELECTRONICS,
-				USB_DEVICE_ID_CHALKBOARD_TOUCH) },
+				USB_DEVICE_ID_CHALKBOARD_10_TOUCH) },
 
 	 /* Acer UT220HQL tbmjz HDMI/USB Multitouch Screen */
 	{ .driver_data = MT_CLS_DEFAULT,
 		HID_USB_DEVICE(USB_VENDOR_ID_ACER,
 				USB_DEVICE_ID_UT220HQL_TOUCH) },
 
-	 /* Xenarc 700CSH with eGalax Capacitive Multi-touch Screen */
+	 /* eGalax Capacitive Multi-touch Screen */
+	 /* Xenarc 700CSH */
 	{ .driver_data = MT_CLS_DEFAULT,
-		HID_USB_DEVICE(USB_VENDOR_ID_XENARC,
+		HID_USB_DEVICE(USB_VENDOR_ID_EGALAX,
 				USB_DEVICE_ID_700CSH_TOUCH) },
+
+	 /* Chalkboard Electronics 14" */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_EGALAX,
+				USB_DEVICE_ID_AT070TN90_TOUCH) },
+
+	 /* D_WAV Scientific Co.,Ltd  */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_EGALAX,
+				USB_DEVICE_ID_CHALKBOARD_14_TOUCH) },
+
+	 /* SINGWAY XWC1359 7'' USB capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_SINGWAY,
+				USB_DEVICE_ID_XWC1359_7_TOUCH) },
+
 
 	/* Generic MT device */
 	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_MULTITOUCH, HID_ANY_ID, HID_ANY_ID) },
