@@ -799,12 +799,21 @@
 
 /* Chalkboard Electronics 10" HDMI/USB Multitouch Screen */
 #define USB_VENDOR_ID_ELECTRONICS 0x04D8
-#define USB_DEVICE_ID_CHALKBOARD_TOUCH 0xF724
+#define USB_DEVICE_ID_CHALKBOARD_10_TOUCH 0xF724
 
 /* Acer UT220HQL tbmjz HDMI/USB Multitouch Screen */
 #define USB_VENDOR_ID_ACER 0x25AA
 #define USB_DEVICE_ID_UT220HQL_TOUCH 0x8882
 
-/* Xenarc 700CSH with eGalax Capacitive Multi-touch Screen */
-#define USB_VENDOR_ID_XENARC 0x0EEF
+/* eGalax Capacitive Multi-touch Screen */
+#define USB_VENDOR_ID_EGALAX 0x0EEF
+/* Xenarc 700CSH */
 #define USB_DEVICE_ID_700CSH_TOUCH 0x7200
+/* D_WAV Scientific Co.,Ltd  */
+#define USB_DEVICE_ID_AT070TN90_TOUCH 0x0001
+/* Chalkboard Electronics 14" */
+#define USB_DEVICE_ID_CHALKBOARD_14_TOUCH 0xA107
+
+/* SINGWAY XWC1359 7'' USB capacitive Screen */
+#define USB_VENDOR_ID_SINGWAY 0x266E
+#define USB_DEVICE_ID_XWC1359_7_TOUCH 0x0101
