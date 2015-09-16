@@ -22,3 +22,5 @@ config DHD_USE_STATIC_BUF
 	depends on AM_WIFI
 	default n
 endif # AM_WIFI
+
+source "../hardware/wifi/realtek/drivers/8192cu/rtl8xxx_CU/Kconfig"
