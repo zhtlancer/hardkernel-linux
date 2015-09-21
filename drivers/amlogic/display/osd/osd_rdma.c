@@ -54,6 +54,7 @@ static char *info;
 static bool osd_rdma_init_flag;
 static int ctrl_ahb_rd_burst_size = 3;
 static int ctrl_ahb_wr_burst_size = 3;
+
 #define OSD_RDMA_UPDATE_RETRY_COUNT 50
 
 static int osd_rdma_init(void);
