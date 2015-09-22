@@ -314,8 +314,8 @@ static void set_hpll_clk_out(unsigned clk)
 #endif                 
     case 2160:	/* VMODE_480I, VMODE_480P, VMODE_576I,
 		   VMODE_576P, VMODE_1600X900P_60HZ */
-	    aml_write_reg32(P_HHI_VID_PLL_CNTL2, 0x59c80000);
-	    aml_write_reg32(P_HHI_VID_PLL_CNTL3, 0x0a563823);
+	    aml_write_reg32(P_HHI_VID_PLL_CNTL2, 0x69c84000);
+	    aml_write_reg32(P_HHI_VID_PLL_CNTL3, 0x8a46c023);
 	    aml_write_reg32(P_HHI_VID_PLL_CNTL4, 0x0123b100);
 	    aml_write_reg32(P_HHI_VID_PLL_CNTL5, 0x12385);
 	    aml_write_reg32(P_HHI_VID_PLL_CNTL,  0x6001042d);
@@ -697,7 +697,6 @@ static enc_clk_val_t setting_enc_clk_val_m8m2[] = {
                 {VMODE_1080I_59HZ, 2975, 4, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
 #endif
 		{VMODE_1080P,      2970, 2, 2, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
-		{VMODE_1080P,      2970, 2, 2, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
 #ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
                 // 2975 for hpll: vco2970 * 0.999
                 {VMODE_1080P,      2975, 2, 2, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
@@ -758,7 +757,6 @@ static enc_clk_val_t setting_enc_clk_val[] = {
     {VMODE_1080I_59HZ, 2975, 4, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
 #endif
     {VMODE_1080P,      2970, 2, 2, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
-    {VMODE_1080P,      2970, 2, 2, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
 #ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
        // 2975 for hpll: vco2970 * 0.999
     {VMODE_1080P,      2975, 2, 2, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
@@ -802,7 +800,6 @@ static enc_clk_val_t setting_enc_clk_val[] = {
     {VMODE_1080I_59HZ, 2975, 4, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
 #endif
     {VMODE_1080P,      2970, 2, 2, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
-    {VMODE_1080P,      2970, 2, 2, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
     {VMODE_720P_50HZ,  2970, 4, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
     {VMODE_1080I_50HZ, 2970, 4, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
     {VMODE_1080P_50HZ, 2970, 2, 2, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
@@ -837,7 +834,6 @@ static enc_clk_val_t setting_enc_clk_val[] = {
     {VMODE_576P,       1080, 4, 1, VIU_ENCP,  5, 4, 2, 1, -1, -1, -1,  1,  -1},
     {VMODE_720P,       1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
     {VMODE_1080I,      1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
-    {VMODE_1080P,      1488, 1, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
     {VMODE_1080P,      1488, 1, 1, VIU_ENCP, 10, 1, 1, 1, -1, -1, -1,  1,  -1},
     {VMODE_720P_50HZ,  1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
     {VMODE_1080I_50HZ, 1488, 2, 1, VIU_ENCP, 10, 1, 2, 1, -1, -1, -1,  1,  -1},
