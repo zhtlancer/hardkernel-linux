@@ -61,7 +61,7 @@
 
 		fb_reserved:linux,meson-fb {
 			compatible = "amlogic, fb-memory";
-			size = <0x0 0x2000000>;
+			size = <0x0 0x8000000>;
 			no-map;
 		};
 
@@ -135,7 +135,7 @@
 		status = "okay";
 		interrupts = <0 3 1 0 89 1>;
 		interrupt-names = "viu-vsync", "rdma";
-		mem_size = <0x01800000 0x00100000>; /* fb0/fb1 memory size */
+		mem_size = <0x06000000 0x00100000>; /* fb0/fb1 memory size */
 		vmode = <3>; /* VMODE_1080P */
 		scale_mode = <0>; /* 1:1 Scale */
 		4k2k_fb = <1>;
