@@ -59,6 +59,12 @@
 			no-map;
 		};
 
+		pstore:aml_pstore {
+			compatible = "amlogic, pstore";
+			reg = <0x0 0x20000000 0x0 0x100000>;
+			no-map;
+		};
+
 		fb_reserved:linux,meson-fb {
 			compatible = "amlogic, fb-memory";
 			size = <0x0 0x8000000>;
@@ -76,37 +82,46 @@
 			size = <0x0 0x2000000>;
 		};
 
-		/*  PICDEC reserved memory */
-		picdec_reserved:linux,picdec {
-			compatible = "amlogic, picdec_memory";
-			size = <0x0 0x1000000>;
-			//no-map;
+		picdec_cma_reserved:linux,picdec {
+			compatible = "shared-dma-pool";
+			linux,phandle = <4>;
+			reusable;
+			size = <0x0 0x3000000>;
+			alignment = <0x0 0x400000>;
+			linux,contiguous-region;
 		};
 
 		/*  POST PROCESS MANAGER */
-		ppmgr_reserved:linux,ppmgr {
-			compatible = "amlogic, ppmgr_memory";
-			size = <0x0 0x2000000>;
-		};
+		//ppmgr_reserved:linux,ppmgr {
+		//	compatible = "amlogic, ppmgr_memory";
+		//	size = <0x0 0x2000000>;
+		//};
 
 		/* AVC Encode CMA pool */
 		avc_cma_reserved:linux,avc_cma {
 			compatible = "shared-dma-pool";
 			linux,phandle = <1>;
 			reusable;
-			size = <0x0 0x2400000>;
+			size = <0x0 0x1400000>;
 			alignment = <0x0 0x400000>;
 			linux,contiguous-region;
 		};
 
-		/* vdec CMA pool */
-		vdec_cma_reserved:linux,vdec_cma {
+		codec_mm_cma:linux,codec_mm_cma {
 			compatible = "shared-dma-pool";
-			linux,phandle = <2>;
+			linux,phandle = <3>;
 			reusable;
-			size = <0x0 0x13000000>;
+			size = <0x0 0xbc00000>;
 			alignment = <0x0 0x400000>;
+			linux,contiguous-region;
 		};
+		/* codec shared reversed */
+		codec_mm_reserved:linux,codec_mm_reserved {
+			compatible = "amlogic, codec-mm-reserved";
+			size = <0x0 0x4100000>;
+			alignment = <0x0 0x100000>;
+ 			no-map;
+ 		};
 	};
 
 	meson-vout {
@@ -168,6 +183,13 @@
 		};
 	};
 
+	codec_mm {
+			compatible = "amlogic, codec, mm";
+			memory-region = <&codec_mm_cma &codec_mm_reserved>;
+			dev_name = "codec_mm";
+			status = "okay";
+	};
+
 	ethmac: ethernet@0xc9410000{
                 compatible = "amlogic, gxbb-rgmii-dwmac";
                 reg = <0x0 0xc9410000 0x0 0x10000
@@ -184,6 +206,14 @@
                 clocks = <&clock CLK_81>;
                 clock-names = "ethclk81";
         };
+
+	rtc{
+		compatible = "amlogic, aml_vrtc";
+		alarm_reg_addr = <0xc81000a8>;
+		timer_e_addr = <0xc1109988>;
+		init_date = "2015/01/01";
+		status = "okay";
+	};
 
 	mesonstream {
 		compatible = "amlogic, codec, streambuf";
@@ -212,7 +242,6 @@
 
 	vdec {
 		compatible = "amlogic, vdec";
-		memory-region = <&vdec_cma_reserved>;
 		dev_name = "vdec.0";
 		status = "okay";
 		interrupts = <0 3 1
@@ -231,14 +260,14 @@
 
 	picdec {
 		   compatible = "amlogic, picdec";
-		   memory-region = <&picdec_reserved>;
+		   memory-region = <&picdec_cma_reserved>;
 		   dev_name = "picdec";
 		   status = "okay";
 	};
 
 	ppmgr {
 		compatible = "amlogic, ppmgr";
-		memory-region = <&ppmgr_reserved>;
+		memory-region = <&ion_reserved>;
 		dev_name = "ppmgr";
 		status = "okay";
 	};
@@ -348,7 +377,7 @@
                         caps2 = "MMC_CAP2_HS200",
                               "MMC_CAP2_HS400";
                         f_min = <400000>;
-                        f_max = <200000000>;
+                        f_max = <100000000>;
                         max_req_size = <0x20000>; /**256KB*/
                         gpio_dat3 = <&gpio BOOT_3 GPIO_ACTIVE_HIGH>;
                         card_type = <1>;
@@ -379,6 +408,12 @@
                         "hdmitx_clk_phy",
                         "hdmitx_clk_vid";
 
+		gpio_i2c_en = <0x1>;
+
+		ranges;
+		#address-cells = <2>;
+		#size-cells = <2>;
+
 		vend_data: vend_data {
 			compatible = "amlogic, amlogic-cec";
 			status = "okay";
@@ -390,6 +425,19 @@
 			interrupt-names = "hdmitx_cec";
 			pinctrl-names = "hdmitx_aocec";
 			pinctrl-0 = <&hdmitx_aocec>;
+			reg = <0x0 0xc810023c 0x0 0x4>;
+		};
+	};
+
+	i2c_gpio: i2c_gpio {
+		compatible = "i2c-gpio";
+		dev_name = "i2c-gpio";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		gpios = <&gpio GPIOH_1 0 &gpio GPIOH_2 0>;
+		i2c_gpio_edid: i2c_gpio_edid {
+			compatible = "i2c-gpio-edid";
+			reg = <0x50 0x0 0x0 0x0>;
 		};
 	};
 
@@ -415,6 +463,7 @@
 		fifosize = < 128 >;
 		pinctrl-names = "default";
 		pinctrl-0 = <&a_uart_pins>;
+		resets = <&clock GCLK_IDX_UART0>;
 	};
 
 	canvas {
@@ -620,18 +669,7 @@
 		idle_interval = <1000>;
 		keep_mode;
 		keep_mode_threshold = <85>;
-		keep_mode_max_range = <1536000 792 4 3>;
-	};
-
-	saradc: saradc {
-		compatible = "amlogic, saradc";
-		status = "okay";
-		interrupts = <0 9 1>;
-		interrupt-names = "saradc_int";
-		clocks = <&clock CLK_XTAL>;
-		clock-names = "saradc_clk";
-                reg = <0x0 0xc1108680 0x0 0x30
-                        0x0 0xc883c3d8 0x0 0x08>;
+		keep_mode_max_range = <1536000 666 4 3>;
 	};
 
         leds: gpio_leds {
