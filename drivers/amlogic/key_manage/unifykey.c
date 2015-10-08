@@ -862,8 +862,12 @@ static ssize_t name_store(struct class *cla,
 			__LINE__);
 		return -EINVAL;
 	}
-	/**/
-	memcpy(name, buf, count-1);
+	/* check '\n' and del */
+	if (buf[count - 1] == '\n')
+		memcpy(name, buf, count-1);
+	else
+		memcpy(name, buf, count);
+
 	query_name_len = strlen(name);
 	pr_err("%s() %d, name %s, %d\n",
 		__func__,
@@ -955,6 +959,7 @@ static ssize_t write_store(struct class *cla,
 {
 	int ret;
 	unsigned char *keydata = NULL;
+	size_t key_len = 0;
 
 	if (curkey != NULL) {
 		keydata = kzalloc(count, GFP_KERNEL);
@@ -964,8 +969,16 @@ static ssize_t write_store(struct class *cla,
 				__func__, __LINE__);
 			goto _out;
 		}
-		memcpy(keydata, buf, count);
-		ret = key_unify_write(curkey->name, keydata, count);
+		/* check '\n' and del */
+		if (buf[count - 1] == '\n') {
+			memcpy(keydata, buf, count-1);
+			key_len = count - 1;
+		} else {
+			memcpy(keydata, buf, count);
+			key_len = count;
+		}
+
+		ret = key_unify_write(curkey->name, keydata, key_len);
 		if (ret < 0) {
 			pr_err("%s() %d: key write fail\n",
 				__func__, __LINE__);

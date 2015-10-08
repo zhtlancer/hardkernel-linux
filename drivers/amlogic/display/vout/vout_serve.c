@@ -37,6 +37,7 @@
 
 /* Amlogic Headers */
 #include <linux/amlogic/vout/vout_notify.h>
+#include <linux/amlogic/hdmi_tx/hdmi_tx_module.h>
 
 /* Local Headers */
 #include "vout_log.h"
@@ -56,10 +57,19 @@ static int early_resume_flag;
 
 static struct class *vout_class;
 static DEFINE_MUTEX(vout_mutex);
-static char vout_mode[64];
-static char vout_axis[64];
+static char vout_mode[64] __nosavedata;
+static char vout_axis[64] __nosavedata;
 static u32 vout_logo_vmode = VMODE_INIT_NULL;
 
+void update_vout_mode_attr(const struct vinfo_s *vinfo)
+{
+	if (vinfo == NULL) {
+		pr_info("error vinfo is null\n");
+		return;
+	} else
+		pr_info("vinfo mode is: %s\n", vinfo->name);
+	snprintf(vout_mode, 40, "%s", vinfo->name);
+}
 
 static void set_vout_mode(char *name);
 static void set_vout_axis(char *axis);
@@ -170,7 +180,8 @@ static void set_vout_mode(char *name)
 		vout_log_info("don't set the same mode as current.\n");
 		return;
 	}
-
+	phy_pll_off();
+	vout_log_info("disable HDMI PHY as soon as possible\n");
 	set_current_vmode(mode);
 	vout_log_info("new mode %s set ok\n", name);
 	vout_notifier_call_chain(VOUT_EVENT_MODE_CHANGE, &mode);
@@ -202,29 +213,6 @@ void update_vmode_status(char *name)
 	snprintf(vout_mode, 64, "%s\n", name);
 }
 EXPORT_SYMBOL(update_vmode_status);
-
-void set_vout_mode_fr_auto(char *name)
-{
-	enum vmode_e vmode;
-	vout_log_info("vmode set to %s\n", name);
-	vmode = validate_vmode(name);
-
-	if (VMODE_MAX == vmode) {
-		vout_log_info("no matched vout mode\n");
-		return;
-	}
-
-	if (vmode == get_current_vmode()) {
-		vout_log_info("don't set the same mode as current.\n");
-		return;
-	}
-
-	update_vmode_status(name);
-	set_current_vmode(vmode);
-	vout_log_info("new mode %s set ok.\n", name);
-	vout_notifier_call_chain(VOUT_EVENT_MODE_CHANGE, &vmode);
-}
-EXPORT_SYMBOL(set_vout_mode_fr_auto);
 #endif
 
 char *get_vout_mode_internal(void)
@@ -321,6 +309,27 @@ static int  meson_vout_resume(struct platform_device *pdev)
 }
 #endif
 
+#ifdef CONFIG_HIBERNATION
+static int  meson_vout_freeze(struct device *dev)
+{
+	return 0;
+}
+
+static int  meson_vout_thaw(struct device *dev)
+{
+	return 0;
+}
+
+static int  meson_vout_restore(struct device *dev)
+{
+	enum vmode_e mode;
+	mode = get_current_vmode();
+	vout_notifier_call_chain(VOUT_EVENT_MODE_CHANGE, &mode);
+
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_SCREEN_ON_EARLY
 void resume_vout_early(void)
 {
@@ -399,6 +408,14 @@ static const struct of_device_id meson_vout_dt_match[] = {
 	{ },
 };
 
+#ifdef CONFIG_HIBERNATION
+const struct dev_pm_ops vout_pm = {
+	.freeze		= meson_vout_freeze,
+	.thaw		= meson_vout_thaw,
+	.restore	= meson_vout_restore,
+};
+#endif
+
 static struct platform_driver
 	vout_driver = {
 	.probe      = meson_vout_probe,
@@ -410,6 +427,9 @@ static struct platform_driver
 	.driver = {
 		.name = "meson-vout",
 		.of_match_table = meson_vout_dt_match,
+#ifdef CONFIG_HIBERNATION
+	.pm	= &vout_pm,
+#endif
 	}
 };
 

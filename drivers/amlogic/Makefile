@@ -54,6 +54,8 @@ obj-$(CONFIG_AMLOGIC_ION)	+= ion_dev/
 
 obj-$(CONFIG_AML_DISPLAY)	+= display/
 
+obj-$(CONFIG_AMLOGIC_LED)	+= led/
+
 obj-$(CONFIG_AML_CANVAS)	+= canvas/
 
 obj-$(CONFIG_AM_VIDEO)		+= amports/
@@ -107,3 +109,10 @@ obj-$(CONFIG_AML_TEMP_SENSOR) += thermal/
 obj-$(CONFIG_AUDIO_DATA) += audinfo_kernel/
 
 obj-$(CONFIG_VIDEO_AMLOGIC_CAPTURE) += camera/
+
+obj-$(CONFIG_AML_CODEC_MM)  	+= codec_mm/
+
+obj-$(CONFIG_AML_WDT)  		+= watchdog/
+
+obj-$(CONFIG_INSTABOOT)		+= instaboot/
+

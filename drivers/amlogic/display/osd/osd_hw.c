@@ -66,7 +66,6 @@
 #ifdef CONFIG_AML_VSYNC_FIQ_ENABLE
 #define  FIQ_VSYNC
 #endif
-
 #define	VOUT_ENCI	1
 #define	VOUT_ENCP	2
 #define	VOUT_ENCT	3
@@ -111,8 +110,8 @@ static int g_vf_height;
 static int g_rotation_width;
 static int g_rotation_height;
 
-static int use_h_filter_mode = -1;
-static int use_v_filter_mode = -1;
+static __nosavedata int use_h_filter_mode = -1;
+static __nosavedata int use_v_filter_mode = -1;
 
 static unsigned int osd_h_filter_mode = 1;
 module_param(osd_h_filter_mode, uint, 0664);
@@ -304,7 +303,7 @@ static int out_fence_create(int *release_fence_fd, u32 *val, u32 buf_num)
 	struct sync_fence *outer_fence;
 	int out_fence_fd = -1;
 
-	out_fence_fd = get_unused_fd();
+	out_fence_fd = get_unused_fd_flags(O_CLOEXEC);
 	/* no file descriptor could be used. Error. */
 	if (out_fence_fd < 0)
 		return -1;
@@ -566,11 +565,14 @@ static irqreturn_t vsync_isr(int irq, void *dev_id)
 	osd_update_3d_mode();
 	osd_update_vsync_hit();
 #endif
-
+#ifdef CONFIG_VSYNC_RDMA
+	osd_rdma_interrupt_done_clear();
+#endif
 #ifndef FIQ_VSYNC
 	return IRQ_HANDLED;
 #endif
 }
+
 
 void osd_wait_vsync_hw(void)
 {
@@ -619,9 +621,6 @@ int osd_set_scan_mode(u32 index)
 			break;
 		case VMODE_1080I:
 		case VMODE_1080I_50HZ:
-#ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
-		case VMODE_1080I_59HZ:
-#endif
 			if (osd_hw.free_scale_mode[index]) {
 				osd_hw.field_out_en = 1;
 				switch (osd_hw.free_scale_data[index].y_end) {
@@ -1044,8 +1043,8 @@ static void osd_set_free_scale_enable_mode1(u32 index, u32 enable)
 				osd_hw.free_scale_data[index].y_end -
 				osd_hw.free_scale_data[index].y_start + 1;
 		}
-		spin_lock_irqsave(&osd_lock, lock_flags);
 		ret = osd_set_scan_mode(index);
+		spin_lock_irqsave(&osd_lock, lock_flags);
 		if (ret)
 			osd_hw.reg[index][OSD_COLOR_MODE].update_func();
 		osd_hw.reg[index][OSD_FREESCALE_COEF].update_func();
@@ -1054,8 +1053,8 @@ static void osd_set_free_scale_enable_mode1(u32 index, u32 enable)
 		osd_hw.reg[index][OSD_ENABLE].update_func();
 		spin_unlock_irqrestore(&osd_lock, lock_flags);
 	} else {
-		spin_lock_irqsave(&osd_lock, lock_flags);
 		ret = osd_set_scan_mode(index);
+		spin_lock_irqsave(&osd_lock, lock_flags);
 		if (ret)
 			osd_hw.reg[index][OSD_COLOR_MODE].update_func();
 		osd_hw.reg[index][DISP_GEOMETRY].update_func();
@@ -1173,9 +1172,6 @@ void osd_get_window_axis_hw(u32 index, s32 *x0, s32 *y0, s32 *x1, s32 *y1)
 		case VMODE_576CVBS:
 		case VMODE_1080I:
 		case VMODE_1080I_50HZ:
-#ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
-		case VMODE_1080I_59HZ:
-#endif
 			*y0 = osd_hw.free_dst_data[index].y_start * 2;
 			*y1 = osd_hw.free_dst_data[index].y_end * 2;
 			break;
@@ -1205,9 +1201,6 @@ void osd_set_window_axis_hw(u32 index, s32 x0, s32 y0, s32 x1, s32 y1)
 		case VMODE_576CVBS:
 		case VMODE_1080I:
 		case VMODE_1080I_50HZ:
-#ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
-		case VMODE_1080I_59HZ:
-#endif
 			osd_hw.free_dst_data[index].y_start = y0 / 2;
 			osd_hw.free_dst_data[index].y_end = y1 / 2;
 			break;
@@ -1396,9 +1389,6 @@ void osd_set_antiflicker_hw(u32 index, u32 vmode, u32 yres)
 	case VMODE_576CVBS:
 	case VMODE_1080I:
 	case VMODE_1080I_50HZ:
-#ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
-	case VMODE_1080I_59HZ:
-#endif
 		osd_need_antiflicker = false;
 		break;
 	default:
@@ -3202,6 +3192,32 @@ void osd_resume_hw(void)
 	osd_log_info("osd_resumed\n");
 	return;
 }
+
+#ifdef CONFIG_HIBERNATION
+static unsigned int fb0_cfg_w0_save;
+void  osd_freeze_hw(void)
+{
+	osd_rdma_enable(0);
+	fb0_cfg_w0_save = osd_reg_read(VIU_OSD1_BLK0_CFG_W0);
+	pr_debug("osd_freezed\n");
+
+	return;
+}
+void osd_thaw_hw(void)
+{
+	pr_debug("osd_thawed\n");
+	osd_rdma_enable(1);
+	return;
+}
+void osd_restore_hw(void)
+{
+	osd_reg_write(VIU_OSD1_BLK0_CFG_W0, fb0_cfg_w0_save);
+	osd_rdma_enable(1);
+	pr_debug("osd_restored\n");
+
+	return;
+}
+#endif
 
 int osd_get_logo_index(void)
 {

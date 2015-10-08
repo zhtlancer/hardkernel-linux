@@ -34,7 +34,11 @@
 /************************************
  *    hdmitx device structure
  *************************************/
-#define VIC_MAX_NUM 128  /* consider 4k2k */
+/*  VIC_MAX_VALID_MODE and VIC_MAX_NUM are associated with
+	HDMITX_VIC420_OFFSET and HDMITX_VIC_MASK in hdmi_common.h */
+#define VIC_MAX_VALID_MODE	256 /* consider 4k2k */
+/* half for valid vic, half for vic with y420*/
+#define VIC_MAX_NUM 512
 #define AUD_MAX_NUM 60
 struct rx_audiocap {
 	unsigned char audio_format_code;
@@ -48,17 +52,21 @@ enum hd_ctrl {
 };
 
 struct rx_cap {
-	unsigned char native_Mode;
+	unsigned int native_Mode;
 	/*video*/
-	unsigned char VIC[VIC_MAX_NUM];
-	unsigned char VIC_count;
-	unsigned char native_VIC;
+	unsigned int VIC[VIC_MAX_NUM];
+	unsigned int VIC_count;
+	unsigned int native_VIC;
 	/*audio*/
 	struct rx_audiocap RxAudioCap[AUD_MAX_NUM];
 	unsigned char AUD_count;
 	unsigned char RxSpeakerAllocation;
 	/*vendor*/
 	unsigned int IEEEOUI;
+	unsigned int HF_IEEEOUI;	/* For HDMI Forum */
+	unsigned int scdc_present:1;
+	unsigned int scdc_rr_capable:1; /* SCDC read request */
+	unsigned int lte_340mcsc_scramble:1;
 	unsigned char ReceiverBrandName[4];
 	unsigned char ReceiverProductName[16];
 	unsigned int ColorDeepSupport;
@@ -120,12 +128,15 @@ struct hdmitx_dev {
 	struct task_struct *task_monitor;
 	struct task_struct *task_hdcp;
 	struct task_struct *task_cec;
+	struct notifier_block nb;
 	struct workqueue_struct *hdmi_wq;
 	struct device *hdtx_dev;
 	struct delayed_work work_hpd_plugin;
 	struct delayed_work work_hpd_plugout;
 	struct work_struct work_internal_intr;
 	struct delayed_work cec_work;
+	struct timer_list hdcp_timer;
+	int hdcp_try_times;
 #ifdef CONFIG_AML_HDMI_TX_14
 	wait_queue_head_t cec_wait_rx;
 #endif
@@ -184,7 +195,7 @@ struct hdmitx_dev {
 #define DISP_SWITCH_FORCE       0
 #define DISP_SWITCH_EDID        1
 	unsigned char disp_switch_config; /* 0, force; 1,edid */
-	unsigned char cur_VIC;
+	unsigned int cur_VIC;
 	unsigned char unplug_powerdown;
 	/**/
 	unsigned char hpd_event; /* 1, plugin; 2, plugout */
@@ -216,6 +227,7 @@ struct hdmitx_dev {
 	struct clk *clk_phy;
 	struct clk *clk_vid;
 	unsigned int mode4k60hz420;
+	unsigned int gpio_i2c_enable;
 };
 
 #define CMD_DDC_OFFSET          (0x10 << 24)
@@ -285,6 +297,7 @@ struct hdmitx_dev {
 #define COMP_AUDIO_SET_N_6144x2          0x1
 #define COMP_AUDIO_SET_N_6144x3          0x2
 #define MISC_AVMUTE_OP          (CMD_MISC_OFFSET + 0x0a)
+#define MISC_FINE_TUNE_HPLL     (CMD_MISC_OFFSET + 0x0b)
 	#define OFF_AVMUTE	0x0
 	#define CLR_AVMUTE	0x1
 	#define SET_AVMUTE	0x2
@@ -358,6 +371,12 @@ extern void hdmitx_output_rgb(void);
 
 extern int get_cur_vout_index(void);
 extern const struct vinfo_s *hdmi_get_current_vinfo(void);
+#ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
+extern enum fine_tune_mode_e get_hpll_tune_mode(void);
+extern void register_hdmi_edid_supported_func(int (*pfunc)(char *mode_name));
+#endif
+void phy_pll_off(void);
+
 
 
 /***********************************************************************
@@ -372,6 +391,12 @@ extern void hdmitx_hpd_plugin_handler(struct work_struct *work);
 extern void hdmitx_hpd_plugout_handler(struct work_struct *work);
 extern void hdmitx_internal_intr_handler(struct work_struct *work);
 extern unsigned char hdmi_audio_off_flag;
+/*
+ * hdmitx_audio_mute_op() is used by external driver call
+ * flag: 0: audio off   1: audio_on
+ *       2: for EDID auto mode
+ */
+extern void hdmitx_audio_mute_op(unsigned int flag);
 
 #define HDMITX_HWCMD_MUX_HPD_IF_PIN_HIGH       0x3
 #define HDMITX_HWCMD_TURNOFF_HDMIHW           0x4

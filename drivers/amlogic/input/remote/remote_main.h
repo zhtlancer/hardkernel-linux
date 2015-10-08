@@ -81,17 +81,17 @@ enum {
 /*remote config val*/
 /****************************************************************/
 static const struct reg_s RDECODEMODE_NEC[] = {
-	{LDR_ACTIVE, ((unsigned)477 << 16) | ((unsigned)400 << 0)},
+	{LDR_ACTIVE, ((unsigned)500 << 16) | ((unsigned)400 << 0)},
 	/* NEC leader 9500us,max 477:
 	(477* timebase = 20) = 9540 ;min 400 = 8000us*/
-	{LDR_IDLE, 248 << 16 | 202 << 0}, /* leader idle*/
-	{LDR_REPEAT, 130 << 16 | 110 << 0}, /* leader repeat*/
-	{DURATION_REG0, 60 << 16 | 48 << 0 }, /* logic '0' or '00'*/
-	{OPERATION_CTRL_REG0, 3 << 28 | (0xFA0 << 12) | 0x13},
+	{LDR_IDLE, 300 << 16 | 200 << 0}, /* leader idle*/
+	{LDR_REPEAT, 150 << 16 | 80 << 0}, /* leader repeat*/
+	{DURATION_REG0, 72 << 16 | 40 << 0 }, /* logic '0' or '00'*/
+	{OPERATION_CTRL_REG0, 7 << 28 | (0xFA0 << 12) | 0x13},
 	/* sys clock boby time.base time = 20 body frame 108ms*/
-	{DURATION_REG1_AND_STATUS, (111 << 20) | (100 << 10)},
+	{DURATION_REG1_AND_STATUS, (134 << 20) | (90 << 10)},
 	/* logic '1' or '01'*/
-	{OPERATION_CTRL_REG1, 0x9f40}, /* boby long decode (8-13)*/
+	{OPERATION_CTRL_REG1, 0x9f00}, /* boby long decode (8-13)*/
 	/*{OPERATION_CTRL_REG1,0xbe40},// boby long decode (8-13)*/
 	{OPERATION_CTRL_REG2, 0x0}, /* hard decode mode*/
 	{DURATION_REG2, 0},
@@ -100,17 +100,17 @@ static const struct reg_s RDECODEMODE_NEC[] = {
 };
 /****************************************************************/
 static const struct reg_s RDECODEMODE_DUOKAN[] = {
-	{LDR_ACTIVE, 53 << 16 | 50 << 0},
-	{LDR_IDLE, 31 << 16 | 25 << 0},
-	{LDR_REPEAT, 30 << 16 | 26 << 0},
-	{DURATION_REG0, 61 << 16 | 55 << 0 },
-	{OPERATION_CTRL_REG0, 3 << 28 | (0x5DC << 12) | 0x13},
+	{LDR_ACTIVE, ((65 << 16) | (40 << 0))},
+	{LDR_IDLE, ((37 << 16) | (15 << 0))},
+	{LDR_REPEAT, ((30 << 16) | (26 << 0))},
+	{DURATION_REG0, ((63 << 16) | (53 << 0))},
+	{OPERATION_CTRL_REG0, ((3 << 28) | (0x5DC << 12) | (0x13))},
 	/*body frame 30ms*/
-	{DURATION_REG1_AND_STATUS, (76 << 20) | 69 << 10},
+	{DURATION_REG1_AND_STATUS, ((78 << 20) | (68 << 10))},
 	{OPERATION_CTRL_REG1, 0x9300},
 	{OPERATION_CTRL_REG2, 0x10b},
-	{DURATION_REG2, 91 << 16 | 79 << 0},
-	{DURATION_REG3, 111 << 16 | 99 << 0},
+	{DURATION_REG2, ((96 << 16) | (80 << 0))},
+	{DURATION_REG3, ((112 << 16) | (92 << 0))},
 	{CONFIG_END,            0      }
 };
 /****************************************************************/
@@ -589,6 +589,7 @@ extern irqreturn_t remote_bridge_isr(int irq, void *dev_id);
 extern irqreturn_t remote_null_bridge_isr(int irq, void *dev_id);
 extern int remote_hw_reprot_null_key(struct remote *remote_data);
 extern int remote_hw_reprot_key(struct remote *remote_data);
+extern int remote_duokan_reprot_key(struct remote *remote_data);
 extern int remote_hw_nec_rca_2in1_reprot_key(struct remote *remote_data);
 extern int remote_hw_nec_toshiba_2in1_reprot_key(struct remote *remote_data);
 extern int remote_sw_reprot_key(struct remote *remote_data);

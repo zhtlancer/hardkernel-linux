@@ -25,6 +25,7 @@
 #include <linux/io.h>
 #include <linux/amlogic/saradc.h>
 #include "saradc_reg.h"
+#include <linux/reset.h>
 
 /* #define ENABLE_DYNAMIC_POWER */
 
@@ -80,6 +81,8 @@ static void saradc_reset(struct saradc *adc)
 	int clk_src, clk_div;
 	if (adc->regs->reg3 & FLAG_INITIALIZED) {
 		saradc_info("initialized by BL30\n");
+		if (adc->clk_reg)
+			*adc->clk_reg |= (1<<8);
 		return;
 	}
 	saradc_info("initialized by gxbb\n");
@@ -323,6 +326,7 @@ static int saradc_probe(struct platform_device *pdev)
 {
 	int err;
 	struct saradc *adc;
+	struct reset_control *rst;
 
 	adc = kzalloc(sizeof(struct saradc), GFP_KERNEL);
 	if (!adc) {
@@ -346,6 +350,10 @@ static int saradc_probe(struct platform_device *pdev)
 		err = -ENOENT;
 		goto end_err;
 	}
+
+	rst = devm_reset_control_get(&pdev->dev, NULL);
+	if (!IS_ERR(rst))
+		reset_control_deassert(rst);
 
 	saradc_reset(adc);
 	gp_saradc = adc;
@@ -397,6 +405,16 @@ static int saradc_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static void saradc_shutdown(struct platform_device *pdev)
+{
+	struct saradc *adc = (struct saradc *)dev_get_drvdata(&pdev->dev);
+	unsigned long flags;
+
+	spin_lock_irqsave(&adc->lock, flags);
+	saradc_power_control(adc, 0);
+	spin_unlock_irqrestore(&adc->lock, flags);
+}
+
 #ifdef CONFIG_OF
 static const struct of_device_id saradc_dt_match[] = {
 	{ .compatible = "amlogic, saradc"},
@@ -411,6 +429,7 @@ static struct platform_driver saradc_driver = {
 	.remove     = saradc_remove,
 	.suspend    = saradc_suspend,
 	.resume     = saradc_resume,
+	.shutdown = saradc_shutdown,
 	.driver     = {
 		.name   = "saradc",
 		.of_match_table = saradc_dt_match,

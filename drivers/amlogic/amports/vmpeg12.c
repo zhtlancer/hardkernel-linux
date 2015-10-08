@@ -30,10 +30,13 @@
 #include <linux/amlogic/amports/vframe_provider.h>
 #include <linux/amlogic/amports/vframe_receiver.h>
 #include <linux/amlogic/cpu_version.h>
+#include <linux/amlogic/codec_mm/codec_mm.h>
+#include <linux/dma-mapping.h>
 
 #include "vdec_reg.h"
 #include "vmpeg12.h"
 #include "arch/register.h"
+#include "amports_priv.h"
 
 
 #ifdef CONFIG_AM_VDEC_MPEG12_LOG
@@ -153,6 +156,9 @@ static struct timer_list recycle_timer;
 static u32 stat;
 static unsigned long buf_start;
 static u32 buf_size, ccbuf_phyAddress;
+static void *ccbuf_phyAddress_virt;
+static int ccbuf_phyAddress_is_remaped_nocache;
+
 static DEFINE_SPINLOCK(lock);
 
 static u32 frame_rpt_state;
@@ -169,7 +175,7 @@ static inline int pool_index(struct vframe_s *vf)
 {
 	if ((vf >= &vfpool[0]) && (vf <= &vfpool[VF_POOL_SIZE - 1]))
 		return 0;
-	else if ((vf >= &vfpool[1]) && (vf <= &vfpool2[VF_POOL_SIZE - 1]))
+	else if ((vf >= &vfpool2[0]) && (vf <= &vfpool2[VF_POOL_SIZE - 1]))
 		return 1;
 	else
 		return -1;
@@ -261,8 +267,18 @@ static irqreturn_t vmpeg12_isr(int irq, void *dev_id)
 	reg = READ_VREG(MREG_BUFFEROUT);
 
 	if ((reg >> 16) == 0xfe) {
-		wakeup_userdata_poll(reg & 0xffff,
-			ccbuf_phyAddress, CCBUF_SIZE, 0);
+		if (!ccbuf_phyAddress_is_remaped_nocache &&
+			ccbuf_phyAddress &&
+			ccbuf_phyAddress_virt) {
+			codec_mm_dma_flush(
+				ccbuf_phyAddress_virt,
+				CCBUF_SIZE,
+				DMA_FROM_DEVICE);
+		}
+		wakeup_userdata_poll(
+			reg & 0xffff,
+			(unsigned long)ccbuf_phyAddress_virt,
+			CCBUF_SIZE, 0);
 		WRITE_VREG(MREG_BUFFEROUT, 0);
 	} else if (reg) {
 		info = READ_VREG(MREG_PIC_INFO);
@@ -618,9 +634,10 @@ static void vmpeg_put_timer_func(unsigned long arg)
 	while (!kfifo_is_empty(&recycle_q) && (READ_VREG(MREG_BUFFERIN) == 0)) {
 		struct vframe_s *vf;
 		if (kfifo_get(&recycle_q, &vf)) {
-			if ((vf->index >= 0) && (--vfbuf_use[vf->index] == 0)) {
+			if ((vf->index < DECODE_BUFFER_NUM_MAX) &&
+			 (--vfbuf_use[vf->index] == 0)) {
 				WRITE_VREG(MREG_BUFFERIN, vf->index + 1);
-				vf->index = -1;
+				vf->index = DECODE_BUFFER_NUM_MAX;
 			}
 
 			if (pool_index(vf) == cur_pool_idx) {
@@ -634,7 +651,7 @@ static void vmpeg_put_timer_func(unsigned long arg)
 		frame_width * frame_height * (96000 / frame_dur)) {
 		int fps = 96000 / frame_dur;
 		saved_resolution = frame_width * frame_height * fps;
-		vdec_source_changed(VFORMAT_H264,
+		vdec_source_changed(VFORMAT_MPEG12,
 			frame_width, frame_height, fps);
 	}
 
@@ -747,8 +764,18 @@ static void vmpeg12_canvas_init(void)
 		}
 	}
 
-	ccbuf_phyAddress = buf_start + 9 * decbuf_size;
-	WRITE_VREG(MREG_CO_MV_START, buf_start + 9 * decbuf_size + CCBUF_SIZE);
+	WRITE_VREG(MREG_CO_MV_START,
+		buf_start + 9 * decbuf_size + CCBUF_SIZE);
+	if (!ccbuf_phyAddress) {
+		ccbuf_phyAddress = (u32)(buf_start + 9 * decbuf_size);
+		ccbuf_phyAddress_virt = codec_mm_phys_to_virt(ccbuf_phyAddress);
+		if (!ccbuf_phyAddress_virt) {
+			ccbuf_phyAddress_virt = ioremap_nocache(
+				ccbuf_phyAddress,
+				CCBUF_SIZE);
+			ccbuf_phyAddress_is_remaped_nocache = 1;
+		}
+	}
 
 }
 
@@ -831,14 +858,20 @@ static void vmpeg12_local_init(void)
 	cur_pool_idx ^= 1;
 
 	for (i = 0; i < VF_POOL_SIZE; i++) {
-		const struct vframe_s *vf =
-			(cur_pool_idx == 0) ? &vfpool[i] : &vfpool2[i];
-		vfpool[i].index = -1;
+		const struct vframe_s *vf;
+		if (cur_pool_idx == 0) {
+			vf = &vfpool[i];
+			vfpool[i].index = DECODE_BUFFER_NUM_MAX;
+			} else {
+			vf = &vfpool2[i];
+			vfpool2[i].index = DECODE_BUFFER_NUM_MAX;
+			}
 		kfifo_put(&newframe_q, (const struct vframe_s *)vf);
 	}
 
 	for (i = 0; i < DECODE_BUFFER_NUM_MAX; i++)
 		vfbuf_use[i] = 0;
+
 
 	frame_width = frame_height = frame_dur = frame_prog = 0;
 	frame_force_skip_flag = 0;
@@ -969,7 +1002,12 @@ static int amvdec_mpeg12_remove(struct platform_device *pdev)
 	}
 
 	amvdec_disable();
+	if (ccbuf_phyAddress_is_remaped_nocache)
+		iounmap(ccbuf_phyAddress_virt);
 
+	ccbuf_phyAddress_virt = NULL;
+	ccbuf_phyAddress = 0;
+	ccbuf_phyAddress_is_remaped_nocache = 0;
 	amlog_level(LOG_LEVEL_INFO, "amvdec_mpeg12 remove.\n");
 
 	return 0;

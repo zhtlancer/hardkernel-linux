@@ -152,8 +152,8 @@ static dev_t di_devno;
 static struct class *di_clsp;
 
 #define INIT_FLAG_NOT_LOAD 0x80
-/* remove process count for p separate by i */
-static const char version_s[] = "2015-6-17a";
+/* enable nr clock when di enabled */
+static const char version_s[] = "2015-8-03a";
 static unsigned char boot_init_flag;
 static int receiver_is_amvideo = 1;
 
@@ -1953,8 +1953,11 @@ VFM_NAME, VFRAME_EVENT_RECEIVER_PUT, NULL);
 	}
 	di_uninit_buf();
 	di_set_power_control(0, 0);
-	if (get_blackout_policy())
+	if (get_blackout_policy()) {
 		di_set_power_control(1, 0);
+		disable_post_deinterlace_2();
+		Wr(DI_CLKG_CTRL, 0x2);
+	}
 
 	di_unlock_irqfiq_restore(irq_flag2, fiq_flag);
 	spin_unlock_irqrestore(&plist_lock, flags);
@@ -2100,6 +2103,9 @@ static unsigned char is_bypass(vframe_t *vf_in)
 	/*prot is conflict with di post*/
 	if (vf_in && vf_in->video_angle)
 		return 1;
+	if (vf_in && (vf_in->type &VIDTYPE_PIC))
+		return 1;
+		
 	if (vf_in && (vf_in->type & VIDTYPE_COMPRESS))
 		return 1;
 	if ((di_vscale_skip_enable & 0x4) && vf_in) {
@@ -3177,7 +3183,7 @@ di_pre_stru.di_chan2_buf_dup_p);
 			di_mtn_1_ctrl1 &= (~(1<<29));/* disable txt */
 			cont_rd = 0;
 			RDMA_WR(DI_ARB_CTRL,
-				RDMA_RD(DI_ARB_CTRL)&(~0x303));
+				RDMA_RD(DI_ARB_CTRL)|1<<9|1<<8|1<<1|1<<0);
 		} else {
 			RDMA_WR(DI_ARB_CTRL,
 				RDMA_RD(DI_ARB_CTRL)|1<<9|1<<8|1<<1|1<<0);
@@ -5783,6 +5789,7 @@ unreg:
 					#endif
 					if (get_blackout_policy()) {
 						di_set_power_control(1, 0);
+						disable_post_deinterlace_2();
 						Wr(DI_CLKG_CTRL, 0x2);
 					}
 					di_unlock_irqfiq_restore(irq_flag2, fiq_flag);
@@ -5822,8 +5829,18 @@ static void di_unreg_process_irq(void)
 		rdma_clear(de_devp->rdma_handle);
 #endif
 		di_set_power_control(0, 0);
-		if (get_blackout_policy())
+		#ifndef NEW_DI_V3
+		Wr(DI_CLKG_CTRL, 0xff0000);
+		/* di enable nr clock gate */
+		#else
+		Wr(DI_CLKG_CTRL, 0xf60000);
+		/* nr/blend0/ei0/mtn0 clock gate */
+		#endif
+		if (get_blackout_policy()) {
 			di_set_power_control(1, 0);
+			disable_post_deinterlace_2();
+			Wr(DI_CLKG_CTRL, 0x2);
+		}
 		di_unlock_irqfiq_restore(irq_flag2, fiq_flag);
 
 #if (defined ENABLE_SPIN_LOCK_ALWAYS)
@@ -5895,7 +5912,7 @@ static void di_reg_process(void)
 			Wr(DI_CLKG_CTRL, 0xfeff0000);
 			/* di enable nr clock gate */
 			#else
-			Wr(DI_CLKG_CTRL, 0xfcf60000);
+			Wr(DI_CLKG_CTRL, 0xfdf60000);
 			/* nr/blend0/ei0/mtn0 clock gate */
 			#endif
 /* add for di Reg re-init */

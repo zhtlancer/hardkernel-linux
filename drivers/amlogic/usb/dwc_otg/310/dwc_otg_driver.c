@@ -67,6 +67,8 @@
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
 #include <linux/amlogic/usbtype.h>
+#include <linux/usb.h>
+#include <linux/usb/hcd.h>
 
 #define DWC_DRIVER_VERSION	"3.10a 12-MAY-2014"
 #define DWC_DRIVER_DESC		"HS OTG USB Controller driver"
@@ -225,6 +227,19 @@ static struct dwc_otg_driver_module_params dwc_otg_module_params = {
 	.otg_ver = -1,
 	.adp_enable = -1,
 };
+
+bool force_device_mode = 0;
+static int __init force_otg_mode(char *str)
+{
+	force_device_mode = 1;
+	return 1;
+}
+__setup("otg_device", force_otg_mode);
+module_param_named(otg_device, force_device_mode,
+		bool, S_IRUGO | S_IWUSR);
+
+MODULE_PARM_DESC(otg_device, "set otg to force device mode" " ");
+
 
 static u64 dwc2_dmamask = DMA_BIT_MASK(32);
 
@@ -749,6 +764,95 @@ static int dwc_otg_driver_remove(struct platform_device *pdev)
 
 	return 0;
 }
+
+static void dwc_otg_driver_shutdown(struct platform_device *pdev)
+{
+#if 0
+	dwc_otg_device_t *otg_dev = g_dwc_otg_device[pdev->id];
+	int irq = 0;
+	const char *s_clock_name = NULL;
+	const char *cpu_type = NULL;
+	struct usb_hcd *hcd = platform_get_drvdata(pdev);
+
+	DWC_DEBUGPL(DBG_ANY, "%s(%p)\n", __func__, pdev);
+
+	/*
+	* Remove the device attributes
+	*/
+	dwc_otg_attr_remove(pdev);
+
+	if (hcd)
+		if (hcd->driver->shutdown)
+			hcd->driver->shutdown(hcd);
+
+	if (!otg_dev) {
+		/* Memory allocation for the dwc_otg_device failed. */
+		DWC_DEBUGPL(DBG_ANY, "%s: otg_dev NULL!\n", __func__);
+		return;
+	}
+#ifndef DWC_DEVICE_ONLY
+	if (otg_dev->hcd)
+		hcd_remove(pdev);
+	else
+		DWC_DEBUGPL(DBG_ANY, "%s: otg_dev->hcd NULL!\n", __func__);
+
+#endif
+
+#ifndef DWC_HOST_ONLY
+	if (otg_dev->pcd)
+		pcd_remove(pdev);
+	else
+		DWC_DEBUGPL(DBG_ANY, "%s: otg_dev->pcd NULL!\n", __func__);
+
+#endif
+	/*
+	* Free the IRQ
+	*/
+	if (otg_dev->common_irq_installed) {
+		irq = platform_get_irq(pdev, 0);
+		if (irq < 0)
+			return;
+		free_irq(irq, otg_dev);
+	} else {
+		DWC_DEBUGPL(DBG_ANY, "%s: no installed irq!\n", __func__);
+		return;
+	}
+
+	if (otg_dev->core_if) {
+		if (otg_dev->core_if->vbus_power_pin != -2)
+			gpiod_put(otg_dev->core_if->usb_gpio_desc);
+		dwc_otg_cil_remove(otg_dev->core_if);
+	} else {
+		DWC_DEBUGPL(DBG_ANY, "%s: otg_dev->core_if NULL!\n", __func__);
+		return;
+	}
+
+	if (otg_dev->id_change_timer)
+		DWC_TIMER_FREE(otg_dev->id_change_timer);
+
+	s_clock_name = of_get_property(pdev->dev.of_node, "clock-src", NULL);
+	cpu_type = of_get_property(pdev->dev.of_node, "cpu-type", NULL);
+
+	clk_suspend_usb(pdev, s_clock_name,
+			(unsigned long)(otg_dev->
+				core_if->usb_peri_reg), cpu_type);
+
+	/*
+	* Return the memory.
+	*/
+	if (otg_dev->os_dep.base)
+		iounmap(otg_dev->os_dep.base);
+
+	DWC_FREE(otg_dev);
+	otg_dev = NULL;
+
+	/*
+	* Clear the drvdata pointer.
+	*/
+	platform_set_drvdata(pdev, 0);
+#endif
+	return;
+}
 #ifdef CONFIG_HAS_EARLYSUSPEND
 extern int get_pcd_ums_state(dwc_otg_pcd_t *pcd);
 static void usb_early_suspend(struct early_suspend *h)
@@ -821,7 +925,7 @@ static int dwc_otg_driver_probe(struct platform_device *pdev)
 
 	dev_dbg(&pdev->dev, "dwc_otg_driver_probe(%p)\n", pdev);
 
-	if (dcount == 0)	{
+	if (dcount == 0) {
 		dcount++;
 		usbdev = (struct device *)&pdev->dev;
 	}
@@ -1093,6 +1197,9 @@ static int dwc_otg_driver_probe(struct platform_device *pdev)
 		dwc_otg_device->common_irq_installed = 1;
 	}
 
+	if (force_device_mode && (port_index == 0))
+		port_type = USB_PORT_TYPE_SLAVE;
+
 	switch (port_type) {
 	case USB_PORT_TYPE_OTG:
 		id_mode = FORCE_ID_CLEAR;
@@ -1231,11 +1338,33 @@ static void dwc2_complete(struct device *dev)
 
 static int dwc2_suspend(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
+	const char *s_clock_name = NULL;
+	const char *cpu_type = NULL;
+
+	s_clock_name = of_get_property(pdev->dev.of_node, "clock-src", NULL);
+	cpu_type = of_get_property(pdev->dev.of_node, "cpu-type", NULL);
+
+	clk_suspend_usb(pdev, s_clock_name,
+			(unsigned long)(g_dwc_otg_device[pdev->id]->
+				core_if->usb_peri_reg), cpu_type);
+
 	return 0;
 }
 
 static int dwc2_resume(struct device *dev)
 {
+	struct platform_device *pdev = to_platform_device(dev);
+	const char *s_clock_name = NULL;
+	const char *cpu_type = NULL;
+
+	s_clock_name = of_get_property(pdev->dev.of_node, "clock-src", NULL);
+	cpu_type = of_get_property(pdev->dev.of_node, "cpu-type", NULL);
+
+	clk_resume_usb(pdev, s_clock_name,
+			(unsigned long)(g_dwc_otg_device[pdev->id]->
+				core_if->usb_peri_reg), cpu_type);
+
 	return 0;
 }
 
@@ -1264,6 +1393,7 @@ MODULE_DEVICE_TABLE(of, of_dwc2_match);
 static struct platform_driver dwc_otg_driver = {
 	.probe		= dwc_otg_driver_probe,
 	.remove		= dwc_otg_driver_remove,
+	.shutdown	= dwc_otg_driver_shutdown,
 	.driver		= {
 		.name	= "dwc_otg",
 		.of_match_table	= of_match_ptr(of_dwc2_match),

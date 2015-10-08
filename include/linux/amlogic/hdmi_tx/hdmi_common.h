@@ -19,6 +19,12 @@
 #define __HDMI_COMMON_H__
 
 /* HDMI VIC definitions */
+
+/* HDMITX_VIC420_OFFSET and HDMITX_VIC_MASK are associated with
+	VIC_MAX_VALID_MODE and VIC_MAX_NUM in hdmi_tx_module.h */
+#define HDMITX_VIC420_OFFSET	0x100
+#define HDMITX_VIC_MASK			0xff
+
 enum hdmi_vic {
 	/* Refer to CEA 861-D */
 	HDMI_Unkown = 0,
@@ -135,6 +141,27 @@ enum hdmi_vic {
 	HDMI_3840x1080p100hz,
 	HDMI_3840x540p240hz,
 	HDMI_3840x540p200hz,
+
+	/*
+	the following vic is for those y420 mode
+	they are all beyond OFFSET_HDMITX_VIC420(0x1000)
+	and they has same vic with normal vic in the lower bytes.
+	*/
+	HDMI_VIC_Y420					=
+		HDMITX_VIC420_OFFSET,
+	HDMI_3840x2160p50_16x9_Y420		=
+		HDMITX_VIC420_OFFSET + HDMI_3840x2160p50_16x9,
+	HDMI_3840x2160p60_16x9_Y420		=
+		HDMITX_VIC420_OFFSET + HDMI_3840x2160p60_16x9,
+	HDMI_4096x2160p50_256x135_Y420	=
+		HDMITX_VIC420_OFFSET + HDMI_4096x2160p50_256x135,
+	HDMI_4096x2160p60_256x135_Y420	=
+		HDMITX_VIC420_OFFSET + HDMI_4096x2160p60_256x135,
+	HDMI_3840x2160p50_64x27_Y420	=
+		HDMITX_VIC420_OFFSET + HDMI_3840x2160p50_64x27,
+	HDMI_3840x2160p60_64x27_Y420	=
+		HDMITX_VIC420_OFFSET + HDMI_3840x2160p60_64x27,
+	HDMI_VIC_Y420_MAX,
 };
 
 /* Compliance with old definitions */
@@ -170,6 +197,10 @@ enum hdmi_vic {
 #define HDMI_4k2k_smpte_24      HDMI_4096x2160p24_256x135
 #define HDMI_4k2k_smpte_50      HDMI_4096x2160p50_256x135
 #define HDMI_4k2k_smpte_60      HDMI_4096x2160p60_256x135
+/* for Y420 modes*/
+#define HDMI_4k2k_50_y420		HDMI_3840x2160p50_16x9_Y420
+#define HDMI_4k2k_60_y420		HDMI_3840x2160p60_16x9_Y420
+
 
 /* CEA TIMING STRUCT DEFINITION */
 struct hdmi_cea_timing {
@@ -255,6 +286,15 @@ enum hdmi_color_range {
 	hdmi_color_range_LIM, hdmi_color_range_FUL,
 };
 
+struct hdmi_csc_coef_table {
+	unsigned char input_format;
+	unsigned char output_format;
+	unsigned char color_depth;
+	unsigned char color_format; /* 0 for ITU601, 1 for ITU709 */
+	unsigned char coef_length;
+	unsigned char *coef;
+};
+
 enum hdmi_audio_packet {
 	hdmi_audio_packet_SMP = 0x02,
 	hdmi_audio_packet_1BT = 0x07,
@@ -280,6 +320,11 @@ enum hdmi_aspect_ratio {
 
 struct hdmi_format_para *hdmi_get_fmt_paras(enum hdmi_vic vic);
 void check_detail_fmt(void);
+unsigned int hdmi_get_csc_coef(
+	unsigned int input_format, unsigned int output_format,
+	unsigned int color_depth, unsigned int color_format,
+	unsigned char **coef_array, unsigned int *coef_length);
+
 
 /* HDMI Audio Parmeters */
 /* Refer to CEA-861-D Page 88 */

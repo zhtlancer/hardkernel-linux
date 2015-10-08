@@ -33,7 +33,6 @@
 #include <linux/workqueue.h>
 #include <linux/dma-mapping.h>
 #include <linux/atomic.h>
-#include <linux/amlogic/iomap.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include "amports_priv.h"
@@ -257,9 +256,8 @@ static u32 first_offset;
 static u32 first_pts;
 static u64 first_pts64;
 static bool first_pts_cached;
-static unsigned long sei_data_buffer;
-static unsigned long sei_data_buffer_phys;
-static ulong *sei_data_buffer_remap;
+static void *sei_data_buffer;
+static dma_addr_t sei_data_buffer_phys;
 
 #define MC_OFFSET_HEADER    0x0000
 #define MC_OFFSET_DATA      0x1000
@@ -1179,6 +1177,7 @@ static void vh264_isr(void)
 	struct vframe_s *vf;
 	unsigned int cpu_cmd;
 	unsigned int pts, pts_lookup_save, pts_valid_save, pts_valid = 0;
+	unsigned int pts_us64_valid = 0;
 	u64 pts_us64;
 	bool force_interlaced_frame = false;
 	unsigned int sei_itu35_flags;
@@ -1328,6 +1327,7 @@ static void vh264_isr(void)
 				pts_us64 = first_pts64;
 				first_pts_cached = false;
 				pts_valid = 1;
+				pts_us64_valid = 1;
 #ifdef DEBUG_PTS
 				pts_hit++;
 #endif
@@ -1335,11 +1335,13 @@ static void vh264_isr(void)
 					   (PTS_TYPE_VIDEO, b_offset, &pts, 0,
 						&pts_us64) == 0) {
 				pts_valid = 1;
+				pts_us64_valid = 1;
 #ifdef DEBUG_PTS
 				pts_hit++;
 #endif
 			} else {
 				pts_valid = 0;
+				pts_us64_valid = 0;
 #ifdef DEBUG_PTS
 				pts_missed++;
 #endif
@@ -1528,7 +1530,10 @@ static void vh264_isr(void)
 				vf->duration_pulldown = 0;
 				vf->index = buffer_index;
 				vf->pts = (pts_valid) ? pts : 0;
-				vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+				if (pts_us64_valid == 1)
+					vf->pts_us64 = pts_us64;
+				else
+				vf->pts_us64 = div64_u64(((u64)vf->pts)*100, 9);
 				vf->canvas0Addr = vf->canvas1Addr =
 					spec2canvas(&buffer_spec[buffer_index]);
 				vfbuf_use[buffer_index]++;
@@ -1569,7 +1574,10 @@ static void vh264_isr(void)
 				vf->duration_pulldown = 0;
 				vf->index = buffer_index;
 				vf->pts = (pts_valid) ? pts : 0;
-				vf->pts_us64 = (pts_valid) ? pts_us64 : 0;
+				if (pts_us64_valid == 1)
+					vf->pts_us64 = pts_us64;
+				else
+				vf->pts_us64 = div64_u64(((u64)vf->pts)*100, 9);
 				vf->canvas0Addr = vf->canvas1Addr =
 					spec2canvas(&buffer_spec[buffer_index]);
 				vfbuf_use[buffer_index]++;
@@ -1707,7 +1715,7 @@ static void vh264_isr(void)
 				(unsigned char *)phys_to_virt(
 						sei_data_buffer_phys +
 						ltemp);
-			/* daddr = (unsigned char *)(sei_data_buffer_remap +
+			/* daddr = (unsigned char *)(sei_data_buffer +
 			   ltemp); */
 			pr_info("0x%x\n", *daddr);
 		}
@@ -1720,7 +1728,7 @@ static void vh264_isr(void)
 		set_userdata_poc(user_data_poc);
 		WRITE_VREG(AV_SCRATCH_J, 0);
 		wakeup_userdata_poll(sei_itu35_wp,
-				(unsigned long)sei_data_buffer_phys,
+				(unsigned long)sei_data_buffer,
 				USER_DATA_SIZE, sei_itu35_data_length);
 	}
 #ifdef HANDLE_H264_IRQ
@@ -2314,6 +2322,15 @@ static int vh264_stop(int mode)
 			mc_cpu_addr = NULL;
 		}
 	}
+	if (sei_data_buffer != NULL) {
+		dma_free_coherent(
+			amports_get_dma_device(),
+			USER_DATA_SIZE,
+			sei_data_buffer,
+			sei_data_buffer_phys);
+		sei_data_buffer = NULL;
+		sei_data_buffer_phys = 0;
+	}
 	amvdec_disable();
 
 	return 0;
@@ -2404,7 +2421,8 @@ static void stream_switching_do(struct work_struct *work)
 	u32 y_index, u_index, src_index, des_index, y_desindex, u_dexindex;
 	struct canvas_s csy, csu, cyd;
 #endif
-
+	if (!atomic_read(&vh264_active))
+		return;
 	if ((!p_last_vf)
 		|| (vh264_stream_switching_state == SWITCHING_STATE_OFF))
 		return;
@@ -2579,26 +2597,14 @@ static int amvdec_h264_probe(struct platform_device *pdev)
 
 	if (pdata->sys_info)
 		vh264_amstream_dec_info = *pdata->sys_info;
-	if (0 && 0 == sei_data_buffer) {	/* TODO... */
+	if (NULL == sei_data_buffer) {
 		sei_data_buffer =
-			__get_free_pages(GFP_KERNEL, get_order(USER_DATA_SIZE));
-
+			dma_alloc_coherent(amports_get_dma_device(),
+				USER_DATA_SIZE,
+				&sei_data_buffer_phys, GFP_KERNEL);
 		if (!sei_data_buffer) {
 			pr_info("%s: Can not allocate sei_data_buffer\n",
 				   __func__);
-			return -ENOMEM;
-		}
-		sei_data_buffer_phys = virt_to_phys((void *)sei_data_buffer);
-
-		sei_data_buffer_remap =
-			ioremap_nocache(sei_data_buffer_phys, USER_DATA_SIZE);
-		if (!sei_data_buffer_remap) {
-			pr_info("%s: Can not remap sei_data_buffer\n",
-				   __func__);
-			free_pages(sei_data_buffer, get_order(USER_DATA_SIZE));
-
-			sei_data_buffer = 0;
-
 			return -ENOMEM;
 		}
 		/* pr_info("buffer 0x%x, phys 0x%x, remap 0x%x\n",
@@ -2626,9 +2632,9 @@ static int amvdec_h264_probe(struct platform_device *pdev)
 
 static int amvdec_h264_remove(struct platform_device *pdev)
 {
+	atomic_set(&vh264_active, 0);
 	cancel_work_sync(&error_wd_work);
 	cancel_work_sync(&stream_switching_work);
-
 	mutex_lock(&vh264_mutex);
 	vh264_stop(MODE_FULL);
 	vdec_source_changed(VFORMAT_H264, 0, 0, 0);

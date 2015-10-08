@@ -38,6 +38,10 @@
 #include <asm/sizes.h>
 #include <asm/tlb.h>
 
+#ifdef CONFIG_HIBERNATION
+#include <linux/suspend.h>
+#endif
+
 #include "mm.h"
 
 phys_addr_t memstart_addr __read_mostly = 0;
@@ -69,12 +73,14 @@ static void __init zone_sizes_init(unsigned long min, unsigned long max)
 	memset(zone_size, 0, sizeof(zone_size));
 
 	/* 4GB maximum for 32-bit only capable devices */
+#ifdef CONFIG_ZONE_DMA
 	if (IS_ENABLED(CONFIG_ZONE_DMA)) {
 		unsigned long max_dma_phys =
 			(unsigned long)dma_to_phys(NULL, DMA_BIT_MASK(32) + 1);
 		max_dma = max(min, min(max, max_dma_phys >> PAGE_SHIFT));
 		zone_size[ZONE_DMA] = max_dma - min;
 	}
+#endif
 	zone_size[ZONE_NORMAL] = max - max_dma;
 
 	memcpy(zhole_size, zone_size, sizeof(zhole_size));
@@ -85,12 +91,12 @@ static void __init zone_sizes_init(unsigned long min, unsigned long max)
 
 		if (start >= max)
 			continue;
-
+#ifdef CONFIG_ZONE_DMA
 		if (IS_ENABLED(CONFIG_ZONE_DMA) && start < max_dma) {
 			unsigned long dma_end = min(end, max_dma);
 			zhole_size[ZONE_DMA] -= dma_end - start;
 		}
-
+#endif
 		if (end > max_dma) {
 			unsigned long normal_end = min(end, max);
 			unsigned long normal_start = max(start, max_dma);
@@ -300,6 +306,11 @@ void __init mem_init(void)
 #undef MLK
 #undef MLM
 #undef MLK_ROUNDUP
+
+#ifdef CONFIG_HIBERNATION
+	register_nosave_region((unsigned long)virt_to_pfn(_text),
+		 (unsigned long)virt_to_pfn(_etext));
+#endif
 
 	/*
 	 * Check boundaries twice: Some fundamental inconsistencies can be

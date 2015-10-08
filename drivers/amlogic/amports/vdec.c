@@ -44,23 +44,27 @@
 #include "arch/clk.h"
 #include <linux/reset.h>
 #include <linux/amlogic/cpu_version.h>
+#include <linux/amlogic/codec_mm/codec_mm.h>
 
 static DEFINE_MUTEX(vdec_mutex);
 
 #define MC_SIZE (4096 * 4)
 #define CMA_ALLOC_SIZE SZ_64M
-
+#define MEM_NAME "vdec_prealloc"
 #define SUPPORT_VCODEC_NUM  1
 static int inited_vcodec_num;
 static int poweron_clock_level;
+static int keep_vdec_mem;
 static unsigned int debug_trace_num = 16 * 20;
 static int vdec_irq[VDEC_IRQ_MAX];
 static struct platform_device *vdec_device;
 static struct platform_device *vdec_core_device;
 static struct page *vdec_cma_page;
+int vdec_mem_alloced_from_codec, delay_release;
 static unsigned long reserved_mem_start, reserved_mem_end;
 static int hevc_max_reset_count;
 static bool hevc_workaround;
+static DEFINE_SPINLOCK(vdec_spin_lock);
 
 #define HEVC_TEST_LIMIT1 50
 #define HEVC_TEST_LIMIT2 100
@@ -100,6 +104,22 @@ static const char * const vdec_device_name[] = {
 	"amvdec_h265"
 };
 
+static int vdec_default_buf_size[] = {
+	32, /*"amvdec_mpeg12",*/
+	32, /*"amvdec_mpeg4",*/
+	48, /*"amvdec_h264",*/
+	32, /*"amvdec_mjpeg",*/
+	32, /*"amvdec_real",*/
+	32, /*"amjpegdec",*/
+	32, /*"amvdec_vc1",*/
+	32, /*"amvdec_avs",*/
+	32, /*"amvdec_yuv",*/
+	64, /*"amvdec_h264mvc",*/
+	64, /*"amvdec_h264_4k2k", else alloc on decoder*/
+	48, /*"amvdec_h265", else alloc on decoder*/
+	0
+};
+
 void vdec_set_decinfo(struct dec_sysinfo *p)
 {
 	vdec_dev_reg.sys_info = p;
@@ -123,7 +143,7 @@ int vdec_set_resource(unsigned long start, unsigned long end, struct device *p)
 	return 0;
 }
 
-s32 vdec_init(enum vformat_e vf)
+s32 vdec_init(enum vformat_e vf, int is_4k)
 {
 	s32 r;
 	int retry_num = 0;
@@ -133,7 +153,7 @@ s32 vdec_init(enum vformat_e vf)
 		return -EIO;
 	}
 	if (vf == VFORMAT_H264_4K2K ||
-		vf == VFORMAT_HEVC) {
+		(vf == VFORMAT_HEVC && is_4k)) {
 		try_free_keep_video();
 	}
 	inited_vcodec_num++;
@@ -142,37 +162,42 @@ s32 vdec_init(enum vformat_e vf)
 		vdec_dev_reg.mem_start,
 		vdec_dev_reg.mem_end);
 
-retry_alloc:
-	if (vdec_dev_reg.mem_start == vdec_dev_reg.mem_end) {
-		pr_info("vdec cma tool size = %ld MB\n",
-			dma_get_cma_size_int_byte(vdec_dev_reg.cma_dev)
-				/ SZ_1M);
-
-		vdec_cma_page = dma_alloc_from_contiguous(
-			vdec_dev_reg.cma_dev,
-			CMA_ALLOC_SIZE / PAGE_SIZE, 4);
-		if (!vdec_cma_page) {
+/*retry alloc:*/
+	while (vdec_dev_reg.mem_start == vdec_dev_reg.mem_end) {
+		int alloc_size = vdec_default_buf_size[vf] * SZ_1M;
+		if (alloc_size == 0)
+			break;/*alloc end*/
+		if (is_4k) {
+			/*used 264 4k's setting for 265.*/
+			int m4k_size =
+				vdec_default_buf_size[VFORMAT_H264_4K2K] *
+				SZ_1M;
+			if ((m4k_size > 0) && (m4k_size < 200 * SZ_1M))
+				alloc_size = m4k_size;
+		}
+		vdec_dev_reg.mem_start = codec_mm_alloc_for_dma(MEM_NAME,
+			alloc_size / PAGE_SIZE, 4 + PAGE_SHIFT,
+			CODEC_MM_FLAGS_CMA_CLEAR);
+		if (!vdec_dev_reg.mem_start) {
 			if (retry_num < 1) {
 				pr_err("vdec base CMA allocation failed,try again\\n");
 				retry_num++;
 				try_free_keep_video();
-				goto retry_alloc;
+				continue;/*retry alloc*/
 			}
 			pr_err("vdec base CMA allocation failed.\n");
 			inited_vcodec_num--;
 			return -ENOMEM;
 		}
+		pr_info("vdec base memory alloced %p\n",
+		(void *)vdec_dev_reg.mem_start);
 
-#ifdef CONFIG_ARM64
-		dma_clear_buffer(vdec_cma_page, CMA_ALLOC_SIZE);
-#endif
-		pr_info("vdec base cma page allocated %p\n", vdec_cma_page);
-
-		vdec_dev_reg.mem_start = page_to_phys(vdec_cma_page);
 		vdec_dev_reg.mem_end = vdec_dev_reg.mem_start +
-			CMA_ALLOC_SIZE - 1;
+			alloc_size - 1;
+		vdec_mem_alloced_from_codec = 1;
+		break;/*alloc end*/
 	}
-
+/*alloc end:*/
 	if ((vf == VFORMAT_HEVC) &&
 		hevc_workaround_needed() &&
 		hevc_workaround)
@@ -204,18 +229,20 @@ error:
 
 s32 vdec_release(enum vformat_e vf)
 {
+
 	if (vdec_device)
 		platform_device_unregister(vdec_device);
 
-	if (vdec_cma_page) {
-		dma_release_from_contiguous(vdec_dev_reg.cma_dev,
-			vdec_cma_page,
-			CMA_ALLOC_SIZE / PAGE_SIZE);
-
+	if (delay_release-- <= 0 &&
+			!keep_vdec_mem &&
+			vdec_mem_alloced_from_codec &&
+			vdec_dev_reg.mem_start) {
+		codec_mm_free_for_dma(MEM_NAME, vdec_dev_reg.mem_start);
 		vdec_cma_page = NULL;
 		vdec_dev_reg.mem_start = reserved_mem_start;
 		vdec_dev_reg.mem_end = reserved_mem_end;
 	}
+
 
 	inited_vcodec_num--;
 
@@ -321,10 +348,7 @@ void vdec_poweron(enum vdec_type_e core)
 		/*add power on vdec clock level setting,only for m8 chip,
 		   m8baby and m8m2 can dynamic adjust vdec clock,
 		   power on with default clock level */
-		if (poweron_clock_level == 1 && is_meson_m8_cpu())
-			vdec_clock_hi_enable();
-		else
-			vdec_clock_enable();
+		vdec_clock_hi_enable();
 		/* power up vdec memories */
 		WRITE_VREG(DOS_MEM_PD_VDEC, 0);
 		/* remove vdec1 isolation */
@@ -332,6 +356,17 @@ void vdec_poweron(enum vdec_type_e core)
 				READ_AOREG(AO_RTI_GEN_PWR_ISO0) & ~0xC0);
 		/* reset DOS top registers */
 		WRITE_VREG(DOS_VDEC_MCRCC_STALL_CTRL, 0);
+		if (get_cpu_type() >=
+			MESON_CPU_MAJOR_ID_GXBB) {
+			/*
+			enable VDEC_1 DMC request
+			*/
+			unsigned long flags;
+			spin_lock_irqsave(&vdec_spin_lock, flags);
+			codec_dmcbus_write(DMC_REQ_CTRL,
+				codec_dmcbus_read(DMC_REQ_CTRL) | (1 << 13));
+			spin_unlock_irqrestore(&vdec_spin_lock, flags);
+		}
 	} else if (core == VDEC_2) {
 		if (has_vdec2()) {
 			/* vdec2 power on */
@@ -344,7 +379,7 @@ void vdec_poweron(enum vdec_type_e core)
 			WRITE_VREG(DOS_SW_RESET2, 0xffffffff);
 			WRITE_VREG(DOS_SW_RESET2, 0);
 			/* enable vdec1 clock */
-			vdec2_clock_enable();
+			vdec2_clock_hi_enable();
 			/* power up vdec memories */
 			WRITE_VREG(DOS_MEM_PD_VDEC2, 0);
 			/* remove vdec2 isolation */
@@ -391,7 +426,7 @@ void vdec_poweron(enum vdec_type_e core)
 				WRITE_VREG(DOS_SW_RESET3, 0xffffffff);
 				WRITE_VREG(DOS_SW_RESET3, 0);
 				/* enable hevc clock */
-				hevc_clock_enable();
+				hevc_clock_hi_enable();
 				/* power up hevc memories */
 				WRITE_VREG(DOS_MEM_PD_HEVC, 0);
 				/* remove hevc isolation */
@@ -462,10 +497,19 @@ void vdec_poweron(enum vdec_type_e core)
 
 void vdec_poweroff(enum vdec_type_e core)
 {
-
 	mutex_lock(&vdec_mutex);
-
 	if (core == VDEC_1) {
+		if (get_cpu_type() >=
+			MESON_CPU_MAJOR_ID_GXBB) {
+			/* disable VDEC_1 DMC REQ
+			*/
+			unsigned long flags;
+			spin_lock_irqsave(&vdec_spin_lock, flags);
+			codec_dmcbus_write(DMC_REQ_CTRL,
+				codec_dmcbus_read(DMC_REQ_CTRL) & (~(1 << 13)));
+			spin_unlock_irqrestore(&vdec_spin_lock, flags);
+			udelay(10);
+		}
 		/* enable vdec1 isolation */
 		WRITE_AOREG(AO_RTI_GEN_PWR_ISO0,
 				READ_AOREG(AO_RTI_GEN_PWR_ISO0) | 0xc0);
@@ -521,9 +565,7 @@ void vdec_poweroff(enum vdec_type_e core)
 					0xc0);
 		}
 	}
-
 	mutex_unlock(&vdec_mutex);
-
 }
 
 bool vdec_on(enum vdec_type_e core)
@@ -639,8 +681,6 @@ void vdec_source_changed(int format, int width, int height, int fps)
 		return;
 
 
-	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_M8B)
-		vdec_clock_prepare_switch();
 
 	vdec_source_changed_for_clk_set(format, width, height, fps);
 	pr_info("vdec1 video changed to %d x %d %d fps clk->%dMHZ\n",
@@ -659,9 +699,6 @@ void vdec2_source_changed(int format, int width, int height, int fps)
 
 
 
-		if (get_cpu_type() >= MESON_CPU_MAJOR_ID_M8B)
-			vdec_clock_prepare_switch();
-
 		vdec_source_changed_for_clk_set(format, width, height, fps);
 		pr_info("vdec2 video changed to %d x %d %d fps clk->%dMHZ\n",
 			width, height, fps, vdec_clk_get(VDEC_2));
@@ -676,10 +713,6 @@ void hevc_source_changed(int format, int width, int height, int fps)
 	if (vdec_source_get(VDEC_HEVC) == width * height * fps)
 		return;
 
-
-
-	if (get_cpu_type() >= MESON_CPU_MAJOR_ID_M8B)
-		hevc_clock_prepare_switch();
 
 	vdec_source_changed_for_clk_set(format, width, height, fps);
 
@@ -911,6 +944,32 @@ static ssize_t show_poweron_clock_level(struct class *class,
 	return sprintf(buf, "%d\n", poweron_clock_level);
 }
 
+/*
+if keep_vdec_mem == 1
+always don't release
+vdec 64 memory for fast play.
+*/
+static ssize_t store_keep_vdec_mem(struct class *class,
+		struct class_attribute *attr,
+		const char *buf, size_t size)
+{
+	unsigned val;
+	ssize_t ret;
+
+	ret = sscanf(buf, "%d", &val);
+	if (ret != 1)
+		return -EINVAL;
+	keep_vdec_mem = val;
+	return size;
+}
+
+static ssize_t show_keep_vdec_mem(struct class *class,
+		struct class_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", keep_vdec_mem);
+}
+
+
 /*irq num as same as .dts*/
 /*
 	interrupts = <0 3 1
@@ -1054,6 +1113,8 @@ static struct class_attribute vdec_class_attrs[] = {
 	show_poweron_clock_level, store_poweron_clock_level),
 	__ATTR(dump_risc_mem, S_IRUGO | S_IWUSR | S_IWGRP,
 	dump_risc_mem_show, dump_risc_mem_store),
+	__ATTR(keep_vdec_mem, S_IRUGO | S_IWUSR | S_IWGRP,
+	show_keep_vdec_mem, store_keep_vdec_mem),
 	__ATTR_NULL
 };
 
@@ -1061,6 +1122,30 @@ static struct class vdec_class = {
 		.name = "vdec",
 		.class_attrs = vdec_class_attrs,
 	};
+
+
+/*
+pre alloced enough memory for decoder
+fast start.
+*/
+void pre_alloc_vdec_memory(void)
+{
+	if (!keep_vdec_mem || vdec_dev_reg.mem_start)
+		return;
+
+	vdec_dev_reg.mem_start = codec_mm_alloc_for_dma(MEM_NAME,
+		CMA_ALLOC_SIZE / PAGE_SIZE, 4 + PAGE_SHIFT,
+		CODEC_MM_FLAGS_CMA_CLEAR);
+	if (!vdec_dev_reg.mem_start)
+		return;
+	pr_info("vdec base memory alloced %p\n",
+	(void *)vdec_dev_reg.mem_start);
+
+	vdec_dev_reg.mem_end = vdec_dev_reg.mem_start +
+		CMA_ALLOC_SIZE - 1;
+	vdec_mem_alloced_from_codec = 1;
+	delay_release = 3;
+}
 
 static int vdec_probe(struct platform_device *pdev)
 {
@@ -1089,7 +1174,13 @@ static int vdec_probe(struct platform_device *pdev)
 		/* set vdec dmc request to urgent */
 		WRITE_DMCREG(DMC_AM5_CHAN_CTRL, 0x3f203cf);
 	}
-
+	if (codec_mm_get_reserved_size() >= 48 * SZ_1M
+		&& codec_mm_get_reserved_size() <=  96 * SZ_1M) {
+		vdec_default_buf_size[VFORMAT_H264_4K2K] =
+			codec_mm_get_reserved_size() / SZ_1M;
+		/*all reserved size for prealloc*/
+	}
+	pre_alloc_vdec_memory();
 	return 0;
 }
 

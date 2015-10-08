@@ -23,6 +23,7 @@
 #include "register.h"
 #include "clk_priv.h"
 #include "register_ops.h"
+#include "log.h"
 
 /*
 HHI_VDEC_CLK_CNTL
@@ -148,6 +149,7 @@ HHI_VDEC_CLK_CNTL
 
 static int clock_level[VDEC_MAX + 1];
 
+
 static int vdec_clock_init(void)
 {
 	return 0;
@@ -155,6 +157,7 @@ static int vdec_clock_init(void)
 
 static int vdec_clock_set(int clk)
 {
+	VDEC1_SAFE_CLOCK();
 	VDEC1_CLOCK_OFF();
 	VDEC1_255M();
 	VDEC1_CLOCK_ON();
@@ -219,6 +222,7 @@ static int hevc_clock_init(void)
 
 static int hevc_clock_set(int clk)
 {
+	HEVC_SAFE_CLOCK();
 	HEVC_CLOCK_OFF();
 	/* HEVC_255M(); */
 	HEVC_638M();
@@ -235,16 +239,6 @@ static void hevc_clock_on(void)
 static void hevc_clock_off(void)
 {
 	HEVC_CLOCK_OFF();
-}
-
-static void vdec_clock_prepare_switch(void)
-{
-	VDEC1_SAFE_CLOCK();
-}
-
-static void hevc_clock_prepare_switch(void)
-{
-	HEVC_SAFE_CLOCK();
 }
 
 static int vdec_clock_get(enum vdec_type_e core)

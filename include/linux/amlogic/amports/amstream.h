@@ -172,7 +172,6 @@
 #define AUDIO_EXTRA_DATA_SIZE   (4096)
 #define MAX_SUB_NUM		32
 
-#define MAX_STREAMBUFFER_SIZE (1024*1024*15)
 
 enum VIDEO_DEC_TYPE {
 	VIDEO_DEC_FORMAT_UNKNOW,
@@ -481,7 +480,7 @@ struct am_ioctl_parm_ptr {
 };
 
 
-#define SUPPORT_VDEC_NUM	(8)
+#define SUPPORT_VDEC_NUM	(10)
 int vcodec_profile_register(const struct codec_profile_t *vdec_profile);
 ssize_t vcodec_profile_read(char *buf);
 

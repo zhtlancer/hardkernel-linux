@@ -34,6 +34,7 @@
 #include "vdec_reg.h"
 #include "vmpeg4.h"
 #include "arch/register.h"
+#include "amports_priv.h"
 
 
 /* #define CONFIG_AM_VDEC_MPEG4_LOG */
@@ -639,7 +640,7 @@ static void vmpeg_put_timer_func(unsigned long arg)
 		frame_width * frame_height * (96000 / frame_dur)) {
 		int fps = 96000 / frame_dur;
 		saved_resolution = frame_width * frame_height * fps;
-		vdec_source_changed(VFORMAT_H264,
+		vdec_source_changed(VFORMAT_MPEG4,
 			frame_width, frame_height, fps);
 	}
 

@@ -411,8 +411,14 @@ int32_t emmc_key_read(uint8_t *buffer, uint32_t length)
 	blk = addr >> bit;
 	cnt = size >> bit;
 	dst = (unsigned char *)buffer;
+	mmc_claim_host(card->host);
 	do {
 		ret = mmc_read_internal(card, blk, EMMC_BLOCK_SIZE, dst);
+		if (ret) {
+			pr_err("%s [%d] mmc_write_internal error\n",
+				__func__, __LINE__);
+			return ret;
+		}
 		blk += EMMC_BLOCK_SIZE;
 		cnt -= EMMC_BLOCK_SIZE;
 		dst = (unsigned char *)buffer + MAX_EMMC_BLOCK_SIZE;
@@ -423,6 +429,7 @@ int32_t emmc_key_read(uint8_t *buffer, uint32_t length)
 	pr_info("%s:%d,%s\n", __func__, __LINE__, &buffer[512]);
 	pr_info("%s:%d,%s\n", __func__, __LINE__, &buffer[1024]);
 	*/
+	mmc_release_host(card->host);
 	return ret;
 }
 EXPORT_SYMBOL(emmc_key_read);
@@ -468,17 +475,20 @@ int32_t emmc_key_write(uint8_t *buffer, uint32_t length)
 	blk = addr >> bit;
 	cnt = size >> bit;
 	src = (unsigned char *)buffer;
+	mmc_claim_host(card->host);
 	do {
 		ret = mmc_write_internal(card, blk, EMMC_BLOCK_SIZE, src);
+		if (ret) {
+			pr_err("%s [%d] mmc_write_internal error\n",
+				__func__, __LINE__);
+			return ret;
+		}
 		blk += EMMC_BLOCK_SIZE;
 		cnt -= EMMC_BLOCK_SIZE;
 		src = (unsigned char *)buffer + MAX_EMMC_BLOCK_SIZE;
 	} while (cnt != 0);
 	pr_info("%s:%d, write %s\n", __func__, __LINE__, (ret) ? "error":"ok");
-	pr_info("%s:%d,%s\n", __func__, __LINE__, buffer);
-	pr_info("%s:%d,%s\n", __func__, __LINE__, &buffer[512]);
-	pr_info("%s:%d,%s\n", __func__, __LINE__, &buffer[1024]);
-
+	mmc_release_host(card->host);
 	return ret;
 }
 EXPORT_SYMBOL(emmc_key_write);

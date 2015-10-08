@@ -161,7 +161,7 @@ static int update_table_item(u32 addr, u32 val)
 retry:
 	if (0 == (retry_count--)) {
 		pr_info("OSD RDMA stuck .....%d,0x%x\n", retry_count,
-				osd_reg_read(RDMA_STATUS));
+			osd_reg_read(RDMA_STATUS));
 		reset_rdma_table();
 		OSD_RDMA_STAUS_MARK_DIRTY;
 		spin_lock_irqsave(&rdma_lock, flags);
@@ -169,14 +169,14 @@ retry:
 		request_item.addr = OSD_RDMA_FLAG_REG;
 		request_item.val = OSD_RDMA_STATUS_MARK_COMPLETE;
 		osd_rdma_mem_cpy(
-				&rdma_table[item_count],
-				&request_item, 8);
+			&rdma_table[item_count],
+			&request_item, 8);
 		osd_reg_write(END_ADDR, (table_paddr + item_count * 8 + 7));
 		request_item.addr = addr;
 		request_item.val = val;
 		osd_rdma_mem_cpy(
-				&rdma_table[item_count-1],
-				&request_item, 8);
+			&rdma_table[item_count-1],
+			&request_item, 8);
 		spin_unlock_irqrestore(&rdma_lock, flags);
 		return -1;
 	}
@@ -330,6 +330,16 @@ static int stop_rdma(char channel)
 	return 0;
 }
 
+
+void osd_rdma_interrupt_done_clear(void)
+{
+	if (rdma_reset_tigger_flag) {
+		pr_info("osd rdma restart!\n");
+		rdma_reset_tigger_flag = 0;
+		osd_rdma_enable(0);
+		osd_rdma_enable(1);
+	}
+}
 int read_rdma_table(void)
 {
 	int rdma_count = 0;

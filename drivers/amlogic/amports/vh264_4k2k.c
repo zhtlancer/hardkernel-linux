@@ -35,6 +35,11 @@
 #include <linux/dma-contiguous.h>
 #include <linux/delay.h>
 
+#include <linux/amlogic/codec_mm/codec_mm.h>
+
+
+#define MEM_NAME "codec_264_4k"
+
 /* #include <mach/am_regs.h> */
 #if 1 /* MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON8 */
 
@@ -44,8 +49,6 @@
 #include "amports_priv.h"
 #include "vdec.h"
 #include "amvdec.h"
-
-
 
 
 #if  0 /* MESON_CPU_TYPE == MESON_CPU_TYPE_MESON6TVD */
@@ -91,6 +94,7 @@ static const struct vframe_operations_s vh264_4k2k_vf_provider = {
 
 static struct vframe_provider_s vh264_4k2k_vf_prov;
 
+static u32 mb_width_old, mb_height_old;
 static u32 frame_width, frame_height, frame_dur, frame_ar;
 static u32 saved_resolution;
 static struct timer_list recycle_timer;
@@ -245,6 +249,7 @@ struct buffer_spec_s {
 #endif
 
 	struct page *alloc_pages;
+	unsigned long phy_addr;
 	int alloc_count;
 };
 
@@ -410,34 +415,40 @@ int init_canvas(int start_addr, long dpb_size, int dpb_number, int mb_width,
 #else
 			int page_count =
 				PAGE_ALIGN((mb_total << 8) +
-						   (mb_total << 7)) / PAGE_SIZE;
+						(mb_total << 7)) / PAGE_SIZE;
 #endif
 
-			if (buffer_spec[i].alloc_pages) {
+			if (buffer_spec[i].phy_addr) {
 				if (page_count != buffer_spec[i].alloc_count) {
-					pr_info("Delay release CMA buffer %d\n",
+					pr_info("Delay release CMA buffer%d\n",
 						   i);
 
-					dma_release_from_contiguous(cma_dev,
+					/*dma_release_from_contiguous(cma_dev,
 							buffer_spec[i].
 							alloc_pages,
 							buffer_spec[i].
 							alloc_count);
+							*/
+					codec_mm_free_for_dma(MEM_NAME,
+						buffer_spec[i].phy_addr);
+					buffer_spec[i].phy_addr = 0;
 					buffer_spec[i].alloc_pages = NULL;
 					buffer_spec[i].alloc_count = 0;
 				} else
 					pr_info("Re-use CMA buffer %d\n", i);
 			}
 
-			if (!buffer_spec[i].alloc_pages) {
+			if (!buffer_spec[i].phy_addr) {
 				buffer_spec[i].alloc_count = page_count;
-				buffer_spec[i].alloc_pages =
-					dma_alloc_from_contiguous(cma_dev,
-							page_count, 4);
+				buffer_spec[i].phy_addr =
+					codec_mm_alloc_for_dma(
+					MEM_NAME, buffer_spec[i].alloc_count,
+					4 + PAGE_SHIFT,
+					CODEC_MM_FLAGS_CMA_CLEAR);
 			}
 			alloc_count++;
 
-			if (!buffer_spec[i].alloc_pages) {
+			if (!buffer_spec[i].phy_addr) {
 				buffer_spec[i].alloc_count = 0;
 				pr_info
 				("264 4K2K decoder memory alloc failed %d.\n",
@@ -445,20 +456,13 @@ int init_canvas(int start_addr, long dpb_size, int dpb_number, int mb_width,
 				mutex_unlock(&vh264_4k2k_mutex);
 				return -1;
 			}
-#ifdef CONFIG_ARM64
-			else
-				dma_clear_buffer(buffer_spec[i].alloc_pages,
-					buffer_spec[i].alloc_count * PAGE_SIZE);
-#endif
-			addr = page_to_phys(buffer_spec[i].alloc_pages);
+			addr = buffer_spec[i].phy_addr;
 			dpb_addr = addr;
 		} else {
-			if (buffer_spec[i].alloc_pages) {
-				dma_release_from_contiguous(cma_dev,
-						buffer_spec[i].
-						alloc_pages,
-						buffer_spec[i].
-						alloc_count);
+			if (buffer_spec[i].phy_addr) {
+				codec_mm_free_for_dma(MEM_NAME,
+					buffer_spec[i].phy_addr);
+				buffer_spec[i].phy_addr = 0;
 				buffer_spec[i].alloc_pages = NULL;
 				buffer_spec[i].alloc_count = 0;
 			}
@@ -644,10 +648,13 @@ static void do_alloc_work(struct work_struct *work)
 	pr_info("crop_right = 0x%x crop_bottom = 0x%x chroma_format_idc = 0x%x\n",
 		crop_right, crop_bottom, chroma444);
 
-	if ((frame_width == 0) || (frame_height == 0) || crop_infor) {
+	if ((frame_width == 0) || (frame_height == 0) || crop_infor ||
+		mb_width != mb_width_old ||
+		mb_height != mb_height_old) {
 		frame_width = mb_width << 4;
 		frame_height = mb_height << 4;
-
+		mb_width_old = mb_width;
+		mb_height_old = mb_height;
 		if (frame_mbs_only_flag) {
 			frame_height -= (2 >> chroma444) *
 				min(crop_bottom,
@@ -980,7 +987,8 @@ static void vh264_4k2k_put_timer_func(unsigned long arg)
 			kfifo_put(&newframe_q, (const struct vframe_s *)vf);
 		}
 	}
-	if (frame_dur > 0 && saved_resolution !=
+	if (first_i_recieved &&/*do switch after first i frame ready.*/
+		frame_dur > 0 && saved_resolution !=
 		frame_width * frame_height * (96000 / frame_dur)) {
 		int fps = 96000 / frame_dur;
 		saved_resolution = frame_width * frame_height * fps;
@@ -1321,6 +1329,8 @@ static void vh264_4k2k_local_init(void)
 	pts_missed = 0;
 	pts_hit = 0;
 #endif
+	mb_width_old = 0;
+	mb_height_old = 0;
 	saved_resolution = 0;
 	vh264_4k2k_rotation =
 		(((unsigned long) vh264_4k2k_amstream_dec_info.param) >> 16)
@@ -1611,21 +1621,21 @@ static int vh264_4k2k_stop(void)
 #ifdef CONFIG_VSYNC_RDMA
 	msleep(100);
 #endif
-
-	canvas_read((READ_VCBUS_REG(VD1_IF0_CANVAS0) & 0xff), &cur_canvas);
-	disp_addr = cur_canvas.addr;
+	if (!get_blackout_policy()) {
+		canvas_read((READ_VCBUS_REG(VD1_IF0_CANVAS0) & 0xff),
+			&cur_canvas);
+		disp_addr = cur_canvas.addr;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(buffer_spec); i++) {
-		if (buffer_spec[i].alloc_pages) {
+		if (buffer_spec[i].phy_addr) {
 			if (disp_addr ==
-				page_to_phys(buffer_spec[i].alloc_pages))
+				(u32)buffer_spec[i].phy_addr)
 				pr_info("Skip releasing CMA buffer %d\n", i);
 			else {
-				dma_release_from_contiguous(cma_dev,
-						buffer_spec[i].
-						alloc_pages,
-						buffer_spec[i].
-						alloc_count);
+				codec_mm_free_for_dma(MEM_NAME,
+					buffer_spec[i].phy_addr);
+				buffer_spec[i].phy_addr = 0;
 				buffer_spec[i].alloc_pages = NULL;
 				buffer_spec[i].alloc_count = 0;
 			}

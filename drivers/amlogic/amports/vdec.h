@@ -29,13 +29,13 @@ struct vdec_dev_reg_s {
 	unsigned long flag;
 } /*vdec_dev_reg_t */;
 
-extern void dma_clear_buffer(struct page *page, size_t size);
+
 
 extern void vdec_set_decinfo(struct dec_sysinfo *p);
 extern int vdec_set_resource(unsigned long start, unsigned long end,
 							 struct device *p);
 
-extern s32 vdec_init(enum vformat_e vf);
+extern s32 vdec_init(enum vformat_e vf, int is_4k);
 extern s32 vdec_release(enum vformat_e vf);
 
 s32 vdec_dev_register(void);
