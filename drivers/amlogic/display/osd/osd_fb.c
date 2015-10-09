@@ -533,6 +533,13 @@ osd_setcmap(struct fb_cmap *cmap, struct fb_info *info)
 	return 0;
 }
 
+#ifdef CONFIG_ARCH_MESON64_ODROIDC2
+extern int (*disp_get_ump_secure_id) (struct fb_info *info, 
+	struct osd_fb_dev_s *g_fbi,	unsigned long arg, int buf);
+#define GET_UMP_SECURE_ID_BUF1 _IOWR('m', 311, unsigned int)
+#define GET_UMP_SECURE_ID_BUF2 _IOWR('m', 312, unsigned int)
+#endif
+
 static int osd_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 {
 	struct osd_fb_dev_s *fbdev = (struct osd_fb_dev_s *)info->par;
@@ -548,6 +555,9 @@ static int osd_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 	unsigned long ret;
 	u32 flush_rate;
 	struct fb_sync_request_s sync_request;
+#ifdef CONFIG_ARCH_MESON64_ODROIDC2
+	int secure_id_buf_n;
+#endif
 
 	switch (cmd) {
 	case  FBIOPUT_OSD_SRCKEY_ENABLE:
@@ -753,6 +763,28 @@ static int osd_ioctl(struct fb_info *info, unsigned int cmd, unsigned long arg)
 			/* fence create fail. */
 			ret = -1;
 		break;
+#ifdef CONFIG_ARCH_MESON64_ODROIDC2
+	case GET_UMP_SECURE_ID_BUF1: {
+		secure_id_buf_n = 0;
+		if (!disp_get_ump_secure_id)
+			request_module("osd_ump");
+		if (disp_get_ump_secure_id)
+			return disp_get_ump_secure_id(info, fbdev, arg, secure_id_buf_n);
+		else
+			return -ENOTSUPP;
+		}
+		break;
+	case GET_UMP_SECURE_ID_BUF2: {
+		secure_id_buf_n = 1;
+		if (!disp_get_ump_secure_id)
+			request_module("osd_ump");
+		if (disp_get_ump_secure_id)
+			return disp_get_ump_secure_id(info, fbdev, arg, secure_id_buf_n);
+		else
+			return -ENOTSUPP;
+		}
+		break;
+#endif		
 	case FBIO_WAITFORVSYNC:
 		osd_wait_vsync_event();
 		ret = copy_to_user(argp, &ret, sizeof(u32));

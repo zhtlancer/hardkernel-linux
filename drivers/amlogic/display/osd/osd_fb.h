@@ -29,6 +29,10 @@
 /* Local Headers */
 #include "osd.h"
 
+#ifdef CONFIG_ARCH_MESON64_ODROIDC2
+#include <ump/ump_kernel_interface.h>
+#endif
+
 #ifdef CONFIG_FB_OSD2_ENABLE
 #define OSD_COUNT 2 /* enable two OSD layers */
 #else
@@ -53,6 +57,9 @@ struct osd_fb_dev_s {
 	u32 preblend_enable;
 	u32 enable_key_flag;
 	u32 color_key;
+#ifdef CONFIG_ARCH_MESON64_ODROIDC2
+	ump_dd_handle ump_wrapped_buffer[OSD_COUNT][2];
+#endif
 };
 
 #define OSD_INVALID_INFO        0xffffffff
