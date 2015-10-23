@@ -899,8 +899,17 @@ CONFIG_AML_REG_ACCESS=y
 #
 # Ethernet Support
 #
-# CONFIG_AM_PHY is not set
+CONFIG_AM_PHY=y
 CONFIG_PHYLIB=y
+
+#
+# MII PHY device drivers
+#
+# CONFIG_AML_PHY is not set
+# CONFIG_AML_SMSC is not set
+# CONFIG_AML_ICPLUS is not set
+# CONFIG_AML_MICREL is not set
+CONFIG_AML_REALTEK=y
 
 #
 # MMC/SD/SDIO Host Controller Drivers
