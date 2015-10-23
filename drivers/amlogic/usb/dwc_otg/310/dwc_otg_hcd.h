@@ -613,6 +613,7 @@ struct dwc_otg_hcd {
 	uint64_t hfnum_other_frrem_accum_b;
 #endif
 	uint8_t  auto_pm_suspend_flag;
+	uint8_t  pm_freeze_flag;
 };
 
 /** @name Transaction Execution Functions */
@@ -868,4 +869,5 @@ void dwc_otg_hcd_save_data_toggle(dwc_hc_t * hc,
 #define dwc_sample_frrem(_hcd, _qh, _letter)
 #endif
 #endif
-#endif /* DWC_DEVICE_ONLY */
+#endif
+/* DWC_DEVICE_ONLY */

@@ -518,6 +518,22 @@ void dwc_otg_hcd_stop(dwc_otg_hcd_t * hcd)
 	dwc_mdelay(1);
 }
 
+void host_hibernation_restore(dwc_otg_hcd_t * hcd)
+{
+	hprt0_data_t hprt0 = {.d32 = 0 };
+
+	hprt0.d32 = DWC_READ_REG32(hcd->core_if->host_if->hprt0);
+	hprt0.b.prtpwr = 0;
+	DWC_WRITE_REG32(hcd->core_if->host_if->hprt0, hprt0.d32);
+
+	dwc_mdelay(1);
+
+	hprt0.d32 = DWC_READ_REG32(hcd->core_if->host_if->hprt0);
+	hprt0.b.prtpwr = 1;
+	DWC_WRITE_REG32(hcd->core_if->host_if->hprt0, hprt0.d32);
+
+}
+
 static void dwc_otg_hcd_power_save(dwc_otg_hcd_t * hcd, int power_on)
 {
 	usb_dbg_uart_data_t uart = {.d32 = 0 };
@@ -557,6 +573,7 @@ int dwc_otg_hcd_suspend(dwc_otg_hcd_t * hcd)
 {
 	hcd->core_if->suspend_mode = 1;
 	DWC_DEBUGPL(DBG_HCD, "DWC OTG HCD SUSPEND\n");
+
 	dwc_otg_hcd_power_save(hcd, 0);
 
  	return 0;
@@ -576,8 +593,12 @@ int dwc_otg_hcd_resume(dwc_otg_hcd_t *hcd)
 	}
 
 	hcd->core_if->suspend_mode = 0;
+
 	dwc_otg_hcd_power_save(hcd, 1);
-	
+	if (hcd->pm_freeze_flag) {
+		host_hibernation_restore(hcd);
+	}
+
 	return 0;
 }
 
@@ -1088,15 +1109,6 @@ int dwc_otg_hcd_init(dwc_otg_hcd_t * hcd, dwc_otg_core_if_t * core_if)
 		}
 		hcd->fiq_state->dummy_send = DWC_ALLOC_ATOMIC(16);
 
-		hcd->fiq_stack = DWC_ALLOC(sizeof(struct fiq_stack));
-		if (!hcd->fiq_stack) {
-			retval = -DWC_E_NO_MEMORY;
-			DWC_ERROR("%s: cannot allocate fiq_stack structure\n", __func__);
-			dwc_otg_hcd_free(hcd);
-			goto out;
-		}
-		hcd->fiq_stack->magic1 = 0xDEADBEEF;
-		hcd->fiq_stack->magic2 = 0xD00DFEED;
 		hcd->fiq_state->gintmsk_saved.d32 = ~0;
 		hcd->fiq_state->haintmsk_saved.b2.chint = ~0;
 

@@ -914,6 +914,7 @@ static int dwc_otg_driver_probe(
 	dwc_otg_device_t *dwc_otg_device;
 	struct dwc_otg_driver_module_params *pcore_para;
 	int irqno;
+	unsigned long flags = IRQF_SHARED | IRQF_DISABLED;
 
 	dev_dbg(&_dev->dev, "dwc_otg_driver_probe(%p)\n", _dev);
 
@@ -947,6 +948,15 @@ static int dwc_otg_driver_probe(
 		struct device_node	*of_node = _dev->dev.of_node;
 		match = of_lm_match_node(dwc_otg_dt_match, of_node);
 		if(match){
+			gpio_name = of_get_property(of_node, "gpio-pwr", NULL);
+			if (gpio_name) {
+				int nr = amlogic_gpio_name_map_num(gpio_name);
+				amlogic_gpio_request_one(nr,
+							 GPIOF_OUT_INIT_LOW,
+							 "usb_pwr_en");
+				amlogic_set_value(nr, 1, "usb_pwr_en");
+			}
+
 			s_clock_name = of_get_property(of_node, "clock-src", NULL);
 			prop = of_get_property(of_node, "port-id", NULL);
 			if(prop)
@@ -1205,10 +1215,12 @@ static int dwc_otg_driver_probe(
 	 */
 	dwc_otg_disable_global_interrupts(dwc_otg_device->core_if);
 
-	if(fiq_enable && use_fiq_flag)
+	if(fiq_enable && use_fiq_flag) {
 		irqno= MESON_USB_FIQ_BRIDGE;
-	else
+	} else {
 		irqno = _dev->irq;
+		flags |= IRQ_TYPE_LEVEL_HIGH;
+	}
 	/*
 	 * Install the interrupt handler for the common interrupts before
 	 * enabling common interrupts in core_init below.
@@ -1216,7 +1228,7 @@ static int dwc_otg_driver_probe(
 	DWC_DEBUGPL(DBG_CIL, "registering (common) handler for irq%d\n",
 		    irqno);
 	retval = request_irq(irqno, dwc_otg_common_irq,
-			     IRQF_SHARED | IRQF_DISABLED | IRQ_LEVEL, "dwc_otg",
+			     flags, "dwc_otg",
 			     dwc_otg_device);
 	if (retval) {
 		DWC_ERROR("request of irq%d failed\n", _dev->irq);

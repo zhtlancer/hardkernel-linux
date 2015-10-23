@@ -67,6 +67,9 @@
 
 extern unsigned char  _dwc_otg_fiq_stub, _dwc_otg_fiq_stub_end;
 
+DEFINE_PER_CPU(void *, fiq_stack_cpu);
+static DEFINE_MUTEX(fiq_lock);
+
 /**
  * Gets the endpoint number from a _bEndpointAddress argument. The endpoint is
  * qualified with its direction (possible 32 endpoints per device).
@@ -369,6 +372,14 @@ static struct fiq_handler fh = {
   .name = "usb_fiq",
 };
 
+extern void __fiq_ll_setup(long r8, long r9, long fp, void *sp);
+static void fiq_setup_helper(void *regs)
+{
+	struct pt_regs *fiq_regs = regs;
+
+	__fiq_ll_setup(fiq_regs->ARM_r8, fiq_regs->ARM_r9, fiq_regs->ARM_fp,
+			__get_cpu_var(fiq_stack_cpu) + THREAD_START_SP);
+}
 
 
 /**
@@ -395,6 +406,8 @@ int hcd_init(
 	int retval = 0;
 	int irqno;
 	struct pt_regs regs;
+	unsigned long flags = IRQF_SHARED | IRQF_DISABLED;
+	int cpu;
 
 	DWC_DEBUGPL(DBG_HCD, "DWC OTG HCD INIT\n");
 	
@@ -461,7 +474,6 @@ int hcd_init(
 		DWC_WARN("FIQ at 0x%08x", (fiq_fsm_enable ? (int)&dwc_otg_fiq_fsm : (int)&dwc_otg_fiq_nop));
 		DWC_WARN("FIQ ASM at 0x%08x length %d", (int)&_dwc_otg_fiq_stub, (int)(&_dwc_otg_fiq_stub_end - &_dwc_otg_fiq_stub));
 
-		set_fiq_handler((void *) &_dwc_otg_fiq_stub, &_dwc_otg_fiq_stub_end - &_dwc_otg_fiq_stub);
 		memset(&regs,0,sizeof(regs));
 
 		regs.ARM_r8 = (long) dwc_otg_hcd->fiq_state;
@@ -473,11 +485,26 @@ int hcd_init(
 		} else {
 			regs.ARM_fp = (long) dwc_otg_fiq_nop;
 		}
-		
-		regs.ARM_sp = (long) dwc_otg_hcd->fiq_stack + (sizeof(struct fiq_stack) - 4);
+
+		mutex_lock(&fiq_lock);
+
+		for_each_possible_cpu(cpu) {
+			void *stack;
+			stack = (void *) __get_free_pages(GFP_KERNEL, THREAD_SIZE_ORDER);
+			if (WARN_ON(!stack)) {
+				retval = -ENOMEM;
+				mutex_unlock(&fiq_lock);
+				goto error3;
+			}
+			per_cpu(fiq_stack_cpu, cpu) = stack;
+		}
+
+		on_each_cpu(fiq_setup_helper, &regs, true);
+		set_fiq_handler((void *) &_dwc_otg_fiq_stub, &_dwc_otg_fiq_stub_end - &_dwc_otg_fiq_stub);
+
+		mutex_unlock(&fiq_lock);
 
 //		__show_regs(&regs);
-		set_fiq_regs(&regs);
 
 		//Set the mphi periph to  the required registers
 		//dwc_otg_hcd->fiq_state->mphi_regs.base    = otg_dev->os_dep.mphi_base;
@@ -517,23 +544,32 @@ int hcd_init(
 //	if (otg_dev->core_if->otg_ver)
 //		hcd->self.is_hnp_cap = dwc_otg_get_hnpcapable(otg_dev->core_if);
 #endif
-	if (fiq_enable && dwc_otg_hcd->core_if->use_fiq_flag)
+	if (fiq_enable && dwc_otg_hcd->core_if->use_fiq_flag) {
 		irqno = MESON_USB_FIQ_BRIDGE;
-	else
+	} else {
 		irqno = _dev->irq;
+		flags |= IRQ_TYPE_LEVEL_HIGH;
+	}
 	/*
 	 * Finish generic HCD initialization and start the HCD. This function
 	 * allocates the DMA buffer pool, registers the USB bus, requests the
 	 * IRQ line, and calls hcd_start method.
 	 */
-	retval = usb_add_hcd(hcd, irqno, IRQF_SHARED | IRQF_DISABLED);
+	retval = usb_add_hcd(hcd, irqno, flags);
 	if (retval < 0) {
-		goto error2;
+		goto error3;
 	}
 
 	dwc_otg_hcd_set_priv_data(dwc_otg_hcd, hcd);
 	return 0;
 
+error3:
+	mutex_lock(&fiq_lock);
+	for_each_possible_cpu(cpu) {
+		__free_pages(per_cpu(fiq_stack_cpu, cpu), THREAD_SIZE_ORDER);
+		per_cpu(fiq_stack_cpu, cpu) = NULL;
+	}
+	mutex_unlock(&fiq_lock);
 error2:
 	usb_put_hcd(hcd);
 error1:
@@ -637,11 +673,13 @@ int hcd_suspend(struct usb_hcd *hcd)
 {
 	dwc_otg_hcd_t *dwc_otg_hcd = hcd_to_dwc_otg_hcd(hcd);
 	dwc_otg_hcd->auto_pm_suspend_flag = (hcd->flags>>31)&1;
+	dwc_otg_hcd->pm_freeze_flag = (hcd->flags >> 30) & 1;
 
 	DWC_DEBUGPL(DBG_HCD, "HCD SUSPEND\n");
 
 	dwc_otg_hcd_suspend(dwc_otg_hcd);
 	hcd->flags &= (~(1<<31));
+	hcd->flags &= (~(1<<30));
 
 	return 0;
 }
@@ -651,11 +689,14 @@ int hcd_resume(struct usb_hcd *hcd)
 {
 	dwc_otg_hcd_t *dwc_otg_hcd = hcd_to_dwc_otg_hcd(hcd);
 	dwc_otg_hcd->auto_pm_suspend_flag = (hcd->flags>>31)&1;
-	
+	dwc_otg_hcd->pm_freeze_flag = (hcd->flags >> 30) & 1;
+
 	DWC_DEBUGPL(DBG_HCD, "HCD RESUME\n");
 	
 	dwc_otg_hcd_resume(dwc_otg_hcd);
 	hcd->flags &= (~(1<<31));
+	hcd->flags &= (~(1<<30));
+
 	return 0;
 }
 
@@ -795,16 +836,15 @@ static int urb_enqueue(struct usb_hcd *hcd,
 				     usb_maxpacket(urb->dev, urb->pipe,
 						   !(usb_pipein(urb->pipe))));
 
-	buf = urb->transfer_buffer;
-	if (hcd->self.uses_dma) {
-		/*
-		 * Calculate virtual address from physical address,
-		 * because some class driver may not fill transfer_buffer.
-		 * In Buffer DMA mode virual address is used,
-		 * when handling non DWORD aligned buffers.
-		 */
-		buf = phys_to_virt(urb->transfer_dma);
+	if (hcd->self.uses_dma && (urb->transfer_flags & URB_NO_TRANSFER_DMA_MAP) &&
+			!urb->transfer_buffer)
+	{
+		DWC_ERROR("dwc_otg_hcd: urb->transfer_buffer not set. Bailing out.\n");
+		DWC_FREE(dwc_otg_urb);
+		return -EINVAL;
 	}
+
+	buf = urb->transfer_buffer;
 
 	if (!(urb->transfer_flags & URB_NO_INTERRUPT))
 		flags |= URB_GIVEBACK_ASAP;
