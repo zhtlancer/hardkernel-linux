@@ -244,6 +244,15 @@ static void aml_i2c_xfer_prepare(struct aml_i2c *i2c, unsigned int speed)
 
 static void aml_i2c_start_token_xfer(struct aml_i2c *i2c)
 {
+	struct aml_i2c_reg_ctrl *ctrl =
+		(struct aml_i2c_reg_ctrl *)&(i2c->master_regs->i2c_ctrl);
+
+	if (ctrl->manual_en || ctrl->ack_ignore)	{
+		dev_err(&i2c->adap.dev, "Controller Error! manual_en = %d, ack_ignore = %d\n",
+				ctrl->manual_en, ctrl->ack_ignore);
+		/* Controller Error Fix. */
+		ctrl->manual_en = 0;	ctrl->ack_ignore = 0;
+	}
 	aml_i2c_dump(i2c);
 	i2c->master_regs->i2c_ctrl &= ~1;	/*clear*/
 	i2c->master_regs->i2c_ctrl |= 1;	/*set*/
@@ -351,12 +360,19 @@ static ssize_t aml_i2c_write(struct aml_i2c *i2c, unsigned char *buf,
 	int ret;
 	size_t wr_len;
 	int tagnum = 0;
-	if (!buf || !len)
+	if (!buf)
 		return -EINVAL;
 	aml_i2c_clear_token_list(i2c);
 	if (!(i2c->msg_flags & I2C_M_NOSTART)) {
 		i2c->token_tag[tagnum++] = TOKEN_START;
 		i2c->token_tag[tagnum++] = TOKEN_SLAVE_ADDR_WRITE;
+
+		if (!len)	{
+			i2c->token_tag[tagnum++] = TOKEN_STOP;
+			aml_i2c_set_token_list(i2c);
+			aml_i2c_start_token_xfer(i2c);
+			return	aml_i2c_wait_ack(i2c);
+		}
 	}
 	while (len) {
 		wr_len = min_t(size_t, len, AML_I2C_MAX_TOKENS-tagnum);
@@ -599,9 +615,8 @@ static int aml_i2c_xfer(struct i2c_adapter *i2c_adap, struct i2c_msg *msgs,
 			i2c->msg_flags = p->flags;
 			aml_i2c_dbg(i2c, "msg%d: addr=0x%x, flag=0x%x, len=%d\n",
 						i, p->addr, p->flags, p->len);
-			ret = i2c->ops->do_address(i2c, p->addr);
-			if (ret || !p->len)
-				continue;
+			i2c->ops->do_address(i2c, p->addr);
+
 			if (p->flags & I2C_M_RD)
 				ret = i2c->ops->read(i2c, p->buf, p->len);
 			else
