@@ -13,8 +13,6 @@
  * Example core scaling policy.
  */
 
-#pragma GCC diagnostic ignored "-Wunused-variable"
-
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/workqueue.h>
@@ -22,18 +20,18 @@
 #include <mali_kernel_common.h>
 #include <mali_osk_profiling.h>
 
-#include <meson_main.h>
 #include <linux/amlogic/amports/gp_pll.h>
 #define LOG_MALI_SCALING 1
-
+#include "meson_main2.h"
+#include "mali_clock.h"
 
 static int currentStep;
 #ifndef CONFIG_MALI_DVFS
 static int num_cores_enabled;
 static int lastStep;
 static struct work_struct wq_work;
-#endif
 static mali_plat_info_t* pmali_plat = NULL;
+#endif
 static int  scaling_mode = MALI_PP_FS_SCALING;
 //static int  scaling_mode = MALI_SCALING_DISABLE;
 //static int  scaling_mode = MALI_PP_SCALING;
@@ -469,6 +467,12 @@ void set_mali_schel_mode(u32 mode)
 		return;
 	scaling_mode = mode;
 
+	//disable thermal in turbo mode
+	if (scaling_mode == MALI_TURBO_MODE) {
+		pmali_plat->limit_on = 0;
+	} else {
+		pmali_plat->limit_on = 1;
+	}
 	/* set default performance range. */
 	pmali_plat->scale_info.minclk = pmali_plat->cfg_min_clock;
 	pmali_plat->scale_info.maxclk = pmali_plat->cfg_clock;
@@ -514,13 +518,29 @@ void mali_gpu_utilization_callback(struct mali_gpu_utilization_data *data)
 	}
 #endif
 }
+static u32 clk_cntl_save = 0;
+void mali_dev_freeze(void)
+{
+	clk_cntl_save = mplt_read(HHI_MALI_CLK_CNTL);
+}
 
 void mali_dev_restore(void)
 {
-#ifndef CONFIG_MALI_DVFS
-	mali_dvfs_threshold_table * pdvfs = pmali_plat->dvfs_table;
 
-	//mali_perf_set_num_pp_cores(num_cores_enabled);
-	mali_clock_set(pdvfs[currentStep].freq_index);
-#endif
+	mplt_write(HHI_MALI_CLK_CNTL, clk_cntl_save);
+	if (pmali_plat && pmali_plat->pdev) {
+		mali_clock_init_clk_tree(pmali_plat->pdev);
+	} else {
+		printk("error: init clock failed, pmali_plat=%p, pmali_plat->pdev=%p\n",
+				pmali_plat, pmali_plat == NULL ? NULL: pmali_plat->pdev);
+	}
+}
+
+int mali_meson_get_gpu_data(struct mali_gpu_device_data *mgpu_data)
+{
+	mgpu_data->get_clock_info = NULL;
+	mgpu_data->get_freq = NULL;
+	mgpu_data->set_freq = NULL;
+	mgpu_data->utilization_callback = mali_gpu_utilization_callback;
+	return 0;
 }
