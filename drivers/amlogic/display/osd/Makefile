@@ -9,4 +9,4 @@ obj-$(CONFIG_INSTABOOT) += osd_progressbar.o
 ccflags-y += -Idrivers/staging/android/
 ccflags-y += -Idrivers/amlogic/display/
 
-obj-$(CONFIG_ARCH_MESON64_ODROIDC2) += osd_ump.o
+obj-$(CONFIG_UMP) += osd_ump.o
