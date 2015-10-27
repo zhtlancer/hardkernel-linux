@@ -1,9 +1,9 @@
 /*
  * Copyright (C) 2010-2015 ARM Limited. All rights reserved.
- *
+ * 
  * This program is free software and is provided to you under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
- *
+ * 
  * A copy of the licence is included with the program, and can also be obtained from Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
@@ -129,18 +129,16 @@ void mali_mem_block_allocator_destroy(void)
 
 u32 mali_mem_block_release(mali_mem_backend *mem_bkend)
 {
-
-    mali_mem_allocation *alloc = mem_bkend->mali_allocation;
-    u32 free_pages_nr = 0;
-
+	mali_mem_allocation *alloc = mem_bkend->mali_allocation;
+	u32 free_pages_nr = 0;
 	MALI_DEBUG_ASSERT(mem_bkend->type == MALI_MEM_BLOCK);
 
 	/* Unmap the memory from the mali virtual address space. */
 	mali_mem_block_mali_unmap(alloc);
-    mutex_lock(&mem_bkend->mutex);
-    free_pages_nr = mali_mem_block_free(&mem_bkend->block_mem);
-    mutex_unlock(&mem_bkend->mutex);
-    return free_pages_nr;
+	mutex_lock(&mem_bkend->mutex);
+	free_pages_nr = mali_mem_block_free(&mem_bkend->block_mem);
+	mutex_unlock(&mem_bkend->mutex);
+	return free_pages_nr;
 }
 
 
@@ -183,14 +181,19 @@ int mali_mem_block_alloc(mali_mem_block_mem *block_mem, u32 size)
 
 u32 mali_mem_block_free(mali_mem_block_mem *block_mem)
 {
-	mali_mem_block_free_list(&block_mem->pfns);
-	MALI_DEBUG_PRINT(4, ("BLOCK Mem free : size = 0x%x\n", block_mem->count * _MALI_OSK_MALI_PAGE_SIZE));
+	u32 free_pages_nr = 0;
+
+	free_pages_nr = mali_mem_block_free_list(&block_mem->pfns);
+	MALI_DEBUG_PRINT(4, ("BLOCK Mem free : allocated size = 0x%x, free size = 0x%x\n", block_mem->count * _MALI_OSK_MALI_PAGE_SIZE,
+			     free_pages_nr * _MALI_OSK_MALI_PAGE_SIZE));
 	block_mem->count = 0;
 	MALI_DEBUG_ASSERT(list_empty(&block_mem->pfns));
+
+	return free_pages_nr;
 }
 
 
-void mali_mem_block_free_list(struct list_head *list)
+u32 mali_mem_block_free_list(struct list_head *list)
 {
 	struct mali_page_node *m_page, *m_tmp;
 	mali_block_allocator *info = mali_mem_block_gobal_allocator;
@@ -233,29 +236,30 @@ void mali_mem_block_free_node(struct mali_page_node *node)
 /* unref the node, but not free it */
 _mali_osk_errcode_t mali_mem_block_unref_node(struct mali_page_node *node)
 {
-       mali_block_allocator *info = mali_mem_block_gobal_allocator;
-       mali_page_node *new_node;
+	mali_block_allocator *info = mali_mem_block_gobal_allocator;
+	mali_page_node *new_node;
 
-       /* only handle BLOCK node */
-       if (node->type == MALI_PAGE_NODE_BLOCK && info) {
-               /*Need to make this atomic?*/
-               if (1 == _mali_page_node_get_ref_count(node)) {
-                       /* allocate a  new node, Add to free list, keep the old node*/
-                       _mali_page_node_unref(node);
-                       new_node = _mali_page_node_allocate(MALI_PAGE_NODE_BLOCK);
-                       if (new_node) {
-                               memcpy(new_node, node, sizeof(mali_page_node));
-                               list_add(&new_node->list, &info->free);
-                               atomic_add(1, &info->free_num);
-                       } else
-                               return _MALI_OSK_ERR_FAULT;
+	/* only handle BLOCK node */
+	if (node->type == MALI_PAGE_NODE_BLOCK && info) {
+		/*Need to make this atomic?*/
+		if (1 == _mali_page_node_get_ref_count(node)) {
+			/* allocate a  new node, Add to free list, keep the old node*/
+			_mali_page_node_unref(node);
+			new_node = _mali_page_node_allocate(MALI_PAGE_NODE_BLOCK);
+			if (new_node) {
+				memcpy(new_node, node, sizeof(mali_page_node));
+				list_add(&new_node->list, &info->free);
+				atomic_add(1, &info->free_num);
+			} else
+				return _MALI_OSK_ERR_FAULT;
 
-               } else {
-                       _mali_page_node_unref(node);
-               }
-       }
-       return _MALI_OSK_ERR_OK;
+		} else {
+			_mali_page_node_unref(node);
+		}
+	}
+	return _MALI_OSK_ERR_OK;
 }
+
 
 int mali_mem_block_mali_map(mali_mem_block_mem *block_mem, struct mali_session_data *session, u32 vaddr, u32 props)
 {

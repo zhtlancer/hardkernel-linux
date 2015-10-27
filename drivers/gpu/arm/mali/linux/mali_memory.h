@@ -98,7 +98,6 @@ _mali_osk_errcode_t mali_mem_mali_map_prepare(mali_mem_allocation *descriptor);
  */
 void mali_mem_mali_map_free(struct mali_session_data *session, u32 size, mali_address_t vaddr, u32 flags);
 
-
 /** @brief Parse resource and prepare the OS memory allocator
  *
  * @param size Maximum size to allocate for Mali GPU.
@@ -113,6 +112,7 @@ _mali_osk_errcode_t mali_memory_core_resource_os_memory(u32 size);
  * @return _MALI_OSK_ERR_OK on success, otherwise failure.
  */
 _mali_osk_errcode_t mali_memory_core_resource_dedicated_memory(u32 start, u32 size);
+
 
 struct mali_page_node *_mali_page_node_allocate(mali_page_node_type type);
 

@@ -34,7 +34,6 @@ int mem_alloc_wrapper(struct mali_session_data *session_data, _mali_uk_alloc_mem
 int mem_free_wrapper(struct mali_session_data *session_data, _mali_uk_free_mem_s __user *uargs);
 int mem_bind_wrapper(struct mali_session_data *session_data, _mali_uk_bind_mem_s __user *uargs);
 int mem_unbind_wrapper(struct mali_session_data *session_data, _mali_uk_unbind_mem_s __user *uargs);
-
 int mem_cow_wrapper(struct mali_session_data *session_data, _mali_uk_cow_mem_s __user *uargs);
 int mem_cow_modify_range_wrapper(struct mali_session_data *session_data, _mali_uk_cow_modify_range_s __user *uargs);
 int mem_write_safe_wrapper(struct mali_session_data *session_data, _mali_uk_mem_write_safe_s __user *uargs);

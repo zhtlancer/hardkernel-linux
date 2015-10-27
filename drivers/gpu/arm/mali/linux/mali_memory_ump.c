@@ -1,9 +1,9 @@
 /*
  * Copyright (C) 2012-2015 ARM Limited. All rights reserved.
- *
+ * 
  * This program is free software and is provided to you under the terms of the GNU General Public License version 2
  * as published by the Free Software Foundation, and any use by you of this program is subject to the terms of such GNU licence.
- *
+ * 
  * A copy of the licence is included with the program, and can also be obtained from Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
@@ -104,7 +104,6 @@ static void mali_mem_ump_unmap(mali_mem_allocation *alloc)
 	mali_session_memory_lock(session);
 	mali_mem_mali_map_free(session, alloc->psize, alloc->mali_vma_node.vm_node.start,
 			       alloc->flags);
-
 	mali_session_memory_unlock(session);
 }
 
@@ -152,3 +151,4 @@ void mali_mem_unbind_ump_buf(mali_mem_backend *mem_backend)
 	mali_mem_ump_unmap(alloc);
 	ump_dd_reference_release(ump_mem);
 }
+

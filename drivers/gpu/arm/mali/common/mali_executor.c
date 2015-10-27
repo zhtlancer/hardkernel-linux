@@ -611,9 +611,10 @@ _mali_osk_errcode_t mali_executor_interrupt_gp(struct mali_group *group,
 	} else {
 		struct mali_gp_job *job;
 		mali_bool success;
-		
-		if (MALI_TRUE == time_out)
+
+		if (MALI_TRUE == time_out) {
 			mali_group_dump_status(group);
+		}
 
 		success = (int_result != MALI_INTERRUPT_RESULT_ERROR) ?
 			  MALI_TRUE : MALI_FALSE;
@@ -712,8 +713,9 @@ _mali_osk_errcode_t mali_executor_interrupt_pp(struct mali_group *group,
 		struct mali_pp_job *job = NULL;
 		mali_bool success;
 
-		if (MALI_TRUE == time_out)
+		if (MALI_TRUE == time_out) {
 			mali_group_dump_status(group);
+		}
 
 		success = (int_result == MALI_INTERRUPT_RESULT_SUCCESS) ?
 			  MALI_TRUE : MALI_FALSE;
@@ -1456,8 +1458,8 @@ static mali_bool mali_executor_virtual_group_is_usable(void)
 {
 #if defined(CONFIG_MALI450)
 	MALI_DEBUG_ASSERT_EXECUTOR_LOCK_HELD();
-	return ((EXEC_STATE_INACTIVE == virtual_group_state ||
-		EXEC_STATE_IDLE == virtual_group_state)&&(virtual_group->state != MALI_GROUP_STATE_ACTIVATION_PENDING)) ?
+	return (EXEC_STATE_INACTIVE == virtual_group_state ||
+		EXEC_STATE_IDLE == virtual_group_state) ?
 	       MALI_TRUE : MALI_FALSE;
 #else
 	return MALI_FALSE;

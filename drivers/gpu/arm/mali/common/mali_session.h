@@ -49,9 +49,9 @@ struct mali_session_data {
 	mali_bool use_high_priority_job_queue; /**< If MALI_TRUE, jobs added from this session will use the high priority job queues. */
 	u32 pid;
 	char *comm;
-    atomic_t mali_mem_array[MALI_MEM_TYPE_MAX]; /**< The array to record mem types' usage for this session. */
-    atomic_t mali_mem_allocated_pages; /** The current allocated mali memory pages, which include mali os memory and mali dedicated memory.*/
-    size_t max_mali_mem_allocated_size; /**< The past max mali memory allocated size, which include mali os memory and mali dedicated memory. */
+	atomic_t mali_mem_array[MALI_MEM_TYPE_MAX]; /**< The array to record mem types' usage for this session. */
+	atomic_t mali_mem_allocated_pages; /** The current allocated mali memory pages, which include mali os memory and mali dedicated memory.*/
+	size_t max_mali_mem_allocated_size; /**< The past max mali memory allocated size, which include mali os memory and mali dedicated memory. */
 	/* Added for new memroy system */
 	struct mali_allocation_manager allocation_mgr;
 };

@@ -8,7 +8,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
  */
 
-#include <linux/sched.h>
 #include "mali_osk.h"
 #include "mali_osk_list.h"
 #include "mali_session.h"
@@ -88,30 +87,24 @@ u32 mali_session_max_window_num(void)
 	return max_window_num;
 }
 #endif
+
 void mali_session_memory_tracking(_mali_osk_print_ctx *print_ctx)
 {
 	struct mali_session_data *session, *tmp;
-	char task_comm[TASK_COMM_LEN];
-	struct task_struct *ttask;
 	u32 mali_mem_usage;
 	u32 total_mali_mem_size;
 
 	MALI_DEBUG_ASSERT_POINTER(print_ctx);
 	mali_session_lock();
-
 	MALI_SESSION_FOREACH(session, tmp, link) {
-		ttask = pid_task(find_vpid(session->pid), PIDTYPE_PID);
-		//get_task_comm(task_comm, ttask);
-		strncpy(task_comm, ttask->comm, sizeof(ttask->comm));
-                _mali_osk_ctxprintf(print_ctx, "  %-25s  %-10u  %-10u  %-15u  %-15u  %-10u  %-10u\n",
-                                    session->comm, session->pid,
-                                   (atomic_read(&session->mali_mem_allocated_pages)) * _MALI_OSK_MALI_PAGE_SIZE,
-                                   session->max_mali_mem_allocated_size,
-                                   (atomic_read(&session->mali_mem_array[MALI_MEM_EXTERNAL])) * _MALI_OSK_MALI_PAGE_SIZE,
-                                   (atomic_read(&session->mali_mem_array[MALI_MEM_UMP])) * _MALI_OSK_MALI_PAGE_SIZE,
-                                   (atomic_read(&session->mali_mem_array[MALI_MEM_DMA_BUF])) * _MALI_OSK_MALI_PAGE_SIZE
-                                  );
-
+		_mali_osk_ctxprintf(print_ctx, "  %-25s  %-10u  %-10u  %-15u  %-15u  %-10u  %-10u\n",
+				    session->comm, session->pid,
+				    (atomic_read(&session->mali_mem_allocated_pages)) * _MALI_OSK_MALI_PAGE_SIZE,
+				    session->max_mali_mem_allocated_size,
+				    (atomic_read(&session->mali_mem_array[MALI_MEM_EXTERNAL])) * _MALI_OSK_MALI_PAGE_SIZE,
+				    (atomic_read(&session->mali_mem_array[MALI_MEM_UMP])) * _MALI_OSK_MALI_PAGE_SIZE,
+				    (atomic_read(&session->mali_mem_array[MALI_MEM_DMA_BUF])) * _MALI_OSK_MALI_PAGE_SIZE
+				   );
 	}
 	mali_session_unlock();
 	mali_mem_usage  = _mali_ukk_report_memory_usage();

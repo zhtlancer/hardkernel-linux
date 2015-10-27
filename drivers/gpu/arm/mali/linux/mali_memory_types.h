@@ -34,6 +34,7 @@ typedef struct mali_block_item {
 	unsigned long phy_addr;
 } mali_block_item;
 
+
 typedef enum mali_page_node_type {
 	MALI_PAGE_NODE_OS,
 	MALI_PAGE_NODE_BLOCK,
@@ -42,8 +43,8 @@ typedef enum mali_page_node_type {
 typedef struct mali_page_node {
 	struct list_head list;
 	union {
-			struct page *page;
-			mali_block_item *blk_it;
+		struct page *page;
+		mali_block_item *blk_it; /*pointer to block item*/
 	};
 	u32 type;
 } mali_page_node;
@@ -89,7 +90,7 @@ typedef struct mali_mem_virt_mali_mapping {
 
 typedef struct mali_mem_virt_cpu_mapping {
 	void __user *addr;
-	u32 ref;
+	struct vm_area_struct *vma;
 } mali_mem_virt_cpu_mapping;
 
 #define MALI_MEM_ALLOCATION_VALID_MAGIC 0xdeda110c
@@ -127,7 +128,6 @@ typedef struct mali_mem_allocation {
 	_mali_osk_atomic_t mem_alloc_refcount;
 } mali_mem_allocation;
 
-
 /* COW backend memory type */
 typedef struct mali_mem_cow {
 	struct list_head pages;  /**< all pages for this cow backend allocation,
@@ -155,7 +155,7 @@ typedef struct mali_mem_backend {
 	mali_mem_allocation *mali_allocation;
 	struct mutex mutex;
 	mali_mem_type cow_type;
-	
+
 	u32 cow_flag;
 } mali_mem_backend;
 

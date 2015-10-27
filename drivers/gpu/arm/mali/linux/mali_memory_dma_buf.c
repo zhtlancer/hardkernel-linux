@@ -341,13 +341,12 @@ failed_alloc_mem:
 	return _MALI_OSK_ERR_FAULT;
 }
 
-
 void mali_mem_unbind_dma_buf(mali_mem_backend *mem_backend)
 {
 	struct mali_dma_buf_attachment *mem;
 	MALI_DEBUG_ASSERT_POINTER(mem_backend);
-    MALI_DEBUG_ASSERT(MALI_MEM_DMA_BUF == mem_backend->type);
-    
+	MALI_DEBUG_ASSERT(MALI_MEM_DMA_BUF == mem_backend->type);
+
 	mem = mem_backend->dma_buf.attachment;
 	MALI_DEBUG_ASSERT_POINTER(mem);
 	MALI_DEBUG_ASSERT_POINTER(mem->attachment);
@@ -355,18 +354,16 @@ void mali_mem_unbind_dma_buf(mali_mem_backend *mem_backend)
 	MALI_DEBUG_PRINT(3, ("Mali DMA-buf: release attachment %p\n", mem));
 
 #if defined(CONFIG_MALI_DMA_BUF_MAP_ON_ATTACH)
-       MALI_DEBUG_ASSERT_POINTER(mem_backend->mali_allocation);
-       /* We mapped implicitly on attach, so we need to unmap on release */
-       mali_dma_buf_unmap(mem_backend->mali_allocation, mem);
+	MALI_DEBUG_ASSERT_POINTER(mem_backend->mali_allocation);
+	/* We mapped implicitly on attach, so we need to unmap on release */
+	mali_dma_buf_unmap(mem_backend->mali_allocation, mem);
 #endif
-       /* Wait for buffer to become unmapped */
-       wait_event(mem->wait_queue, !mem->is_mapped);
-       MALI_DEBUG_ASSERT(!mem->is_mapped);
+	/* Wait for buffer to become unmapped */
+	wait_event(mem->wait_queue, !mem->is_mapped);
+	MALI_DEBUG_ASSERT(!mem->is_mapped);
 
-       dma_buf_detach(mem->buf, mem->attachment);
-       dma_buf_put(mem->buf);
+	dma_buf_detach(mem->buf, mem->attachment);
+	dma_buf_put(mem->buf);
 
-       _mali_osk_free(mem);
+	_mali_osk_free(mem);
 }
-
-

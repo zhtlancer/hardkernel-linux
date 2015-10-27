@@ -14,6 +14,7 @@
 #include "mali_osk.h"
 #include "mali_memory_types.h"
 
+
 /** @brief Release Mali OS memory
  *
  * The session memory_lock must be held when calling this function.

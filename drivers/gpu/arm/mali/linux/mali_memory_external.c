@@ -86,3 +86,4 @@ _mali_osk_errcode_t mali_mem_bind_ext_buf(mali_mem_allocation *alloc,
 
 	MALI_SUCCESS;
 }
+
