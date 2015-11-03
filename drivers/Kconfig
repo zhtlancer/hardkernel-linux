@@ -178,4 +178,6 @@ source "drivers/gator/Kconfig"
 
 source "drivers/hardkernel/Kconfig"
 
+source "drivers/coresight/Kconfig"
+
 endmenu
