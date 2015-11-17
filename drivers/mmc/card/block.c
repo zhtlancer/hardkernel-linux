@@ -45,7 +45,9 @@
 #include <asm/uaccess.h>
 
 #include "queue.h"
+#if !defined(CONFIG_ARCH_MESON64_ODROIDC2)
 #include <linux/mmc/emmc_partitions.h>
+#endif
 
 MODULE_ALIAS("mmc:block");
 #ifdef MODULE_PARAM_PREFIX
@@ -2465,7 +2467,9 @@ static int mmc_blk_probe(struct mmc_card *card)
 	if (mmc_add_disk(md))
 		goto out;
 
+#if !defined(CONFIG_ARCH_MESON64_ODROIDC2)
 	aml_emmc_partition_ops(card, md->disk); /* add by gch */
+#endif
 	atomic_set(&emmc_probe, 0);
 	wake_up(&emmc_probe_waitqueue);
 
