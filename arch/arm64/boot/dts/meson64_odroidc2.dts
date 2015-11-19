@@ -125,10 +125,10 @@
                         0 89 1>;
 		interrupt-names = "viu-vsync", "rdma";
 		mem_size = <0x06000000 0x00100000>; /* fb0/fb1 memory size */
-                vmode = <3>;
+                vmode = <4>;	/* 720p60hz */
 		scale_mode = <1>;
                 4k2k_fb = <1>;
-		display_size_default = <1920 1080 1920 2160 32>;
+		display_size_default = <1280 720 1280 1440 32>;
 	};
 
 	ge2d {
