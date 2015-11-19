@@ -31,6 +31,10 @@
 #include <linux/hrtimer.h>
 #include <asm/setup.h>
 
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+#include <linux/amlogic/iomap.h>
+#endif
+
 MODULE_AUTHOR("Hardkernel Co,.Ltd");
 MODULE_DESCRIPTION("SYSFS driver for ODROID hardware");
 MODULE_LICENSE("GPL");
@@ -87,11 +91,60 @@ static ssize_t show_mac_addr(struct class *class,
 	return snprintf(buf, PAGE_SIZE, "%s\n", mac_addr);
 }
 
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+/*
+ * Discover the boot device within MicroSD or eMMC
+ * and return 1 for eMMC, otherwise 0.
+ */
+enum {
+	BOOT_DEVICE_RESERVED = 0,
+	BOOT_DEVICE_EMMC = 1,
+	BOOT_DEVICE_NAND = 2,
+	BOOT_DEVICE_SPI = 3,
+	BOOT_DEVICE_SD = 4,
+	BOOT_DEVICE_USB = 5,
+	BOOT_DEVICE_MAX,
+};
+
+static int get_boot_device(void)
+{
+	int bootdev = aml_read_aobus(0x90 << 2) & 0xf;
+
+	if (bootdev >= BOOT_DEVICE_MAX)
+		return BOOT_DEVICE_RESERVED;
+
+	return bootdev;
+}
+
+int board_boot_from_emmc(void)
+{
+	return !!(get_boot_device() == BOOT_DEVICE_EMMC);
+}
+EXPORT_SYMBOL(board_boot_from_emmc);
+
+static ssize_t show_bootdev(struct class *class,
+		struct class_attribute *attr, char *buf)
+{
+	const char *boot_dev_name[BOOT_DEVICE_MAX] = {
+		"unknown",	/* reserved boot device treated as 'unknown' */
+		"emmc",
+		"nand",
+		"spi",
+		"sd",
+		"usb"
+	};
+
+	return snprintf(buf, PAGE_SIZE, "%s\n",
+			boot_dev_name[get_boot_device()]);
+}
+#endif
+
 static struct class_attribute odroid_class_attrs[] = {
 	__ATTR(poweroff_trigger, 0222, NULL, set_poweroff_trigger),
 	__ATTR(product, 0444, show_product, NULL),
 	__ATTR(serialno, 0444, show_serialno, NULL),
 	__ATTR(mac_addr, 0444, show_mac_addr, NULL),
+	__ATTR(bootdev, 0444, show_bootdev, NULL),
 	__ATTR_NULL,
 };
 
