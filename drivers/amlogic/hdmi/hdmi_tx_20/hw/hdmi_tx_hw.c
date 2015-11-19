@@ -1963,6 +1963,10 @@ static int hdmitx_set_dispmode(struct hdmitx_dev *hdev,
 	mdelay(1);
 	hdmitx_set_reg_bits(HDMITX_DWC_FC_INVIDCONF, 1, 3, 1);
 
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+	hdmitx_hdmi_dvi_config(hdev, odroidc_voutmode() != VOUTMODE_HDMI);
+#endif
+
 	return 0;
 }
 
@@ -4348,3 +4352,26 @@ static void hdmitx_set_hw(struct hdmitx_vidpara *param)
 			output_color_format);
 	return;
 }
+
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+static int dvi_mode = VOUTMODE_HDMI;
+
+int odroidc_voutmode(void)
+{
+	return dvi_mode;
+}
+EXPORT_SYMBOL(odroidc_voutmode);
+
+static  int __init vout_setup(char *s)
+{
+	dvi_mode = VOUTMODE_HDMI;
+
+	if (!strcmp(s, "dvi"))
+		dvi_mode = VOUTMODE_DVI;
+	else if (!strcmp(s, "vga"))
+		dvi_mode = VOUTMODE_VGA;
+
+	return 0;
+}
+__setup("vout=", vout_setup);
+#endif
