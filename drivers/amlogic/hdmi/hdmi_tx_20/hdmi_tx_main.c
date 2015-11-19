@@ -502,7 +502,7 @@ static int set_disp_mode_auto(void)
 			hdmi_print(IMP, SYS "change to DVI mode\n");
 		}
 		hdmitx_device.cur_VIC = vic;
-		hdmitx_device.output_blank_flag = 1;
+		hdmitx_device.output_blank_flag = 0;
 		if (hdmitx_device.hdcpop.hdcp14_en)
 			hdmitx_device.HWOp.CntlDDC(&hdmitx_device,
 				DDC_HDCP_OP, HDCP_ON);
@@ -559,7 +559,7 @@ static int set_disp_mode_auto(void)
 		hdmitx_device.cur_VIC);
 	hdmitx_set_audio(&hdmitx_device,
 		&(hdmitx_device.cur_audio_param), hdmi_ch);
-	hdmitx_device.output_blank_flag = 1;
+	hdmitx_device.output_blank_flag = 0;
 	if (hdmitx_device.hdcpop.hdcp14_en)
 		hdmitx_device.HWOp.CntlDDC(&hdmitx_device,
 			DDC_HDCP_OP, HDCP_ON);
@@ -1127,6 +1127,7 @@ static ssize_t store_avmute(struct device *dev,
 static ssize_t store_phy(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
+
 	int cmd = TMDS_PHY_ENABLE;
 	if (strncmp(buf, "0", 1) == 0)
 		cmd = TMDS_PHY_DISABLE;

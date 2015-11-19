@@ -254,7 +254,7 @@ static void osd_test_colorbar(void)
 
 static void osd_reset(void)
 {
-	osd_set_free_scale_enable_hw(0, 0);
+	osd_set_free_scale_enable_hw(0, 0x10001);
 	osd_enable_hw(0, 1);
 }
 

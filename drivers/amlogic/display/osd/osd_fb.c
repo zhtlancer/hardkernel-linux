@@ -1237,6 +1237,7 @@ static ssize_t store_free_scale_axis(struct device *device,
 				parsed[0], parsed[1], parsed[2], parsed[3]);
 	else
 		osd_log_err("set free scale axis error\n");
+	osd_set_free_scale_enable_hw(0, 0x10001);
 	return count;
 }
 
@@ -1418,6 +1419,7 @@ static ssize_t store_window_axis(struct device *device,
 				parsed[0], parsed[1], parsed[2], parsed[3]);
 	else
 		osd_log_err("set window axis error\n");
+	osd_set_free_scale_enable_hw(0, 0x10001);
 	return count;
 }
 
@@ -2248,8 +2250,9 @@ static int osd_probe(struct platform_device *pdev)
 
 		/* Linux Setup */
 		if(index == DEV_OSD0) {
-			osd_set_free_scale_enable_hw(fbi->node, 0);
+			osd_set_free_scale_enable_hw(fbi->node, 0x10001);
 			osd_set_free_scale_mode_hw(fbi->node, 1);
+			osd_blank(0, fbi);
 		}
 
 	}

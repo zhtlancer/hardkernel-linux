@@ -860,12 +860,11 @@ void osd_setup_hw(u32 index,
 		osd_hw.color_info[index] = color;
 	}
 	/* osd blank only control by /sys/class/graphcis/fbx/blank */
-#if 0
+
 	if (osd_hw.enable[index] == DISABLE) {
 		osd_hw.enable[index] = ENABLE;
 		add_to_update_list(index, OSD_ENABLE);
 	}
-#endif
 
 	if (memcmp(&pan_data, &osd_hw.pandata[index],
 				sizeof(struct pandata_s)) != 0 ||
