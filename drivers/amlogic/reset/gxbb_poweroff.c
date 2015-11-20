@@ -31,13 +31,10 @@
 #include <linux/amlogic/iomap.h>
 #include <linux/amlogic/cpu_version.h>
 #include <asm/compiler.h>
-#include <linux/kdebug.h>
 
-#define AO_RTI_STATUS_REG1	((0x00 << 10) | (0x01 << 2))
-#define WATCHDOG_TC		0x2640
 static u32 psci_function_id_restart;
 static u32 psci_function_id_poweroff;
-static char *kernel_panic;
+static u32 psci_function_id_poweroff2;
 
 #if defined(CONFIG_ARCH_MESON64_ODROIDC2)
 /* FIXME: Since S905 does use only 4 bits in AO_SEC_SD_CFG15, only valid
@@ -50,7 +47,7 @@ static char *kernel_panic;
 
 static u32 parse_reason(const char *cmd)
 {
-	u32 reboot_reason = LINUX_REBOOT_CMD_RESTART;
+	u32 reboot_reason = ODROID_REBOOT_CMD_NORMAL;
 
 	if (cmd) {
 		if (strcmp(cmd, "recovery") == 0)
@@ -83,9 +80,7 @@ static u32 parse_reason(const char *cmd)
 #define	MESONGXBB_USB_BURNER_REBOOT				0x4
 #define MESONGXBB_UBOOT_SUSPEND					0x5
 #define MESONGXBB_HIBERNATE					0x6
-#define	MESONGXBB_CRASH_REBOOT					11
-#define	MESONGXBB_KERNEL_PANIC					12
-
+#define	MESONGXBB_CRASH_REBOOT					0x11
 
 static u32 parse_reason(const char *cmd)
 {
@@ -105,15 +100,7 @@ static u32 parse_reason(const char *cmd)
 			reboot_reason = MESONGXBB_UBOOT_SUSPEND;
 		else if (strcmp(cmd, "hibernate") == 0)
 			reboot_reason = MESONGXBB_HIBERNATE;
-	} else {
-		if (kernel_panic) {
-			if (strcmp(kernel_panic, "kernel_panic") == 0)
-				reboot_reason = MESONGXBB_KERNEL_PANIC;
-		}
-
 	}
-
-	pr_info("reboot reason %d\n", reboot_reason);
 	return reboot_reason;
 }
 #endif
@@ -155,27 +142,13 @@ static void do_aml_restart(enum reboot_mode reboot_mode, const char *cmd)
 
 static void do_aml_poweroff(void)
 {
-	/* TODO: Add poweroff capability */
-	__invoke_psci_fn_smc(0x82000042, 1, 0, 0);
-	__invoke_psci_fn_smc(psci_function_id_poweroff,
-				0, 0, 0);
+	__invoke_psci_fn_smc(psci_function_id_poweroff2, 1, 0, 0);
+	__invoke_psci_fn_smc(psci_function_id_poweroff, 0, 0, 0);
 }
-static int panic_notify(struct notifier_block *self,
-			unsigned long cmd, void *ptr)
-{
-	kernel_panic = "kernel_panic";
-
-	return NOTIFY_DONE;
-}
-
-static struct notifier_block panic_notifier = {
-	.notifier_call	= panic_notify,
-};
 
 static int aml_restart_probe(struct platform_device *pdev)
 {
 	u32 id;
-	int ret;
 	pm_power_off = do_aml_poweroff;
 	arm_pm_restart = do_aml_restart;
 
@@ -184,9 +157,9 @@ static int aml_restart_probe(struct platform_device *pdev)
 
 	if (!of_property_read_u32(pdev->dev.of_node, "sys_poweroff", &id))
 		psci_function_id_poweroff = id;
-	ret = register_die_notifier(&panic_notifier);
-	if (ret != 0)
-			return ret;
+
+	if (!of_property_read_u32(pdev->dev.of_node, "sys_poweroff2", &id))
+		psci_function_id_poweroff2 = id;
 
 	return 0;
 }
