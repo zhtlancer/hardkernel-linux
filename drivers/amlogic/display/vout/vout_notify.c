@@ -318,3 +318,24 @@ int vout_unregister_server(struct vout_server_s  *mem_server)
 	return 0;
 }
 EXPORT_SYMBOL(vout_unregister_server);
+
+int set_current_vout_server(struct vout_server_s *vserver)
+{
+	struct vout_server_s *p_server;
+
+	BUG_ON(vserver == NULL);
+	mutex_lock(&vout_mutex);
+	list_for_each_entry(p_server, &vout_module.vout_server_list, list) {
+		if (p_server->name && vserver->name &&
+		    strcmp(p_server->name, vserver->name) == 0) {
+			vout_module.curr_vout_server = vserver;
+			mutex_unlock(&vout_mutex);
+
+			return 0;
+		}
+	}
+	mutex_unlock(&vout_mutex);
+
+	return -EINVAL;
+}
+EXPORT_SYMBOL(set_current_vout_server);

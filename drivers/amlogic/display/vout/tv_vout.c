@@ -58,6 +58,7 @@
 #define P_PIN_MUX_REG_0 CBUS_REG_ADDR(PIN_MUX_REG_0)
 static struct disp_module_info_s disp_module_info __nosavedata;
 static struct disp_module_info_s *info __nosavedata;
+enum vmode_e boot_vmode = VMODE_INIT_NULL;
 
 static void vdac_power_level_store(char *para);
 SET_TV_CLASS_ATTR(vdac_power_level, vdac_power_level_store)
@@ -1135,9 +1136,27 @@ static struct vout_server_s tv_server = {
 
 static void _init_vout(void)
 {
+	if (boot_vmode != VMODE_INIT_NULL)
+		info->vinfo = &tv_info[boot_vmode];
+		
 	if (info->vinfo == NULL)
-		info->vinfo = &tv_info[TVMODE_720P];
+		info->vinfo = &tv_info[TVMODE_1080P];
 }
+
+static int __init get_tvout_hdmi_mode(char *str)
+{
+	int i;
+
+	/* Find the video mode from boot parameter */
+	for (i = 0; i < ARRAY_SIZE(tv_info); ++i) {
+		if (strcmp(tv_info[i].name, str) == 0) {
+			boot_vmode = tv_info[i].mode;
+			return 1;
+		}
+	}
+	return 0;
+}
+__setup("hdmimode=", get_tvout_hdmi_mode);
 
 /* **************************************************** */
 static void bist_test_store(char *para)
@@ -1582,6 +1601,14 @@ static int __init tv_init_module(void)
 		vout_log_err("register tv module server fail\n");
 	else
 		vout_log_info("register tv module server ok\n");
+
+	ret = set_current_vout_server(&tv_server);
+	if (ret < 0) {
+		vout_log_err("set the current vout server failed!\n");
+		return ret;
+	}
+	vout_log_info("set the current vout server = %s\n", tv_server.name);
+
 	create_tv_attr(info);
 	return 0;
 }

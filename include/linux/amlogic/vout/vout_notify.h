@@ -92,6 +92,7 @@ extern enum vmode_e validate_vmode2(char *);
 extern void set_vout2_mode_internal(char *name);
 extern enum vmode_e get_logo_vmode(void);
 extern int set_logo_vmode(enum vmode_e);
+extern int set_current_vout_server(struct vout_server_s *vserver);
 
 extern int vout2_suspend(void);
 extern int vout2_resume(void);
