@@ -280,13 +280,13 @@ static struct regulator_consumer_supply ldo4_consumer_77686 =
 static struct regulator_init_data max77686_ldo4_data = {
 	.constraints	= {
 		.name		= "LDO4 VDDQ_MMC2_2V8",
-		.min_uV		= 2800000,
-		.max_uV		= 2800000,
+		.min_uV		= 3300000,
+		.max_uV		= 3300000,
 		.apply_uV	= 1,
 		.always_on	= 1,
 		.valid_ops_mask = REGULATOR_CHANGE_STATUS,
 		.state_mem	= {
-			.uV		= 2800000,
+			.uV		= 3300000,
 			.enabled = 1,
 		},
 	},
