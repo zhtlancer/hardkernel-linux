@@ -116,4 +116,6 @@ source "drivers/amlogic/pwm/Kconfig"
 source "drivers/amlogic/spicc/Kconfig"
 
 source "drivers/amlogic/cpu_info/Kconfig"
+
+source "drivers/amlogic/defendkey/Kconfig"
 endmenu

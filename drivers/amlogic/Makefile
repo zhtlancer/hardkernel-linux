@@ -140,3 +140,5 @@ obj-$(CONFIG_MESON_PWM) += pwm/
 obj-$(CONFIG_AMLOGIC_SPICC_MASTER) += spicc/
 
 obj-$(CONFIG_AMLOGIC_CPU_INFO)	+=cpu_info/
+
+obj-$(CONFIG_DEFEND_IMG)	+= defendkey/
