@@ -1037,6 +1037,9 @@ static const struct hid_device_id mt_devices[] = {
 	{ .driver_data = MT_CLS_DUAL_INRANGE_CONTACTID,
 		HID_USB_DEVICE(USB_VENDOR_ID_IRTOUCHSYSTEMS,
 			USB_DEVICE_ID_IRTOUCH_INFRARED_USB) },
+	{ .driver_data = MT_CLS_DUAL_INRANGE_CONTACTID,
+		HID_USB_DEVICE(USB_VENDOR_ID_IRTOUCHSYSTEMS,
+			USB_DEVICE_ID_IRTOUCH_TOUCH) },
 
 	/* LG Display panels */
 	{ .driver_data = MT_CLS_DEFAULT,
@@ -1212,6 +1215,11 @@ static const struct hid_device_id mt_devices[] = {
 	{ .driver_data = MT_CLS_DEFAULT,
 		HID_USB_DEVICE(USB_VENDOR_ID_SINGWAY,
 				USB_DEVICE_ID_XWC1359_7_TOUCH) },
+
+	 /* Dell P2314T USB capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_DELL,
+				USB_DEVICE_ID_P2314T_TOUCH) },
 
 	{ }
 };
