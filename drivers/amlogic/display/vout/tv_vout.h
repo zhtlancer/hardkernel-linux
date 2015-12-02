@@ -532,6 +532,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 27000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_480I_RPT */
 		.name              = "480i_rpt",
@@ -544,6 +545,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 27000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_480CVBS*/
 		.name              = "480cvbs",
@@ -556,6 +558,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 27000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_480P */
 		.name              = "480p60hz",
@@ -568,6 +571,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 27000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_480P_RPT */
 		.name              = "480p_rpt",
@@ -580,6 +584,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 27000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_576I */
 		.name              = "576i50hz",
@@ -592,6 +597,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 50,
 		.sync_duration_den = 1,
 		.video_clk         = 27000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_576I_RPT */
 		.name              = "576i_rpt",
@@ -604,6 +610,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 50,
 		.sync_duration_den = 1,
 		.video_clk         = 27000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_576I */
 		.name              = "576cvbs",
@@ -616,6 +623,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 50,
 		.sync_duration_den = 1,
 		.video_clk         = 27000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_576P */
 		.name              = "576p50hz",
@@ -628,6 +636,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 50,
 		.sync_duration_den = 1,
 		.video_clk         = 27000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_576P_RPT */
 		.name              = "576p_rpt",
@@ -640,6 +649,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 50,
 		.sync_duration_den = 1,
 		.video_clk         = 27000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_720P */
 		.name              = "720p60hz",
@@ -652,6 +662,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 74250000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_1080I */
 		.name              = "1080i60hz",
@@ -664,6 +675,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 74250000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_1080P */
 		.name              = "1080p60hz",
@@ -676,6 +688,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 148500000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_720P_50hz */
 		.name              = "720p50hz",
@@ -688,6 +701,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 50,
 		.sync_duration_den = 1,
 		.video_clk         = 74250000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_1080I_50HZ */
 		.name              = "1080i50hz",
@@ -700,6 +714,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 50,
 		.sync_duration_den = 1,
 		.video_clk         = 74250000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_1080P_50HZ */
 		.name              = "1080p50hz",
@@ -712,6 +727,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 50,
 		.sync_duration_den = 1,
 		.video_clk         = 148500000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_1080P_24HZ */
 		.name              = "1080p24hz",
@@ -724,6 +740,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 24,
 		.sync_duration_den = 1,
 		.video_clk         = 74250000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K2K_30HZ */
 		.name              = "2160p30hz",
@@ -736,6 +753,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 30,
 		.sync_duration_den = 1,
 		.video_clk         = 297000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K2K_25HZ */
 		.name              = "2160p25hz",
@@ -748,6 +766,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 25,
 		.sync_duration_den = 1,
 		.video_clk         = 297000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K2K_24HZ */
 		.name              = "2160p24hz",
@@ -760,6 +779,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 24,
 		.sync_duration_den = 1,
 		.video_clk         = 297000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K2K_SMPTE */
 		.name              = "smpte24hz",
@@ -772,6 +792,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 24,
 		.sync_duration_den = 1,
 		.video_clk         = 297000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K2K_FAKE_5G */
 		.name              = "4k2k5g",
@@ -784,6 +805,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 50,
 		.sync_duration_den = 1,
 		.video_clk         = 495000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K2K_60HZ_Y420 */
 		.name              = "2160p60hz420",
@@ -796,6 +818,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K2K_60HZ */
 		.name              = "2160p60hz",
@@ -808,6 +831,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K1K_100HZ_Y420 */
 		.name              = "4k1k100hz420",
@@ -820,6 +844,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 100,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K1K_100HZ */
 		.name              = "4k1k100hz",
@@ -832,6 +857,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 100,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K1K_120HZ_Y420 */
 		.name              = "4k1k120hz420",
@@ -844,6 +870,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 120,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K1K_120HZ */
 		.name              = "4k1k120hz",
@@ -856,6 +883,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 120,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K05K_200HZ_Y420 */
 		.name              = "4k05k200hz420",
@@ -868,6 +896,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 200,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K05K_200HZ */
 		.name              = "4k05k200hz",
@@ -880,6 +909,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 200,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K05K_240HZ_Y420 */
 		.name              = "4k05k240hz420",
@@ -892,6 +922,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 240,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K05K_240HZ */
 		.name              = "4k05k240hz",
@@ -904,6 +935,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 240,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K2K_50HZ_Y420 */
 		.name              = "2160p50hz420",
@@ -916,6 +948,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 50,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_4K2K_50HZ */
 		.name              = "2160p50hz",
@@ -928,6 +961,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 50,
 		.sync_duration_den = 1,
 		.video_clk         = 594000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{
 		.name              = "640x480p60hz",
@@ -1156,6 +1190,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 25175000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_SVGA */
 		.name              = "svga",
@@ -1168,6 +1203,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 40000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_XGA */
 		.name              = "xga",
@@ -1180,6 +1216,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 65000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_sxga */
 		.name              = "sxga",
@@ -1192,6 +1229,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 108000000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_wsxga */
 		.name              = "wsxga",
@@ -1204,6 +1242,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 88750000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{ /* VMODE_fhdvga */
 		.name              = "fhdvga",
@@ -1216,6 +1255,7 @@ static struct vinfo_s tv_info[] = {
 		.sync_duration_num = 60,
 		.sync_duration_den = 1,
 		.video_clk         = 148500000,
+		.viu_color_fmt     = TVIN_YUV444,
 	},
 	{
 		.name              = "custombuilt",
