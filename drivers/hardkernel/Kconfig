@@ -1,0 +1,10 @@
+menu "ODROID Specific Hardware"
+
+config ODROID_USBIO_SENSOR
+    tristate "Enable the USBIO-Sensor Board Driver(Accelermeter)"
+	depends on ARCH_MESON64_ODROIDC2
+	default	n
+	help
+	    Enable USBIO Board + Accelermeter Sensor Board driver.
+endmenu
+
