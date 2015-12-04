@@ -3230,6 +3230,11 @@ CONFIG_ARM_GIC=y
 # CONFIG_RESET_CONTROLLER is not set
 
 #
+# ODROID Specific Hardware
+#
+CONFIG_ODROID_USBIO_SENSOR=y
+
+#
 # File systems
 #
 CONFIG_DCACHE_WORD_ACCESS=y
