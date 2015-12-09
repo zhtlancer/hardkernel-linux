@@ -321,13 +321,18 @@
                         ocr_avail = <0x00200080>;
                         caps = "MMC_CAP_4_BIT_DATA",
                              "MMC_CAP_MMC_HIGHSPEED",
-                             "MMC_CAP_SD_HIGHSPEED";
+                             "MMC_CAP_SD_HIGHSPEED",
+                             "MMC_CAP_UHS_SDR50",
+                             "MMC_CAP_UHS_SDR104";
                         f_min = <400000>;
-                        f_max = <100000000>;
+                        f_max = <85000000>;
                         max_req_size = <0x20000>; /**128KB*/
                         gpio_dat3 = <&gpio CARD_4 GPIO_ACTIVE_HIGH>;
                         jtag_pin = <&gpio CARD_0 GPIO_ACTIVE_HIGH>;
                         gpio_cd = <&gpio CARD_6 GPIO_ACTIVE_HIGH>;
+                        gpio_volsw = <&gpio_ao GPIOAO_3 GPIO_ACTIVE_LOW>;
+                        gpio_power = <&gpio GPIOY_12 GPIO_ACTIVE_HIGH>;
+                        power_level = <1>;
                         irq_in = <3>;
                         irq_out = <5>;
                         card_type = <5>;

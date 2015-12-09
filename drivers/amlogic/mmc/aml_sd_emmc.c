@@ -33,6 +33,12 @@
 #include <../drivers/mmc/core/mmc_ops.h>
 #include "amlsd.h"
 
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+#include <linux/amlogic/iomap.h>
+#define RESET1_REGISTER 0x1102
+#define RESET_SD_EMMC_B            (1<<5)
+#define RESET_SD_EMMC_C            (1<<6)
+#endif
 
 static unsigned int sd_emmc_error_flag;
 /*static unsigned int sd_emmc_debug_flag;*/
@@ -3130,6 +3136,38 @@ fail_init_host:
 	return ret;
 }
 
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+static void aml_sd_emmc_shutdown(struct platform_device *pdev)
+{
+	u32 vclk;
+	struct amlsd_host *host  = platform_get_drvdata(pdev);
+	struct amlsd_platform *pdata;
+	struct sd_emmc_regs *sd_emmc_regs = host->sd_emmc_regs;
+	struct sd_emmc_clock *clkc = (struct sd_emmc_clock *)&(vclk);
+
+	list_for_each_entry(pdata, &host->sibling, sibling) {
+		/* switch to 1.8V */
+		aml_sd_voltage_switch(pdata, MMC_SIGNAL_VOLTAGE_180);
+		/* TF3V3 off */
+		pdata->pwr_off(pdata);
+		mdelay(300);
+
+		/* switch to 3.3V */
+		aml_sd_voltage_switch(pdata, MMC_SIGNAL_VOLTAGE_330);
+		/* TF3V3 on */
+		pdata->pwr_on(pdata);
+	}
+
+	aml_write_cbus(RESET1_REGISTER, RESET_SD_EMMC_B | RESET_SD_EMMC_C);
+
+	/* Disable SD_EMMC_CLOCK */
+	vclk = sd_emmc_regs->gclock;
+	clkc->always_on = 0;
+	clkc->div = 0;
+	sd_emmc_regs->gclock = vclk;
+}
+#endif
+
 int aml_sd_emmc_remove(struct platform_device *pdev)
 {
 	struct amlsd_host *host  = platform_get_drvdata(pdev);
@@ -3174,9 +3212,13 @@ static struct platform_driver aml_sd_emmc_driver = {
 	.remove		= aml_sd_emmc_remove,
 	.suspend	= aml_sd_emmc_suspend,
 	.resume		= aml_sd_emmc_resume,
+
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+	.shutdown	= aml_sd_emmc_shutdown,
+#endif
 	.driver		= {
-	.name = "aml_sd_emmc",
-	.owner = THIS_MODULE,
+		.name = "aml_sd_emmc",
+		.owner = THIS_MODULE,
 		.of_match_table = aml_sd_emmc_dt_match,
 #ifdef CONFIG_HIBERNATION
 		.pm     = &aml_sd_emmc_pm,
