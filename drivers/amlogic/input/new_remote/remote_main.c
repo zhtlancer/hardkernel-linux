@@ -57,6 +57,17 @@
 static struct early_suspend early_suspend;
 #endif
 
+unsigned long ir_remote = 1;
+
+static int __init irremote_setup(char *line)
+{
+	if (kstrtoul(line, 10, &ir_remote) != 0)
+		ir_remote = 1;
+	return	0;
+}
+ __setup("ir_remote=", irremote_setup);
+
+
 static bool key_pointer_switch = true;
 static unsigned int FN_KEY_SCANCODE = 0x3ff;
 static unsigned int OK_KEY_SCANCODE = 0x3ff;
@@ -631,6 +642,12 @@ static int remote_probe(struct platform_device *pdev)
 	struct input_dev *input_dev;
 	unsigned int ao_baseaddr;
 	int i, ret;
+
+	if (ir_remote == 0) {
+		printk("Disabled IR remote by ir_remote = %d.\n", (int)ir_remote);
+		return -EINVAL;
+	}
+
 	aml_set_reg32_mask(P_AO_RTI_PIN_MUX_REG, (1 << 0));
 	if (!pdev->dev.of_node) {
 		printk("aml_remote: pdev->dev.of_node == NULL!\n");
