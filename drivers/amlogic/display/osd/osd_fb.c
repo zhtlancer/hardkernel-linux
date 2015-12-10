@@ -277,6 +277,51 @@ static phys_addr_t fb_rmem_paddr[2];
 static void __iomem *fb_rmem_vaddr[2];
 static u32 fb_rmem_size[2];
 
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+static int osd_set_res_bootargs(int index, enum vmode_e mode)
+{
+	osd_log_info("%s : mode %d\n", __func__, mode);
+
+	/* FIXME : need to adjust this routine */
+	switch (mode) {
+	case VMODE_720P:
+	case VMODE_720P_50HZ:
+		fb_def_var[index].xres = 1280;
+		fb_def_var[index].yres = 720;
+		fb_def_var[index].xres_virtual = 1280;
+		fb_def_var[index].yres_virtual = 1440;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case VMODE_1080P:
+	case VMODE_1080P_50HZ:
+	case VMODE_1080P_24HZ:
+		fb_def_var[index].xres = 1920;
+		fb_def_var[index].yres = 1080;
+		fb_def_var[index].xres_virtual = 1920;
+		fb_def_var[index].yres_virtual = 2160;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case VMODE_4K2K_30HZ:
+	case VMODE_4K2K_25HZ:
+	case VMODE_4K2K_60HZ:
+	case VMODE_4K2K_50HZ:
+	case VMODE_4K2K_60HZ_Y420:
+	case VMODE_4K2K_50HZ_Y420:
+		fb_def_var[index].xres = 1920;
+		fb_def_var[index].yres = 1080;
+		fb_def_var[index].xres_virtual = 1920;
+		fb_def_var[index].yres_virtual = 3240;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	default:
+		osd_log_info("%s, no available resolution info.", __func__);
+		return 1;
+	}
+
+	return 0;
+}
+#endif /* CONFIG_ARCH_MESON64_ODROIDC2 */
+
 phys_addr_t get_fb_rmem_paddr(int index)
 {
 	if (index < 0 || index > 1)
@@ -2133,6 +2178,7 @@ static int osd_probe(struct platform_device *pdev)
 
 	vinfo = get_current_vinfo();
 	osd_log_info("%s vinfo:%p\n", __func__, vinfo);
+
 	for (index = 0; index < OSD_COUNT; index++) {
 		/* register frame buffer memory */
 		fbi = framebuffer_alloc(sizeof(struct osd_fb_dev_s),
@@ -2166,6 +2212,7 @@ static int osd_probe(struct platform_device *pdev)
 			fb_def_var[index].width = vinfo->screen_real_width;
 			fb_def_var[index].height = vinfo->screen_real_height;
 		}
+
 		/* setup fb0 display size */
 		if (index == DEV_OSD0) {
 			ret = of_property_read_u32_array(pdev->dev.of_node,
@@ -2174,6 +2221,7 @@ static int osd_probe(struct platform_device *pdev)
 			if (ret)
 				osd_log_info("not found display_size_default\n");
 			else {
+#if !defined(CONFIG_ARCH_MESON64_ODROIDC2)
 				fb_def_var[index].xres = var_screeninfo[0];
 				fb_def_var[index].yres = var_screeninfo[1];
 				fb_def_var[index].xres_virtual =
@@ -2186,6 +2234,37 @@ static int osd_probe(struct platform_device *pdev)
 					fb_def_var[index].bits_per_pixel);
 				if (fb_def_var[index].bits_per_pixel > 32)
 					fb_def_var[index].bits_per_pixel = 32;
+
+#else /* CONFIG_ARCH_MESON64_ODROIDC2 */
+
+				if (current_mode != logo_mode)
+					current_mode = logo_mode;
+
+				if (osd_set_res_bootargs(index, current_mode)) {
+					fb_def_var[index].xres =
+						var_screeninfo[0];
+					fb_def_var[index].yres =
+						var_screeninfo[1];
+					fb_def_var[index].xres_virtual =
+						var_screeninfo[2];
+					fb_def_var[index].yres_virtual =
+						var_screeninfo[3];
+					fb_def_var[index].bits_per_pixel =
+						var_screeninfo[4];
+				}
+				osd_log_info("fb def : %d %d %d %d %d\n",
+					fb_def_var[index].xres,
+					fb_def_var[index].yres,
+					fb_def_var[index].xres_virtual,
+					fb_def_var[index].yres_virtual,
+					fb_def_var[index].bits_per_pixel);
+
+				osd_log_info("init fbdev bpp is:%d\n",
+					fb_def_var[index].bits_per_pixel);
+
+				if (fb_def_var[index].bits_per_pixel > 32)
+					fb_def_var[index].bits_per_pixel = 32;
+#endif /* CONFIG_ARCH_MESON64_ODROIDC2 */
 			}
 		}
 		/* clear osd buffer if not logo layer */
