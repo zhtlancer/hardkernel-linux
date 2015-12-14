@@ -44,6 +44,13 @@ static struct input_dev *input_dev;
 static int keycode[] = { KEY_POWER, };
 static int key_release_seconds;
 
+#define	SLEEP_DISABLE_FLAG
+
+#if defined(SLEEP_DISABLE_FLAG) && defined(CONFIG_HAS_WAKELOCK)
+	#include <linux/wakelock.h>
+	static struct wake_lock	sleep_wake_lock;
+#endif
+
 static ssize_t set_poweroff_trigger(struct class *class,
 		struct class_attribute *attr, const char *buf, size_t count)
 {
