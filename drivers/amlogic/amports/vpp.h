@@ -126,7 +126,12 @@ struct vpp_frame_par_s {
 /* (MESON_CPU_TYPE==MESON_CPU_TYPE_MESON6TV)||
 (MESON_CPU_TYPE==MESON_CPU_TYPE_MESONG9TV) */
 #define TV_3D_FUNCTION_OPEN
+#endif
+
 #define TV_REVERSE
+
+#ifdef TV_REVERSE
+extern bool reverse;
 #endif
 
 #if 0	/* (MESON_CPU_TYPE==MESON_CPU_TYPE_MESONG9TV) */
