@@ -284,6 +284,113 @@ static int osd_set_res_bootargs(int index, enum vmode_e mode)
 
 	/* FIXME : need to adjust this routine */
 	switch (mode) {
+	case TVMODE_640x480p60hz:
+		fb_def_var[index].xres = 640;
+		fb_def_var[index].yres = 480;
+		fb_def_var[index].xres_virtual = 640;
+		fb_def_var[index].yres_virtual = 960;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_800x480p60hz:
+		fb_def_var[index].xres = 800;
+		fb_def_var[index].yres = 480;
+		fb_def_var[index].xres_virtual = 800;
+		fb_def_var[index].yres_virtual = 960;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_800x600p60hz:
+		fb_def_var[index].xres = 800;
+		fb_def_var[index].yres = 600;
+		fb_def_var[index].xres_virtual = 800;
+		fb_def_var[index].yres_virtual = 1200;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_1024x600p60hz:
+		fb_def_var[index].xres = 1024;
+		fb_def_var[index].yres = 600;
+		fb_def_var[index].xres_virtual = 1024;
+		fb_def_var[index].yres_virtual = 1200;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_1024x768p60hz:
+		fb_def_var[index].xres = 1024;
+		fb_def_var[index].yres = 768;
+		fb_def_var[index].xres_virtual = 1024;
+		fb_def_var[index].yres_virtual = 1536;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_1280x800p60hz:
+		fb_def_var[index].xres = 1280;
+		fb_def_var[index].yres = 800;
+		fb_def_var[index].xres_virtual = 1280;
+		fb_def_var[index].yres_virtual = 1600;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_1280x1024p60hz:
+		fb_def_var[index].xres = 1280;
+		fb_def_var[index].yres = 1024;
+		fb_def_var[index].xres_virtual = 1280;
+		fb_def_var[index].yres_virtual = 2048;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_1360x768p60hz:
+		fb_def_var[index].xres = 1360;
+		fb_def_var[index].yres = 768;
+		fb_def_var[index].xres_virtual = 1360;
+		fb_def_var[index].yres_virtual = 1536;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_1366x768p60hz:
+		fb_def_var[index].xres = 1366;
+		fb_def_var[index].yres = 768;
+		fb_def_var[index].xres_virtual = 1366;
+		fb_def_var[index].yres_virtual = 1536;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_1440x900p60hz:
+		fb_def_var[index].xres = 1440;
+		fb_def_var[index].yres = 900;
+		fb_def_var[index].xres_virtual = 1440;
+		fb_def_var[index].yres_virtual = 1800;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_1600x900p60hz:
+		fb_def_var[index].xres = 1600;
+		fb_def_var[index].yres = 900;
+		fb_def_var[index].xres_virtual = 1600;
+		fb_def_var[index].yres_virtual = 1800;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_1680x1050p60hz:
+		fb_def_var[index].xres = 1680;
+		fb_def_var[index].yres = 1050;
+		fb_def_var[index].xres_virtual = 1680;
+		fb_def_var[index].yres_virtual = 2100;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_1920x1200p60hz:
+		fb_def_var[index].xres = 1920;
+		fb_def_var[index].yres = 1200;
+		fb_def_var[index].xres_virtual = 1920;
+		fb_def_var[index].yres_virtual = 2400;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case VMODE_480P:
+	case VMODE_480I:
+		fb_def_var[index].xres = 720;
+		fb_def_var[index].yres = 480;
+		fb_def_var[index].xres_virtual = 720;
+		fb_def_var[index].yres_virtual = 960;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case VMODE_576P:
+	case VMODE_576I:
+		fb_def_var[index].xres = 720;
+		fb_def_var[index].yres = 576;
+		fb_def_var[index].xres_virtual = 720;
+		fb_def_var[index].yres_virtual = 1152;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
 	case VMODE_720P:
 	case VMODE_720P_50HZ:
 		fb_def_var[index].xres = 1280;
@@ -295,6 +402,8 @@ static int osd_set_res_bootargs(int index, enum vmode_e mode)
 	case VMODE_1080P:
 	case VMODE_1080P_50HZ:
 	case VMODE_1080P_24HZ:
+	case VMODE_1080I:
+	case VMODE_1080I_50HZ:
 		fb_def_var[index].xres = 1920;
 		fb_def_var[index].yres = 1080;
 		fb_def_var[index].xres_virtual = 1920;
