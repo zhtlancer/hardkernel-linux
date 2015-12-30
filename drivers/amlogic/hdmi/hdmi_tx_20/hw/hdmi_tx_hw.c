@@ -3461,7 +3461,7 @@ static enum hdmi_vic get_vic_from_pkt(void)
 		else if (vic == 4)
 			vic = HDMI_4096x2160p24_256x135;
 		else
-			vic = hd_read_reg(P_ISA_DEBUG_REG0);
+			vic = HDMI_Unkown;
 	}
 
 	rgb_ycc &= 0x3;
@@ -3896,10 +3896,12 @@ static void config_hdmi20_tx(enum hdmi_vic vic,
 
 	hdmitx_wr_reg(HDMITX_DWC_FC_AVIVID, (para->vic & HDMITX_VIC_MASK));
 	/* For VESA modes, set VIC as 0 */
+	/*
 	if (para->vic >= HDMITX_VESA_OFFSET) {
 		hdmitx_wr_reg(HDMITX_DWC_FC_AVIVID, 0);
 		hd_write_reg(P_ISA_DEBUG_REG0, para->vic);
 	}
+	*/
 
 	/* write Audio Infoframe packet configuration */
 
