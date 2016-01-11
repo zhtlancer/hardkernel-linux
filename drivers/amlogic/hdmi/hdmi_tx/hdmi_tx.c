@@ -429,14 +429,12 @@ static int set_disp_mode_auto(void)
 			pr_emerg("hdmi: dvi case judgement -> IEEEOUI: %d\n", hdmitx_device.RXCap.IEEEOUI);
 			hdmitx_device.RXCap.IEEEOUI = 0;
             hdmitx_device.HWOp.CntlConfig(&hdmitx_device, CONF_HDMI_DVI_MODE, DVI_MODE);
+            hdmitx_device.cur_VIC = vic;
+            hdmitx_device.output_blank_flag = 1;
+            return 1;
         }
-        hdmitx_device.cur_VIC = vic;
-        hdmitx_device.output_blank_flag = 1;
-        return 1;
     }
-    else {
-        hdmitx_pre_display_init();
-    }
+    hdmitx_pre_display_init();
 
     hdmitx_device.cur_VIC = HDMI_Unkown;
     ret = hdmitx_set_display(&hdmitx_device, vic); //if vic is HDMI_Unkown, hdmitx_set_display will disable HDMI
