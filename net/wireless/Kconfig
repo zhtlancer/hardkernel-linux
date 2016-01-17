@@ -1,20 +1,24 @@
 config WIRELESS_EXT
 	bool
+	default y
 
 config WEXT_CORE
-	def_bool y
+	bool
 	depends on CFG80211_WEXT || WIRELESS_EXT
+	default y
 
 config WEXT_PROC
-	def_bool y
+	bool
 	depends on PROC_FS
 	depends on WEXT_CORE
+	default y
 
 config WEXT_SPY
 	bool
 
 config WEXT_PRIV
 	bool
+	default y
 
 config CFG80211
 	tristate "cfg80211 - wireless configuration API"
