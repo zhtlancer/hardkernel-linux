@@ -41,6 +41,7 @@
 #include <linux/memblock.h>
 #include <linux/of_fdt.h>
 #include <linux/of_platform.h>
+#include <linux/amlogic/cpu_version.h>
 
 #include <asm/fixmap.h>
 #include <asm/cputype.h>
@@ -429,6 +430,9 @@ static const char *hwcap_str[] = {
 static int c_show(struct seq_file *m, void *v)
 {
 	int i;
+#ifdef CONFIG_ARCH_MESON64_ODROIDC2
+	int rev;
+#endif
 
 	seq_printf(m, "Processor\t: %s rev %d (%s)\n",
 		   cpu_name, read_cpuid_id() & 15, ELF_PLATFORM);
@@ -472,6 +476,10 @@ static int c_show(struct seq_file *m, void *v)
 
 	seq_printf(m, "Hardware\t: %s\n", machine_name);
 
+#ifdef CONFIG_ARCH_MESON64_ODROIDC2
+	rev = 0x0200 | get_meson_cpu_version(MESON_CPU_VERSION_LVL_MINOR);
+	seq_printf(m, "Revision\t: %04x\n", rev);
+#endif
 	return 0;
 }
 
