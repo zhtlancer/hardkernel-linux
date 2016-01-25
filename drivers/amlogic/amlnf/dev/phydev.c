@@ -1134,6 +1134,56 @@ static void show_phydev_info(void)
 	}
 }
 
+/*
+this function alloc phydev and init it.
+*/
+int aml_alloc_phydev(struct amlnand_phydev **phydev_pp,
+	struct amlnand_chip *aml_chip,
+	struct dev_para **dev_para,
+	int dev_idx)
+{
+	int ret = 0;
+	struct hw_controller *controller = &(aml_chip->controller);
+	/*struct nand_config *config = aml_chip->config_ptr;*/
+	struct nand_flash *flash = &(aml_chip->flash);
+	struct amlnand_phydev *phydev_p = NULL;
+
+	*phydev_pp = aml_nand_malloc(sizeof(struct amlnand_phydev));
+	if (*phydev_pp == NULL) {
+		aml_nand_msg("malloc failed need %lx here",
+			(sizeof(struct amlnand_phydev)));
+		ret = -NAND_MALLOC_FAILURE;
+		return ret;
+	}
+
+	phydev_p = *phydev_pp;
+	memset(phydev_p, 0, sizeof(struct amlnand_phydev));
+	phydev_p->priv = aml_chip;
+
+	*dev_para = &aml_chip->config_ptr->dev_para[dev_idx];
+	memcpy((void *)&phydev_p->name,
+		&(*dev_para)->name, MAX_DEVICE_NAME_LEN*sizeof(char));
+
+	/*set default parameter*/
+	phydev_p->writesize = flash->pagesize;
+	phydev_p->erasesize = flash->blocksize;
+	phydev_p->oobavail = controller->oobavail;
+	phydev_p->writesize_shift = ffs(phydev_p->writesize) - 1;
+	phydev_p->erasesize_shift = ffs(phydev_p->erasesize) - 1;
+	phydev_p->write = nand_write;
+	phydev_p->read = nand_read;
+	phydev_p->erase = nand_erase;
+	phydev_p->block_isbad = nand_block_isbad;
+	phydev_p->block_markbad = nand_block_markbad;
+	phydev_p->block_modifybbt = block_modifybbt;
+	phydev_p->update_bbt = update_bbt;
+	phydev_p->phydev_test_block = nand_test_block;
+#ifndef AML_NAND_UBOOT
+	phydev_p->suspend = phydev_suspend;
+	phydev_p->resume = phydev_resume;
+#endif
+	return ret;
+}
 
 /******
 *nand chip usage
