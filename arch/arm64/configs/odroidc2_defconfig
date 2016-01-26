@@ -3017,6 +3017,11 @@ CONFIG_RESET_CONTROLLER=y
 # CONFIG_GATOR is not set
 
 #
+# ODROID Specific Hardware
+#
+CONFIG_ODROID_USBIO_SENSOR=y
+
+#
 # File systems
 #
 CONFIG_DCACHE_WORD_ACCESS=y
