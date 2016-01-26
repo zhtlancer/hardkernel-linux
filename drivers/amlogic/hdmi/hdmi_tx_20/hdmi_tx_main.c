@@ -1989,8 +1989,8 @@ static int amhdmitx_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	register_early_suspend(&hdmitx_early_suspend_handler);
-#endif
 	hdmitx_device.nb.notifier_call = hdmitx_reboot_notifier;
+#endif
 	register_reboot_notifier(&hdmitx_device.nb);
 	if ((init_flag&INIT_FLAG_POWERDOWN) && (hpdmode == 2))
 		hdmitx_device.mux_hpd_if_pin_high_flag = 0;
