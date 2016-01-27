@@ -399,10 +399,10 @@
 		vend_data: vend_data {
 			compatible = "amlogic, amlogic-cec";
 			status = "okay";
-			vendor_name = "Amlogic";
+			vendor_name = "Hardkernel";
 			vendor_id = <0x000000>;
-			product_desc = "GXBB Mbox";
-			cec_osd_string = "MBox";
+			product_desc = "ODROID-C2";
+			cec_osd_string = "ODROID-C2";
 			interrupts = <0 199 1>;
 			interrupt-names = "hdmitx_cec";
 			pinctrl-names = "hdmitx_aocec";
