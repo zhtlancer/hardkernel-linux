@@ -170,6 +170,14 @@ static void hdmitx_late_resume(struct early_suspend *h)
 	hdmi_print(INF, SYS "late resume\n");
 }
 
+static struct early_suspend hdmitx_early_suspend_handler = {
+	.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN - 10,
+	.suspend = hdmitx_early_suspend,
+	.resume = hdmitx_late_resume,
+	.param = &hdmitx_device,
+};
+#endif
+
 /* Set avmute_set signal to HDMIRX */
 static int hdmitx_reboot_notifier(struct notifier_block *nb,
 	unsigned long action, void *data)
@@ -181,14 +189,6 @@ static int hdmitx_reboot_notifier(struct notifier_block *nb,
 	hdev->HWOp.CntlMisc(hdev, MISC_HPLL_OP, HPLL_DISABLE);
 	return NOTIFY_OK;
 }
-
-static struct early_suspend hdmitx_early_suspend_handler = {
-	.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN - 10,
-	.suspend = hdmitx_early_suspend,
-	.resume = hdmitx_late_resume,
-	.param = &hdmitx_device,
-};
-#endif
 
 /* static struct hdmitx_info hdmi_info; */
 #define INIT_FLAG_VDACOFF		0x1
@@ -1989,8 +1989,8 @@ static int amhdmitx_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	register_early_suspend(&hdmitx_early_suspend_handler);
-	hdmitx_device.nb.notifier_call = hdmitx_reboot_notifier;
 #endif
+	hdmitx_device.nb.notifier_call = hdmitx_reboot_notifier;
 	register_reboot_notifier(&hdmitx_device.nb);
 	if ((init_flag&INIT_FLAG_POWERDOWN) && (hpdmode == 2))
 		hdmitx_device.mux_hpd_if_pin_high_flag = 0;
