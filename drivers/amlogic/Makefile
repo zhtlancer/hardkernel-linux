@@ -104,6 +104,14 @@ obj-$(CONFIG_MESON_MHU_MBOX)	+= mailbox/
 
 obj-$(CONFIG_AML_RDMA)		+= rdma/
 
+obj-$(CONFIG_AM_WIFI) += wifi/
+ifneq ($(wildcard $(srctree)/../hardware/wifi),)
+	obj-$(CONFIG_RTL8192CU) += ../../../hardware/wifi/realtek/drivers/8192cu/rtl8xxx_CU/
+endif
+ifneq ($(wildcard $(srctree)/../hardware/wifi),)
+	obj-$(CONFIG_RTL8192CU) += ../../../hardware/wifi/realtek/drivers/8192cu/rtl8xxx_CU/
+endif
+
 obj-$(CONFIG_AML_TEMP_SENSOR) += thermal/
 
 obj-$(CONFIG_AUDIO_DATA) += audinfo_kernel/
