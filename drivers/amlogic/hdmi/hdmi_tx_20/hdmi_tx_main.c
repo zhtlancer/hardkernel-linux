@@ -1637,7 +1637,7 @@ static int hdmi_task_handle(void *data)
 	INIT_WORK(&hdmitx_device->work_internal_intr,
 		hdmitx_internal_intr_handler);
 
-	hdmitx_device->tx_aud_cfg = 1; /* default audio configure is on */
+	/*hdmitx_device->tx_aud_cfg = 1;*/ /* default audio configure is on */
 	if (init_flag & INIT_FLAG_POWERDOWN) {
 		/* power down */
 		hdmitx_device->HWOp.SetDispMode(hdmitx_device, NULL);
