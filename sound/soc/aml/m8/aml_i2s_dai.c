@@ -43,6 +43,7 @@
 #include "aml_i2s.h"
 #include "aml_audio_hw.h"
 #include <linux/amlogic/sound/aout_notify.h>
+#include <linux/amlogic/hdmi_tx/hdmi_tx_module.h>
 #include "aml_spdif_dai.h"
 
 struct aml_dai_info dai_info[3] = { {0} };
@@ -217,8 +218,19 @@ static int aml_dai_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 			       struct snd_soc_dai *dai)
 {
 	struct snd_pcm_runtime *rtd = substream->runtime;
+	struct snd_soc_pcm_runtime *prtd = substream->private_data;
+	struct snd_soc_dai *codec_dai = prtd->codec_dai;
 	int *ppp = NULL;
+	bool hdmi_out = false;
+
 	ALSA_TRACE();
+
+	if (!strncmp(codec_dai->name, "dit-hifi", strlen("dit-hifi"))) {
+		hdmi_out = true;
+	} else {
+		hdmi_out = false;
+	}
+
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
@@ -227,9 +239,16 @@ static int aml_dai_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			pr_info("aiu i2s playback enable\n");
 			audio_out_i2s_enable(1);
-			if (IEC958_mode_codec == 0) {
-				pr_info("audio_hw_958_enable 1\n");
-				audio_hw_958_enable(1);
+			if (hdmi_out) {
+				aml_audio_i2s_mute();
+				hdmitx_audio_mute_op(1);
+				if (IEC958_mode_codec == 0) {
+					pr_info("audio_hw_958_enable 1\n");
+					audio_hw_958_enable(1);
+				}
+			} else {
+				aml_audio_i2s_unmute();
+				hdmitx_audio_mute_op(0);
 			}
 		} else {
 			audio_in_i2s_enable(1);
