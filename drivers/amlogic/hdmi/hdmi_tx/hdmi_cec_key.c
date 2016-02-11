@@ -154,6 +154,7 @@ void cec_user_control_released(cec_rx_message_t* pcec_message)
  */
 void cec_standby(cec_rx_message_t* pcec_message)
 {
+#ifndef CONFIG_MACH_MESON8B_ODROIDC
     if(hdmitx_device->cec_func_config & (1 << CEC_FUNC_MSAK)) {
         if(hdmitx_device->cec_func_config & (1 << ONE_TOUCH_STANDBY_MASK)) {
             hdmi_print(INF, CEC  ": System will be in standby mode\n");
@@ -164,6 +165,7 @@ void cec_standby(cec_rx_message_t* pcec_message)
             cec_disable_irq();
         }
     }
+#endif
 }
 
 void cec_key_init(void)
