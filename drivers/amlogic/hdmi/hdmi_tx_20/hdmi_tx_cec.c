@@ -1911,6 +1911,8 @@ static int cec_reboot(struct notifier_block *nb, unsigned long state, void *cmd)
 		cec_menu_status_smp(DEVICE_MENU_INACTIVE);
 		cec_inactive_source();
 	}
+	cec_usrcmd_set_config("0", 1);
+
 	return 0;
 }
 
