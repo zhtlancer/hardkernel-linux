@@ -64,10 +64,9 @@
 
 #define TASK_UNMAPPED_BASE	(PAGE_ALIGN(TASK_SIZE / 4))
 
-/* mmt fix
 #if TASK_SIZE_64 > MODULES_VADDR
 #error Top of 64-bit user space clashes with start of module space
-#endif */
+#endif
 
 /*
  * Physical vs virtual RAM address space conversion.  These are
