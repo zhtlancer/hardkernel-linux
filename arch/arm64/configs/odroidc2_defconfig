@@ -1339,7 +1339,7 @@ CONFIG_AML_RDMA=y
 # Amlogic temperature sensor
 #
 CONFIG_AML_TEMP_SENSOR=y
-CONFIG_AUDIO_DATA=y
+# CONFIG_AUDIO_DATA is not set
 # CONFIG_INSTABOOT is not set
 
 #
