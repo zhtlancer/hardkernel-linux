@@ -715,6 +715,12 @@
                         linux,default-trigger = "heartbeat";
                 };
         };
+
+	onewire: onewire {
+		compatible = "w1-gpio";
+		gpios = <&gpio GPIOX_21 0>;
+	};
+
 };
 
 &i2c_a {
@@ -749,9 +755,5 @@
 };
 
 &efuse {
-	status = "okay";
-};
-
-&audio_data {
 	status = "okay";
 };
