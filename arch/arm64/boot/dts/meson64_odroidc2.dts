@@ -619,7 +619,10 @@
 		#sound-dai-cells = <0>;
 		compatible = "amlogic, aml-pcm-dai";
 	};
-
+	i2s_plat: i2s_platform {
+		compatible = "amlogic, aml-i2s";
+		interrupts = <0 29 1>;
+	};
 	pcm_plat: pcm_platform {
 		compatible = "amlogic, aml-pcm";
 	};
