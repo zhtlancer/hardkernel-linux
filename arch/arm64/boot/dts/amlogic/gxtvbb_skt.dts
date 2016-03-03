@@ -466,9 +466,9 @@
 				"MMC_CAP_ERASE", "MMC_CAP_HW_RESET";
 			caps2 = "MMC_CAP2_HS200";
 			f_min = <300000>;
-            f_max = <100000000>;
-            max_req_size = <0x20000>;          /**256KB*/
-//            gpio_dat3 = "BOOT_3"
+			f_max = <100000000>;
+			max_req_size = <0x20000>;          /**256KB*/
+//			gpio_dat3 = "BOOT_3"
 			gpio_dat3 = <&gpio       BOOT_3      GPIO_ACTIVE_HIGH>;
 			hw_reset =  <&gpio       BOOT_9      GPIO_ACTIVE_HIGH>;
             card_type = <1>; /* 1:mmc card(include eMMC), 2:sd card(include tSD), */
@@ -604,7 +604,7 @@
 			i2c_bus = "i2c_bus_b";
 			reg = <0x35>;
 			use_24m_clock = <0x0>;
-			status = "disable";
+			status = "okay";
 		};
 	};
 
