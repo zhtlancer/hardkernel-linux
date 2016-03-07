@@ -1241,6 +1241,12 @@ static const struct hid_device_id mt_devices[] = {
 		HID_USB_DEVICE(USB_VENDOR_ID_LG_23ET63V,
 				USB_DEVICE_ID_LG_23ET63V_TOUCH) },
 
+/* Lilliput 779GL-70NP/C/T - 7" HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_LILLIPUT,
+				USB_DEVICE_ID_LILLIPUT_779GL_TOUCH) },
+
+
 	{ }
 };
 MODULE_DEVICE_TABLE(hid, mt_devices);
