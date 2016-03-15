@@ -125,9 +125,6 @@ static int omx_pts_interval_upper = 11000;
 static int omx_pts_interval_lower = -5500;
 
 
-/* for bit depth setting. */
-int bit_depth_flag = 8;
-
 bool omx_secret_mode = false;
 #define DEBUG_FLAG_FFPLAY	(1<<0)
 #define DEBUG_FLAG_CALC_PTS_INC	(1<<1)
@@ -4598,12 +4595,6 @@ static int video_receiver_event_fun(int type, void *data, void *private_data)
 			set_clone_frame_rate(video_play_clone_rate, 100);
 		}
 #endif
-		/* if provider is not deinterlace, set bit depth to 8 */
-		if (strncmp((char *)data, "deinterlace", 11) != 0)
-			bit_depth_flag = 8;
-		else
-			bit_depth_flag = 10;
-		pr_info("set bit_depth_flag to %d\n", bit_depth_flag);
 #ifdef TV_3D_FUNCTION_OPEN
 
 		if ((process_3d_type & MODE_3D_FA) && !cur_dispbuf->trans_fmt)
@@ -4643,12 +4634,6 @@ static int video4osd_receiver_event_fun(int type, void *data,
 			pr_info("[video4osd] clear osd_prov\n");
 	} else if (type == VFRAME_EVENT_PROVIDER_REG) {
 		osd_prov = vf_get_provider(RECEIVER4OSD_NAME);
-		/* if provider is not deinterlace, set bit depth to 8 */
-		if (strncmp((char *)data, "deinterlace", 11) != 0)
-			bit_depth_flag = 8;
-		else
-			bit_depth_flag = 10;
-		pr_info("set bit_depth_flag to %d\n", bit_depth_flag);
 
 		if (debug_flag & DEBUG_FLAG_BLACKOUT)
 			pr_info("[video4osd] set osd_prov\n");
