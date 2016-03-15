@@ -4046,6 +4046,10 @@ di_pre_stru.di_inp_buf->vframe, sizeof(vframe_t));
 	di_buf->vframe->private_data = di_buf;
 	di_buf->vframe->canvas0Addr = di_buf->nr_canvas_idx;
 	di_buf->vframe->canvas1Addr = di_buf->nr_canvas_idx;
+	if (!bypass_state)
+		di_buf->vframe->di_process_type = 1;
+	else
+		di_buf->vframe->di_process_type = 0;
 
 	if (di_pre_stru.prog_proc_type) {
 		di_buf->vframe->type = VIDTYPE_PROGRESSIVE |
