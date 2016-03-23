@@ -635,7 +635,7 @@
 		#thermal-sensor-cells = <1>;
 		cpu_dyn_coeff = <140>;
 		/* cpu_freq gpu_freq cpu_core gpu_core */
-		min_state = <1000000 400 1 2>;
+		min_state = <250000 400 1 2>;
 		gpu_dyn_coeff = <437>;
 	};
 	cpucore:thermal_cpu_cores {
