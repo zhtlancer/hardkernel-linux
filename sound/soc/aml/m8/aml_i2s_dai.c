@@ -227,10 +227,15 @@ static int aml_dai_i2s_trigger(struct snd_pcm_substream *substream, int cmd,
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 			pr_info("aiu i2s playback enable\n");
 			audio_out_i2s_enable(1);
+#ifdef CONFIG_ARCH_MESON64_ODROIDC2
+			pr_info("audio_hw_958_enable 1\n");
+			audio_hw_958_enable(1);
+#else
 			if (IEC958_mode_codec == 0) {
 				pr_info("audio_hw_958_enable 1\n");
 				audio_hw_958_enable(1);
 			}
+#endif
 		} else {
 			audio_in_i2s_enable(1);
 			ppp = (int *)(rtd->dma_area + rtd->dma_bytes * 2 - 8);
