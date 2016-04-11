@@ -37,7 +37,7 @@
 #define LOGO_DEBUG    0x1001
 #define LOGO_LOADED   0x1002
 
-static enum vmode_e hdmimode = VMODE_1080P;
+static enum vmode_e hdmimode = VMODE_720P;
 static enum vmode_e cvbsmode = VMODE_480CVBS;
 static enum vmode_e last_mode = VMODE_MAX;
 
