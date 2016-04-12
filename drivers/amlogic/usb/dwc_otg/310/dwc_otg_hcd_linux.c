@@ -957,18 +957,28 @@ static int urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 #endif
 	if(usb_pipeint(urb->pipe) && (dwc_otg_hcd->ssplit_lock == usb_pipedevice(urb->pipe))){
 		DWC_DEBUGPL(DBG_HCD, "addr=%d(%p)\n",usb_pipedevice(urb->pipe),urb->hcpriv);
-		dwc_otg_hcd->ssplit_lock = 0;	
+		dwc_otg_hcd->ssplit_lock = 0;
 	}
-		
+
 	if(urb->hcpriv == NULL){
 		DWC_WARN("urb->hcpriv == NULL! urb = %p status=%d\n",urb,status);
 		goto EXIT;
 	}
-	retval = dwc_otg_hcd_urb_dequeue(dwc_otg_hcd, urb->hcpriv);
-
-	if(!retval) 
+	else {
+		dwc_otg_hcd_urb_t * dwc_otg_urb;
+		dwc_otg_qtd_t *urb_qtd;
+		dwc_otg_urb = urb->hcpriv;
+		urb_qtd = dwc_otg_urb->qtd;
+		retval = -1;
+		if (urb_qtd && urb_qtd->qh) {
+			retval = dwc_otg_hcd_urb_dequeue(dwc_otg_hcd, urb->hcpriv);
+		}
+		if(!retval)
+		DWC_FREE(urb->hcpriv);
+		goto EXIT;
+	}
+	if(!retval)
 	DWC_FREE(urb->hcpriv);
-	
 EXIT:
 	DWC_SPINUNLOCK_IRQRESTORE(dwc_otg_hcd->lock, flags);
 
