@@ -1206,14 +1206,6 @@ u64 snd_usb_interface_dsd_format_quirks(struct snd_usb_audio *chip,
 		break;
 	}
 
-	/* Denon/Marantz devices with USB DAC functionality */
-	if (is_marantz_denon_dac(chip->usb_id)) {
-		if (fp->altsetting == 2)
-			return SNDRV_PCM_FMTBIT_DSD_U32_BE;
-	}
-
-
-
 
 	return 0;
 }
