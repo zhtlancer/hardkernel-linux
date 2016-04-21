@@ -134,6 +134,43 @@ static int hdmitx_cntl_misc(struct hdmitx_dev *hdev, unsigned cmd,
 static void digital_clk_on(unsigned char flag);
 static void digital_clk_off(unsigned char flag);
 
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+static int dvi_mode = VOUTMODE_HDMI;
+
+int odroidc_voutmode(void)
+{
+	return dvi_mode;
+}
+EXPORT_SYMBOL(odroidc_voutmode);
+
+static  int __init vout_setup(char *s)
+{
+	dvi_mode = VOUTMODE_HDMI;
+
+	if (!strcmp(s, "dvi"))
+		dvi_mode = VOUTMODE_DVI;
+	else if (!strcmp(s, "vga"))
+		dvi_mode = VOUTMODE_VGA;
+
+	return 0;
+}
+__setup("vout=", vout_setup);
+
+static bool disableHPD;
+
+static  int __init disableHPD_setup(char *s)
+{
+	if (!(strcmp(s, "true")))
+		disableHPD = true;
+	else
+		disableHPD = false;
+
+	return 0;
+}
+__setup("disablehpd=", disableHPD_setup);
+
+#endif
+
 /*
  * HDMITX HPD HW related operations
  */
@@ -145,6 +182,15 @@ enum hpd_op {
 	HPD_UNMUX_HPD,
 	HPD_READ_HPD_GPIO,
 };
+
+int read_hpd_gpio(void)
+{
+	if (disableHPD)
+		return 1;
+
+	return !!(hd_read_reg(P_PREG_PAD_GPIO1_I) & (1 << 20));
+}
+EXPORT_SYMBOL(read_hpd_gpio);
 
 static int hdmitx_hpd_hw_op(enum hpd_op cmd)
 {
@@ -173,7 +219,7 @@ static int hdmitx_hpd_hw_op(enum hpd_op cmd)
 		hd_set_reg_bits(P_PREG_PAD_GPIO1_EN_N, 1, 21, 1);
 		break;
 	case HPD_READ_HPD_GPIO:
-		ret = !!(hd_read_reg(P_PREG_PAD_GPIO1_I) & (1 << 20));
+		ret = read_hpd_gpio();
 		break;
 	default:
 		pr_info("error hpd cmd %d\n", cmd);
@@ -181,12 +227,6 @@ static int hdmitx_hpd_hw_op(enum hpd_op cmd)
 	}
 	return ret;
 }
-
-int read_hpd_gpio(void)
-{
-	return !!(hd_read_reg(P_PREG_PAD_GPIO1_I) & (1 << 20));
-}
-EXPORT_SYMBOL(read_hpd_gpio);
 
 int hdmitx_ddc_hw_op(enum ddc_op cmd)
 {
@@ -479,6 +519,14 @@ static irqreturn_t intr_handler(int irq, void *dev)
 		else
 			data32 &= ~(1 << 1);
 	}
+
+	if (disableHPD) {
+		hdev->hdmitx_event |= HDMI_TX_HPD_PLUGIN;
+		hdev->hdmitx_event &= ~HDMI_TX_HPD_PLUGOUT;
+		hdmitx_wr_reg(HDMITX_TOP_INTR_STAT_CLR, data32 | 0x6);
+		return IRQ_HANDLED;
+	}
+
 	/* internal interrupt */
 	if (data32 & (1 << 0)) {
 		hdev->hdmitx_event |= HDMI_TX_INTERNAL_INTR;
@@ -2437,6 +2485,15 @@ static void hdmitx_setupirq(struct hdmitx_dev *phdev)
 	r = request_irq(phdev->irq_hpd, &intr_handler,
 			IRQF_SHARED, "hdmitx",
 			(void *)phdev);
+
+	if (disableHPD)	{
+		phdev->hdmitx_event |= HDMI_TX_HPD_PLUGIN;
+		phdev->hdmitx_event &= ~HDMI_TX_HPD_PLUGOUT;
+		PREPARE_DELAYED_WORK(&phdev->work_hpd_plugin,
+			hdmitx_hpd_plugin_handler);
+		queue_delayed_work(phdev->hdmi_wq,
+			&phdev->work_hpd_plugin, HZ/3);
+	}
 }
 
 static void hdmitx_uninit(struct hdmitx_dev *phdev)
@@ -4355,25 +4412,3 @@ static void hdmitx_set_hw(struct hdmitx_vidpara *param)
 	return;
 }
 
-#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
-static int dvi_mode = VOUTMODE_HDMI;
-
-int odroidc_voutmode(void)
-{
-	return dvi_mode;
-}
-EXPORT_SYMBOL(odroidc_voutmode);
-
-static  int __init vout_setup(char *s)
-{
-	dvi_mode = VOUTMODE_HDMI;
-
-	if (!strcmp(s, "dvi"))
-		dvi_mode = VOUTMODE_DVI;
-	else if (!strcmp(s, "vga"))
-		dvi_mode = VOUTMODE_VGA;
-
-	return 0;
-}
-__setup("vout=", vout_setup);
-#endif
