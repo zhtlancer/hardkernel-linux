@@ -495,7 +495,11 @@ static int set_disp_mode_auto(void)
 	if ((vic_ready != HDMI_Unkown) && (vic_ready == vic)) {
 		hdmi_print(IMP, SYS "[%s] ALREADY init VIC = %d\n",
 			__func__, vic);
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+		if (hdmitx_device.RXCap.IEEEOUI == 0 || odroidc_voutmode()) {
+#else
 		if (hdmitx_device.RXCap.IEEEOUI == 0) {
+#endif
 			/* DVI case judgement. In uboot, directly output HDMI
 			 * mode
 			 */
