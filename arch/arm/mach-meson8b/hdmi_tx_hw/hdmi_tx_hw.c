@@ -109,6 +109,24 @@ static unsigned char use_tvenc_conf_flag=1;
 
 static unsigned char cur_vout_index = 1; //CONFIG_AM_TV_OUTPUT2
 
+#if defined(CONFIG_MACH_MESON8B_ODROIDC)
+
+static bool disableHPD;
+
+static int __init disableHPD_setup(char *s)
+{
+	if (!(strcmp(s, "true")))
+		disableHPD = true;
+	else
+		disableHPD = false;
+
+	return	0;
+}
+
+__setup("disablehpd=", disableHPD_setup);
+
+#endif
+
 static void hdmi_tx_mode_ctrl(HDMI_Video_Codes_t vic)
 {
     switch(vic) {
@@ -226,7 +244,17 @@ static irqreturn_t intr_handler(int irq, void *dev_instance)
     }
 
     WRITE_MPEG_REG(HHI_GCLK_MPEG2, READ_MPEG_REG(HHI_GCLK_MPEG2) | (1<<4));     //Enable HDMI PCLK
-    
+
+#if defined(CONFIG_MACH_MESON8B_ODROIDC)
+    if (disableHPD) {
+        hdmitx_device->cur_edid_block=0;
+        hdmitx_device->cur_phy_block_ptr=0;
+        hdmitx_device->hpd_event = 1;
+        hdmi_wr_only_reg(OTHER_BASE_ADDR + HDMI_OTHER_INTR_STAT_CLR,  0x3); //clear HPD falling interrupt in hdmi module 
+        return IRQ_HANDLED;
+    }
+#endif
+
     if (data32 & (1 << 1)) { //HPD falling
         hdmitx_device->vic_count = 0;
         hdmi_wr_only_reg(OTHER_BASE_ADDR + HDMI_OTHER_INTR_STAT_CLR,  1 << 1); //clear HPD falling interrupt in hdmi module 
@@ -1155,6 +1183,12 @@ int read_hpd_gpio(void)
     int level;
 
     level = !!(aml_read_reg32(P_PREG_PAD_GPIO3_I)&(1<<19)); //read GPIOH_0
+
+#if defined(CONFIG_MACH_MESON8B_ODROIDC)
+    if (disableHPD)
+	return 1;
+#endif
+
     return level;
 }
 EXPORT_SYMBOL(read_hpd_gpio);
@@ -2692,6 +2726,14 @@ static void hdmitx_setupirq(hdmitx_dev_t* hdmitx_device)
    r = request_irq(INT_HDMI_TX, &intr_handler,
                     IRQF_SHARED, "amhdmitx",
                     (void *)hdmitx_device);
+
+#if defined(CONFIG_MACH_MESON8B_ODROIDC)
+   if (disableHPD) {
+	hdmitx_device->cur_edid_block=0;
+	hdmitx_device->cur_phy_block_ptr=0;
+	hdmitx_device->hpd_event = 1;
+   }
+#endif
 }    
 
 
