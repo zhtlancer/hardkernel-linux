@@ -60,6 +60,10 @@
 #include <asm/psci.h>
 #include <asm/efi.h>
 
+#ifdef CONFIG_ARCH_MESON64_ODROIDC2
+#include <linux/amlogic/cpu_version.h>
+#endif
+
 unsigned int processor_id;
 EXPORT_SYMBOL(processor_id);
 
@@ -468,6 +472,9 @@ static const char *compat_hwcap_str[] = {
 static int c_show(struct seq_file *m, void *v)
 {
 	int i, j;
+#ifdef CONFIG_ARCH_MESON64_ODROIDC2
+	int rev;
+#endif
 
 	for_each_online_cpu(i) {
 		struct cpuinfo_arm64 *cpuinfo = &per_cpu(cpu_data, i);
@@ -512,6 +519,10 @@ static int c_show(struct seq_file *m, void *v)
 		seq_printf(m, "CPU part\t: 0x%03x\n", ((midr >> 4) & 0xfff));
 		seq_printf(m, "CPU revision\t: %d\n\n", (midr & 0xf));
 	}
+#ifdef CONFIG_ARCH_MESON64_ODROIDC2
+	rev = 0x0200 | get_meson_cpu_version(MESON_CPU_VERSION_LVL_MINOR);
+	seq_printf(m, "Revision\t: %04x\n", rev);
+#endif
 
 	return 0;
 }
