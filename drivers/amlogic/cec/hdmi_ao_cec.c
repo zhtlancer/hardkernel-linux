@@ -450,16 +450,6 @@ void cec_polling_online_dev(int log_addr, int *bool)
         log_addr, *bool);
 }
 
-static int detect_tv_support_cec(unsigned addr)
-{
-	unsigned int ret = 0;
-	unsigned char msg[1];
-	msg[0] = (addr << 4) | 0x0;	/* 0x0, TV's root address */
-	cec_polling_online_dev(msg[0], &ret);
-	CEC_INFO("TV %s support CEC\n", ret ? "does" : "does not");
-	return ret;
-}
-
 /************************ cec arbitration cts code **************************/
 /* using the cec pin as fiq gpi to assist the bus arbitration */
 
@@ -963,14 +953,6 @@ int cec_node_init(struct hdmitx_dev *hdmitx_device)
         (hdmitx_device->hpd_state == 0)) {
         return -1;
     }
-
-	/*
-	 * if TV is not support CEC, we do not need to try allocate CEC
-	 * logical address
-	 */
-	if (!detect_tv_support_cec(0xE))
-		return -1;
-
     a = hdmitx_device->hdmi_info.vsdb_phy_addr.a;
     b = hdmitx_device->hdmi_info.vsdb_phy_addr.b;
     c = hdmitx_device->hdmi_info.vsdb_phy_addr.c;
