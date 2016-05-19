@@ -25,6 +25,7 @@
 #include "meson_main2.h"
 #include "mali_clock.h"
 
+int utilization_level = 0;
 static int currentStep;
 #ifndef CONFIG_MALI_DVFS
 static int num_cores_enabled;
@@ -327,6 +328,7 @@ static void mali_decide_next_status(struct mali_gpu_utilization_data *data, int*
 	u32 ld_up, ld_down;
 	u32 change_mode;
 
+	utilization_level = data->utilization_gpu;
 	*pp_change_flag = 0;
 	change_mode = 0;
 	utilization = 255;
