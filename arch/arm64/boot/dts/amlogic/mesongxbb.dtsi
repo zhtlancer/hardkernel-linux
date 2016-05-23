@@ -170,7 +170,7 @@
 
 	};
 	gic: interrupt-controller@c4301000{
-		compatible = "arm,gic-400";
+		compatible = "arm,gic-400", "arm,cortex-a15-gic", "arm,cortex-a9-gic";
 		#interrupt-cells = <3>;
 		#address-cells = <0>;
 		interrupt-controller;
