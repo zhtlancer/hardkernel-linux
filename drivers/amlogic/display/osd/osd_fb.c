@@ -393,6 +393,27 @@ static int osd_set_res_bootargs(int index, enum vmode_e mode)
 		fb_def_var[index].yres_virtual = 2400;
 		fb_def_var[index].bits_per_pixel = 32;
 		break;
+	case TVMODE_2560x1440p60hz:
+		fb_def_var[index].xres = 2560;
+		fb_def_var[index].yres = 1440;
+		fb_def_var[index].xres_virtual = 2560;
+		fb_def_var[index].yres_virtual = 2880;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_2560x1600p60hz:
+		fb_def_var[index].xres = 2560;
+		fb_def_var[index].yres = 1600;
+		fb_def_var[index].xres_virtual = 2560;
+		fb_def_var[index].yres_virtual = 3200;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_2560x1080p60hz:
+		fb_def_var[index].xres = 2560;
+		fb_def_var[index].yres = 1080;
+		fb_def_var[index].xres_virtual = 2560;
+		fb_def_var[index].yres_virtual = 2160;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
 	case VMODE_480P:
 	case VMODE_480I:
 		fb_def_var[index].xres = 720;
