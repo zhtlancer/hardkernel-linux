@@ -44,7 +44,7 @@
 
 	};
 
-	timer{
+	meson_timer{
 		compatible = "arm, meson-timer";
 		#address-cells = <2>;
 		#size-cells = <2>;
@@ -95,7 +95,7 @@
 			reg=<0x0 0xc11099a0 0x0 0x4>;
 		};
 	};
-/*
+
 	timer {
 		compatible = "arm,armv8-timer";
 		interrupts = <GIC_PPI 13 0xff01>,
@@ -103,7 +103,7 @@
 			        <GIC_PPI 11 0xff01>,
 			        <GIC_PPI 10 0xff01>;
 	};
-*/
+
 	arm_pmu {
 		compatible = "arm,armv8-pmuv3";
 		interrupts = <0 137 4>,
