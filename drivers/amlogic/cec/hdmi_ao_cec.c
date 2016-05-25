@@ -1224,7 +1224,6 @@ static void cec_rx_process(void)
 		break;
 
     default:
-        CEC_ERR("unsupported command:%x\n", opcode);
         break;
     }
     new_msg = 0;
