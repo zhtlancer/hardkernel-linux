@@ -1636,10 +1636,16 @@ static long hdmitx_cec_ioctl(struct file *f,
 
     case CEC_IOC_SET_OPTION_SYS_CTRL:
         tmp = (1 << HDMI_OPTION_SYSTEM_CEC_CONTROL);
-        if (arg)
+        if (arg){
+            if (cec_dev->cec_info.log_addr[0] != 0) {
+                cec_inactive_source(CEC_BROADCAST_ADDR);
+                cec_menu_status_smp(CEC_TV_ADDR, DEVICE_MENU_INACTIVE);
+            }
             cec_dev->hal_flag |= tmp;
-        else
+        }
+        else {
             cec_dev->hal_flag &= ~(tmp);
+        }
         break;
 
     case CEC_IOC_SET_OPTION_SET_LANG:
