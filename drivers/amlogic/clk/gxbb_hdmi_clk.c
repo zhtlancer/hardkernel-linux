@@ -123,7 +123,10 @@ static struct amlogic_pll_rate_table hpll_phy_tbl[] = {
 	HPLL_FVCO_RATE(5940000, 0x7b, 0x1, 0, 0),
 	HPLL_FVCO_RATE(3450000, 0x47, 0x1, 0, 0),
 	HPLL_FVCO_RATE(2970000, 0x3d, 0x1, 0, 0),
+	HPLL_FVCO_RATE(2415000, 0x64, 0x1, 1, 0),
+	HPLL_FVCO_RATE(2685000, 0x6f, 0x1, 1, 0),
 	HPLL_FVCO_RATE(1936200, 0x50, 0x1, 1, 0),
+	HPLL_FVCO_RATE(1855800, 0x4d, 0x1, 1, 0),
 	HPLL_FVCO_RATE(1485000, 0x3d, 0x1, 1, 0),
 	HPLL_FVCO_RATE(1463600, 0x79, 0x1, 1, 1),
 	HPLL_FVCO_RATE(1081700, 0x5a, 0x1, 1, 1),
@@ -145,8 +148,11 @@ static struct vid_clk_table vid_clk_tbl[] = {
 	VID_CLK(594000, 2970000, 0, 1, DIV_5, 0),
 	VID_CLK(345000, 3450000, 0, 1, DIV_5, 1),
 	VID_CLK(297000, 2970000, 0, 1, DIV_5, 1),
+	VID_CLK(241500, 2415000, 0, 1, DIV_5, 1),
+	VID_CLK(268500, 2685000, 0, 1, DIV_5, 1),
 	VID_CLK(148500, 1485000, 0, 1, DIV_5, 1),
 	VID_CLK(193620, 1936200, 0, 1, DIV_5, 1),
+	VID_CLK(185580, 1855800, 0, 1, DIV_5, 1),
 	VID_CLK(146360, 1463600, 0, 1, DIV_5, 1),
 	VID_CLK(108000, 1080000, 0, 1, DIV_5, 1),
 	VID_CLK(106700, 1067000, 0, 1, DIV_5, 1),
@@ -452,6 +458,43 @@ static int	hpll_clk_set(struct clk_hw *hw, unsigned long drate,
 		pr_info("hpll reg: 0x%x\n",
 			readl(hiu_base + HHI_HDMI_PLL_CNTL));
 		break;
+	case 2415000:
+		writel(0x58000264, hiu_base + HHI_HDMI_PLL_CNTL);
+		writel(0x00000000, hiu_base + HHI_HDMI_PLL_CNTL2);
+		writel(0x0d5c5091, hiu_base + HHI_HDMI_PLL_CNTL3);
+		writel(0x801da72c, hiu_base + HHI_HDMI_PLL_CNTL4);
+		writel(0x71486980, hiu_base + HHI_HDMI_PLL_CNTL5);
+		writel(0x00000e55, hiu_base + HHI_HDMI_PLL_CNTL6);
+		set_pll(rate_tbl);
+		pr_info("hpll reg: 0x%x\n",
+			readl(hiu_base + HHI_HDMI_PLL_CNTL));
+		hdmi_update_bits(HHI_HDMI_PLL_CNTL2, 0xffff, 0x4e00);
+		break;
+	case 2685000:
+		writel(0x5800026f, hiu_base + HHI_HDMI_PLL_CNTL);
+		writel(0x00000000, hiu_base + HHI_HDMI_PLL_CNTL2);
+		writel(0x0d5c5091, hiu_base + HHI_HDMI_PLL_CNTL3);
+		writel(0x801da72c, hiu_base + HHI_HDMI_PLL_CNTL4);
+		writel(0x71486980, hiu_base + HHI_HDMI_PLL_CNTL5);
+		writel(0x00000e55, hiu_base + HHI_HDMI_PLL_CNTL6);
+		set_pll(rate_tbl);
+		pr_info("hpll reg: 0x%x\n",
+			readl(hiu_base + HHI_HDMI_PLL_CNTL));
+		hdmi_update_bits(HHI_HDMI_PLL_CNTL2, 0xffff, 0x4e00);
+		break;
+	case 1855800:
+		writel(0x5800024d, hiu_base + HHI_HDMI_PLL_CNTL);
+		writel(0x00000000, hiu_base + HHI_HDMI_PLL_CNTL2);
+		writel(0x0d5c5091, hiu_base + HHI_HDMI_PLL_CNTL3);
+		writel(0x801da72c, hiu_base + HHI_HDMI_PLL_CNTL4);
+		writel(0x71486980, hiu_base + HHI_HDMI_PLL_CNTL5);
+		writel(0x00000e55, hiu_base + HHI_HDMI_PLL_CNTL6);
+		set_pll(rate_tbl);
+		pr_info("hpll reg: 0x%x\n",
+			readl(hiu_base + HHI_HDMI_PLL_CNTL));
+		hdmi_update_bits(HHI_HDMI_PLL_CNTL2, 0xffff, 0x4e00);
+		break;
+
 	default:
 		pr_info("wrong drate %ld\n", drate);
 		break;
@@ -717,8 +760,11 @@ struct hdmi_clock {
 static struct cts_encx_table cts_encp_tbl[] = {
 	CTS_XXX_TBL(594000, 594000, 1, 1),
 	CTS_XXX_TBL(297000, 297000, 1, 1),
+	CTS_XXX_TBL(241500, 241500, 1, 1),
+	CTS_XXX_TBL(268500, 268500, 1, 1),
 	CTS_XXX_TBL(148500, 148500, 1, 1),
 	CTS_XXX_TBL(193620, 193620, 1, 1),
+	CTS_XXX_TBL(185580, 185580, 1, 1),
 	CTS_XXX_TBL(146360, 146360, 1, 1),
 	CTS_XXX_TBL(108000, 108000, 1, 1),
 	CTS_XXX_TBL(106700, 106700, 1, 1),
@@ -744,8 +790,11 @@ static struct cts_encx_table cts_pixel_tbl[] = {
 	CTS_XXX_TBL(594000, 594000, 1, 1),
 	CTS_XXX_TBL(297000, 594000, 1, 2),
 	CTS_XXX_TBL(297000, 297000, 1, 1),
+	CTS_XXX_TBL(241500, 241500, 1, 1),
+	CTS_XXX_TBL(268500, 268500, 1, 1),
 	CTS_XXX_TBL(148500, 148500, 1, 1),
 	CTS_XXX_TBL(193620, 193620, 1, 1),
+	CTS_XXX_TBL(185580, 185580, 1, 1),
 	CTS_XXX_TBL(146360, 146360, 1, 1),
 	CTS_XXX_TBL(108000, 108000, 1, 1),
 	CTS_XXX_TBL(106700, 106700, 1, 1),

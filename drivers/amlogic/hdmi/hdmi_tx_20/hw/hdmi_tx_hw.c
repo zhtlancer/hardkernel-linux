@@ -354,6 +354,9 @@ static struct hdmitx_clk hdmitx_clk[] = {
 	{HDMIV_1600x900p60hz, 24000, 1080000, 108000, 108000, -1, 108000},
 	{HDMIV_1680x1050p60hz, 24000, 1463600, 146360, 146360, -1, 146360},
 	{HDMIV_1920x1200p60hz, 24000, 1936200, 193620, 193620, -1, 193620},
+	{HDMIV_2560x1440p60hz, 24000, 2415000, 241500, 241500, -1, 241500},
+	{HDMIV_2560x1600p60hz, 24000, 2685000, 268500, 268500, -1, 268500},
+	{HDMIV_2560x1080p60hz, 24000, 1855800, 185580, 185580, -1, 185580},
 };
 
 static void set_vmode_clk(struct hdmitx_dev *hdev, enum hdmi_vic vic)
@@ -1516,6 +1519,54 @@ static void hdmi_tvenc_set(struct hdmitx_vidpara *param)
 		EOF_LINES           = 3;
 		VSYNC_LINES         = 6;
 		SOF_LINES           = 36;
+		break;
+	case HDMIV_2560x1440p60hz:
+		INTERLACE_MODE      = 0;
+		PIXEL_REPEAT_VENC   = 0;
+		PIXEL_REPEAT_HDMI   = 0;
+		ACTIVE_PIXELS       = 2560;
+		ACTIVE_LINES        = 1440;
+		LINES_F0            = 1481;
+		LINES_F1            = 1481;
+		FRONT_PORCH         = 48;
+		HSYNC_PIXELS        = 32;
+		BACK_PORCH          = 80;
+		EOF_LINES           = 2;
+		VSYNC_LINES         = 5;
+		SOF_LINES           = 34;
+		TOTAL_FRAMES        = 4;
+		break;
+	case HDMIV_2560x1600p60hz:
+		INTERLACE_MODE      = 0;
+		PIXEL_REPEAT_VENC   = 0;
+		PIXEL_REPEAT_HDMI   = 0;
+		ACTIVE_PIXELS       = 2560;
+		ACTIVE_LINES        = 1600;
+		LINES_F0            = 1646;
+		LINES_F1            = 1646;
+		FRONT_PORCH         = 48;
+		HSYNC_PIXELS        = 32;
+		BACK_PORCH          = 80;
+		EOF_LINES           = 2;
+		VSYNC_LINES         = 6;
+		SOF_LINES           = 38;
+		TOTAL_FRAMES        = 4;
+		break;
+	case HDMIV_2560x1080p60hz:
+		INTERLACE_MODE      = 0;
+		PIXEL_REPEAT_VENC   = 0;
+		PIXEL_REPEAT_HDMI   = 0;
+		ACTIVE_PIXELS       = 2560;
+		ACTIVE_LINES        = 1080;
+		LINES_F0            = 1111;
+		LINES_F1            = 1111;
+		FRONT_PORCH         = 64;
+		HSYNC_PIXELS        = 64;
+		BACK_PORCH          = 96;
+		EOF_LINES           = 3;
+		VSYNC_LINES         = 10;
+		SOF_LINES           = 18;
+		TOTAL_FRAMES        = 4;
 		break;
 	default:
 		break;
