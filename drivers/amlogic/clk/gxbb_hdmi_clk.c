@@ -127,7 +127,7 @@ static struct amlogic_pll_rate_table hpll_phy_tbl[] = {
 	HPLL_FVCO_RATE(2685000, 0x6f, 0x1, 1, 0),
 	HPLL_FVCO_RATE(1936200, 0x50, 0x1, 1, 0),
 	HPLL_FVCO_RATE(1855800, 0x4d, 0x1, 1, 0),
-	HPLL_FVCO_RATE(1540000, 0x40, 0x1, 1, 0),
+	HPLL_FVCO_RATE(1540000, 0x3f, 0x1, 1, 0),
 	HPLL_FVCO_RATE(1485000, 0x3d, 0x1, 1, 0),
 	HPLL_FVCO_RATE(1463600, 0x79, 0x1, 1, 1),
 	HPLL_FVCO_RATE(1081700, 0x5a, 0x1, 1, 1),
@@ -497,7 +497,7 @@ static int	hpll_clk_set(struct clk_hw *hw, unsigned long drate,
 		hdmi_update_bits(HHI_HDMI_PLL_CNTL2, 0xffff, 0x4e00);
 		break;
 	case 1540000:
-		writel(0x58000240, hiu_base + HHI_HDMI_PLL_CNTL);
+		writel(0x5800023f, hiu_base + HHI_HDMI_PLL_CNTL);
 		writel(0x00000000, hiu_base + HHI_HDMI_PLL_CNTL2);
 		writel(0x0d5c5091, hiu_base + HHI_HDMI_PLL_CNTL3);
 		writel(0x801da72c, hiu_base + HHI_HDMI_PLL_CNTL4);
