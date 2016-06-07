@@ -854,3 +854,7 @@
 &efuse {
 	status = "okay";
 };
+
+&amlwatchdog {
+	status = "okay";
+};
