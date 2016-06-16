@@ -35,6 +35,10 @@
 #include <linux/list.h>
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
+#include <linux/amlogic/aml_gpio_consumer.h>
+#include <linux/amlogic/pinctrl_amlogic.h>
+/* AMLogic GPIO irq bank start offset */
+#define	AMLGPIO_IRQ_BASE	96
 
 /* Info for each registered platform device */
 struct pps_gpio_device_data {
@@ -87,6 +91,33 @@ get_irqf_trigger_flags(const struct pps_gpio_device_data *data)
 	return flags;
 }
 
+static int pps_gpio_irq_setup(unsigned int gpio_pin, bool assert_falling_edge)
+{
+	struct gpio_chip *chip;
+	int ret;
+	unsigned long irq_flags;
+	int irq_banks[2] = {0, 0};
+
+	chip = gpio_to_chip(gpio_pin);
+	if(!chip)
+		return -EINVAL;
+
+	// gpio_to_irq translates from global GPIO # to chip offset, which meson_setup_irq wants
+	gpio_pin = gpio_to_irq(gpio_pin);
+
+	irq_flags = assert_falling_edge ? IRQF_TRIGGER_FALLING : IRQF_TRIGGER_RISING;
+	ret = meson_setup_irq(chip, gpio_pin, irq_flags, &irq_banks[0]);
+	if(ret < 0)
+		return -EINVAL;
+
+	if(irq_banks[0] != -1)
+		return irq_banks[0] + AMLGPIO_IRQ_BASE;
+	if(irq_banks[1] != -1)
+		return irq_banks[1] + AMLGPIO_IRQ_BASE;
+
+	return -EINVAL;
+}
+
 static int pps_gpio_probe(struct platform_device *pdev)
 {
 	struct pps_gpio_device_data *data;
@@ -136,7 +167,7 @@ static int pps_gpio_probe(struct platform_device *pdev)
 	}
 
 	/* IRQ setup */
-	ret = gpio_to_irq(data->gpio_pin);
+	ret = pps_gpio_irq_setup(data->gpio_pin, data->assert_falling_edge);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to map GPIO to IRQ: %d\n", ret);
 		return -EINVAL;
@@ -182,7 +213,13 @@ static int pps_gpio_probe(struct platform_device *pdev)
 
 static int pps_gpio_remove(struct platform_device *pdev)
 {
+	unsigned int gpio_pin;
+	int irq_banks[2] = {0, 0};
 	struct pps_gpio_device_data *data = platform_get_drvdata(pdev);
+
+	// gpio_to_irq translates from global GPIO # to chip offset, which meson_free_irq wants
+	gpio_pin = gpio_to_irq(data->gpio_pin);
+	meson_free_irq(gpio_pin, irq_banks);
 
 	pps_unregister_source(data->pps);
 	dev_info(&pdev->dev, "removed IRQ %d as PPS source\n", data->irq);
