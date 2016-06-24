@@ -47,7 +47,11 @@ static int key_release_seconds;
 #define	SLEEP_DISABLE_FLAG
 
 #if defined(SLEEP_DISABLE_FLAG) && defined(CONFIG_HAS_WAKELOCK)
-	#include <linux/wakelock.h>
+	#if defined(CONFIG_ANDROID_PARANOID_NETWORK)
+		#include <linux/wakelock_android.h>
+	#else
+		#include <linux/wakelock.h>
+	#endif
 	static struct wake_lock	sleep_wake_lock;
 #endif
 

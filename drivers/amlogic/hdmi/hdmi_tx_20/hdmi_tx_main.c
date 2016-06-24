@@ -104,6 +104,24 @@ static struct hdmitx_dev hdmitx_device;
 static struct switch_dev sdev = { /* android ics switch device */
 	.name = "hdmi",
 };
+
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+/* default disable hdmiphy suspend */
+int suspend_hdmiphy = 0;
+
+static  int __init suspend_hdmiphy_setup(char *s)
+{
+	if (!strcmp(s, "true") || !strcmp(s, "1"))
+		suspend_hdmiphy = 1;
+	else
+		suspend_hdmiphy = 0;
+
+	return 0;
+}
+__setup("suspend_hdmiphy=", suspend_hdmiphy_setup);
+
+#endif
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 static void hdmitx_early_suspend(struct early_suspend *h)
@@ -1996,7 +2014,8 @@ static int amhdmitx_probe(struct platform_device *pdev)
 	hdmitx_device.tv_cec_support = 0;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
-	register_early_suspend(&hdmitx_early_suspend_handler);
+	if (suspend_hdmiphy)
+		register_early_suspend(&hdmitx_early_suspend_handler);
 #endif
 	hdmitx_device.nb.notifier_call = hdmitx_reboot_notifier;
 	register_reboot_notifier(&hdmitx_device.nb);
