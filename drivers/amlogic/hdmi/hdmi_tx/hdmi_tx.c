@@ -68,12 +68,30 @@ static hdmitx_dev_t hdmitx_device;
 static struct switch_dev sdev = {      // android ics switch device
        .name = "hdmi",
        };
+
+#if defined(CONFIG_MACH_MESON8B_ODROIDC)
+/* default disable hdmiphy suspend */
+int suspend_hdmiphy = 0;
+
+static  int __init suspend_hdmiphy_setup(char *s)
+{
+	if (!strcmp(s, "true") || !strcmp(s, "1"))
+		suspend_hdmiphy = 1;
+	else
+		suspend_hdmiphy = 0;
+
+	return 0;
+}
+__setup("suspend_hdmiphy=", suspend_hdmiphy_setup);
+#endif /* CONFIG_MACH_MESON8B_ODROIDC */
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 static void hdmitx_early_suspend(struct early_suspend *h)
 {
     const vinfo_t *info = hdmi_get_current_vinfo();
     hdmitx_dev_t * phdmi = (hdmitx_dev_t *)h->param;
+
     if (info && (strncmp(info->name, "panel", 5) == 0 || strncmp(info->name, "null", 4) == 0))
         return;
 
@@ -92,12 +110,14 @@ static void hdmitx_late_resume(struct early_suspend *h)
 {
     const vinfo_t *info = hdmi_get_current_vinfo();
     hdmitx_dev_t * phdmi = (hdmitx_dev_t *)h->param;
+
     if (info && (strncmp(info->name, "panel", 5) == 0 || strncmp(info->name, "null", 4) == 0)) {
         hdmitx_device.HWOp.CntlConfig(&hdmitx_device, CONF_VIDEO_BLANK_OP, VIDEO_UNBLANK);
        return ;
     } else {
         hdmitx_device.HWOp.CntlConfig(&hdmitx_device, CONF_VIDEO_BLANK_OP, VIDEO_BLANK);
     }
+
     phdmi->hpd_lock = 0;
     hdmitx_device.HWOp.CntlConfig(&hdmitx_device, CONF_AUDIO_MUTE_OP, AUDIO_MUTE);
     hdmitx_device.HWOp.CntlDDC(&hdmitx_device, DDC_HDCP_OP, HDCP_OFF);
@@ -1549,7 +1569,12 @@ static int amhdmitx_probe(struct platform_device *pdev)
     hdmitx_device.tv_cec_support=0;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
-    register_early_suspend(&hdmitx_early_suspend_handler);
+#if defined(CONFIG_MACH_MESON8B_ODROIDC)
+	if (suspend_hdmiphy)
+		register_early_suspend(&hdmitx_early_suspend_handler);
+#else
+		register_early_suspend(&hdmitx_early_suspend_handler);
+#endif
 #endif
 
     if((init_flag&INIT_FLAG_POWERDOWN)&&(hpdmode==2)){
