@@ -432,7 +432,11 @@ EXPORT_SYMBOL(file_ns_capable);
  */
 bool capable(int cap)
 {
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+	return true;
+#else
 	return ns_capable(&init_user_ns, cap);
+#endif
 }
 EXPORT_SYMBOL(capable);
 
