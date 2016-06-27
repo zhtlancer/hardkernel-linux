@@ -428,7 +428,11 @@ EXPORT_SYMBOL(file_ns_capable);
  */
 bool capable(int cap)
 {
+#if defined(CONFIG_MACH_MESON8B_ODROIDC)
+	return true;
+#else
 	return ns_capable(&init_user_ns, cap);
+#endif
 }
 EXPORT_SYMBOL(capable);
 
