@@ -1490,6 +1490,11 @@ static const struct hid_device_id mt_devices[] = {
 		HID_USB_DEVICE(USB_VENDOR_ID_LILLIPUT,
 				USB_DEVICE_ID_LILLIPUT_779GL_TOUCH) },
 
+/* Zaagtech HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_ZAAGTECH,
+				USB_DEVICE_ID_ZAAGTECH_TOUCH) },
+
 	/* Generic MT device */
 	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_MULTITOUCH, HID_ANY_ID, HID_ANY_ID) },
 
