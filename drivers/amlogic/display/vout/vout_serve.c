@@ -338,6 +338,10 @@ static void meson_vout_late_resume(struct early_suspend *h)
 **	vout driver interface  
 **
 ******************************************************************/
+#if defined(CONFIG_MACH_MESON8B_ODROIDC)
+extern int suspend_hdmiphy;
+#endif
+
 static int 
  meson_vout_probe(struct platform_device *pdev)
 {
@@ -349,7 +353,12 @@ static int
     early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN;
     early_suspend.suspend = meson_vout_early_suspend;
     early_suspend.resume = meson_vout_late_resume;
+#if defined(CONFIG_MACH_MESON8B_ODROIDC)
+	if (suspend_hdmiphy)
+		register_early_suspend(&early_suspend);
+#else
 	register_early_suspend(&early_suspend);
+#endif
 #endif
 
 	if(pdev->dev.of_node != NULL) {
