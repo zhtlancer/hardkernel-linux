@@ -1090,7 +1090,7 @@ CONFIG_AMAUDIO=y
 #
 # Amlogic Audio Interface V2
 #
-# CONFIG_AMAUDIO2 is not set
+CONFIG_AMAUDIO2=y
 
 #
 # Audio dsp process 

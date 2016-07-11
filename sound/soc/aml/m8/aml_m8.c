@@ -522,13 +522,15 @@ static int speaker_events(struct snd_soc_dapm_widget *w,
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
         printk("speaker_events--mute =1\n");
-		amlogic_set_value(p_audio->gpio_mute, 1, "mute_spk");
+		amlogic_gpio_direction_output(p_audio->gpio_mute, 1, "mute_spk");
+		//amlogic_set_value(p_audio->gpio_mute, 1, "mute_spk");
         aml_m8_spk_enabled = 1;
         msleep(p_audio->sleep_time);
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
         printk("speaker_events--mute =0\n");
-		amlogic_set_value(p_audio->gpio_mute, 0, "mute_spk");
+		amlogic_gpio_direction_output(p_audio->gpio_mute, 0, "mute_spk");
+		//amlogic_set_value(p_audio->gpio_mute, 0, "mute_spk");
         aml_m8_spk_enabled = 0;
 		break;
 	}
@@ -556,6 +558,70 @@ static struct snd_soc_jack_pin jack_pins[] = {
 };
 #endif
 
+
+/* HDMI in audio format detect: LPCM or NONE-LPCM */           
+static const char *hdmi_audio_type_texts[] = {
+    "LPCM","NONE-LPCM","UN-KNOWN"
+};          
+static const struct soc_enum hdmi_audio_type_enum =
+    SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
+            ARRAY_SIZE(hdmi_audio_type_texts),
+            hdmi_audio_type_texts);
+
+static int aml_hdmi_audio_type_get_enum(struct snd_kcontrol *kcontrol,
+    struct snd_ctl_elem_value *ucontrol)
+{
+    int ch_status = 0;
+    if ((READ_MPEG_REG(AUDIN_DECODE_CONTROL_STATUS)>>24)&0x1){
+        ch_status = READ_MPEG_REG(AUDIN_DECODE_CHANNEL_STATUS_A_0);
+        if (ch_status&2) //NONE-LPCM
+            ucontrol->value.enumerated.item[0] = 1;
+        else //LPCM
+            ucontrol->value.enumerated.item[0] = 0;     
+    }
+    else
+        ucontrol->value.enumerated.item[0] = 2; //un-stable. un-known       
+    
+    return 0;
+}
+
+static int aml_hdmi_audio_type_set_enum(struct snd_kcontrol *kcontrol,
+    struct snd_ctl_elem_value *ucontrol)
+{
+    return 0;
+}
+
+/* spdif in audio format detect: LPCM or NONE-LPCM */
+static const char *spdif_audio_type_texts[] = {
+    "LPCM","NONE-LPCM","UN-KNOWN"
+};          
+static const struct soc_enum spdif_audio_type_enum =
+    SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
+            ARRAY_SIZE(spdif_audio_type_texts),
+            spdif_audio_type_texts);
+
+static int aml_spdif_audio_type_get_enum(struct snd_kcontrol *kcontrol,
+    struct snd_ctl_elem_value *ucontrol)
+{
+	int ch_status = 0;
+    //if ((READ_MPEG_REG(AUDIN_SPDIF_MISC)>>0x7)&0x1){
+        ch_status = READ_MPEG_REG(AUDIN_SPDIF_CHNL_STS_A)&0x3;
+        if (ch_status&2) //NONE-LPCM
+            ucontrol->value.enumerated.item[0] = 1;
+        else //LPCM
+            ucontrol->value.enumerated.item[0] = 0;     
+    //}
+    //else
+    //    ucontrol->value.enumerated.item[0] = 2; //un-stable. un-known       
+    return 0;
+}
+
+static int aml_spdif_audio_type_set_enum(struct snd_kcontrol *kcontrol,
+    struct snd_ctl_elem_value *ucontrol)
+{
+    return 0;
+}
+
 static const struct snd_kcontrol_new aml_m8_controls[] = {
 	//SOC_DAPM_PIN_SWITCH("Ext Spk"),
 
@@ -570,6 +636,15 @@ static const struct snd_kcontrol_new aml_m8_controls[] = {
 	SOC_SINGLE_BOOL_EXT("Ext Spk Switch", 0,
 		aml_m8_get_spk,
 		NULL),
+
+	SOC_ENUM_EXT("HDMI Audio Type", hdmi_audio_type_enum,
+        aml_hdmi_audio_type_get_enum,
+        aml_hdmi_audio_type_set_enum),
+
+	SOC_ENUM_EXT("SPDIFIN Audio Type", spdif_audio_type_enum,
+        aml_spdif_audio_type_get_enum,
+        aml_spdif_audio_type_set_enum),
+    
    /*
     SOC_SINGLE_BOOL_EXT("Audio MPLL9 Switch", 0,
     aml_m8_get_MPLL9,
@@ -650,6 +725,7 @@ static int aml_asoc_init(struct snd_soc_pcm_runtime *rtd)
         p_aml_audio->timer.function = aml_asoc_timer_func;
         p_aml_audio->timer.data = (unsigned long)p_aml_audio;
         p_aml_audio->data= (void*)card;
+        p_aml_audio->suspended = false;
 
         INIT_WORK(&p_aml_audio->work, aml_asoc_work_func);
         mutex_init(&p_aml_audio->lock);
