@@ -1034,3 +1034,7 @@
 /* Lilliput 779GL-70NP/C/T - 7" HDMI capacitive Screen */
 #define USB_VENDOR_ID_LILLIPUT	0x1391
 #define USB_DEVICE_ID_LILLIPUT_779GL_TOUCH	0x2112
+
+/* Zaagtech HDMI capacitive Screen */
+#define USB_VENDOR_ID_ZAAGTECH	0xAAEC
+#define USB_DEVICE_ID_ZAAGTECH_TOUCH	0xC021
