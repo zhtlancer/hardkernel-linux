@@ -482,6 +482,18 @@
 		compatible = "odroid-sysfs";
 	};
 
+#if 1
+	odroid_gpioctrl {
+		compatible = "odroid-gpioctrl";
+	};
+
+	odroid_gpiomem {
+		compatible = "odroid-gpiomem";
+		reg = <0x0 0xC8834000 0x0 0x1000>;
+		status = "okay";
+	};
+#endif
+
 	dwc2_a {
 		compatible = "amlogic,dwc2";
 		reg = <0x0 0xc9000000 0x0 0x40000>;

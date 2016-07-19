@@ -101,6 +101,8 @@ shared-dma-pool	shared dma pool
 i2c-gpio
 i2c-gpio-edid
 odroid-sysfs
+odroid-gpioctrl
+odroid-gpiomem
 w1-gpio
 spi-gpio
 spidev
