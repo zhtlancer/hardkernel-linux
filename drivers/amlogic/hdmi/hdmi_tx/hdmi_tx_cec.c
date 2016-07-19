@@ -315,9 +315,9 @@ void cec_node_init(hdmitx_dev_t* hdmitx_device)
 
             // here, we need to detect whether TV is supporting the CEC function
             // if not, jump out to save system time
-            //if(!detect_tv_support_cec(player_dev[i])) {
-            //    break;
-            //}
+            if(!detect_tv_support_cec(player_dev[i])) {
+                break;
+            }
             cec_get_menu_language_smp();
             msleep(350);
 

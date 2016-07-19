@@ -949,6 +949,12 @@ void hdmi_print(int dbg_lvl, const char *fmt, ...)
     }
 }
 
+static ssize_t show_tv_support_cec(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+    return snprintf(buf, PAGE_SIZE, "%d\n", hdmitx_device.tv_cec_support);
+}
+
 static DEVICE_ATTR(disp_mode, S_IWUSR | S_IRUGO | S_IWGRP, show_disp_mode, store_disp_mode);
 static DEVICE_ATTR(aud_mode, S_IWUSR | S_IRUGO, show_aud_mode, store_aud_mode);
 static DEVICE_ATTR(edid, S_IWUSR | S_IRUGO, show_edid, store_edid);
@@ -965,6 +971,7 @@ static DEVICE_ATTR(cec, S_IWUSR | S_IRUGO, show_cec, store_cec);
 static DEVICE_ATTR(cec_config, S_IWUSR | S_IRUGO | S_IWGRP, show_cec_config, store_cec_config);
 //static DEVICE_ATTR(cec_config, S_IWUGO | S_IRUGO , NULL, store_cec_config);
 static DEVICE_ATTR(cec_lang_config, S_IWUSR | S_IRUGO | S_IWGRP, show_cec_lang_config, store_cec_lang_config);
+static DEVICE_ATTR(tv_support_cec, S_IRUGO, show_tv_support_cec, NULL);
 
 /*****************************
 *    hdmitx display client interface
@@ -1606,6 +1613,7 @@ static int amhdmitx_probe(struct platform_device *pdev)
     ret=device_create_file(hdmitx_dev, &dev_attr_cec);
     ret=device_create_file(hdmitx_dev, &dev_attr_cec_config);
     ret=device_create_file(hdmitx_dev, &dev_attr_cec_lang_config);
+    ret=device_create_file(hdmitx_dev, &dev_attr_tv_support_cec);
 
     if (hdmitx_dev == NULL) {
         hdmi_print(ERR, SYS "device_create create error\n");
@@ -1950,14 +1958,15 @@ static  int __init hdmitx_boot_para_setup(char *s)
             }
             else if(strncmp(token, "cec", 3)==0) {
                 unsigned int list = simple_strtoul(token+3,NULL,16);
-                if((list >= 0) && (list <= 0xf)) {
+                if((list >= 0) && (list <= 0x2f)) {
                     hdmitx_device.cec_func_config = list;
                     aml_write_reg32(P_AO_DEBUG_REG0, hdmitx_device.cec_func_config);         // save cec function list to AO_REG
                 }
                 hdmi_print(INF, CEC "Function List: %s, %s, %s, %s\n", (hdmitx_device.cec_func_config & (1 << CEC_FUNC_MSAK)) ? "enable" : "disable",
                                                               (hdmitx_device.cec_func_config & (1 << ONE_TOUCH_PLAY_MASK)) ? "one touch play" : "",
                                                               (hdmitx_device.cec_func_config & (1 << ONE_TOUCH_STANDBY_MASK)) ? "one touch standby" : "",
-                                                              (hdmitx_device.cec_func_config & (1 << AUTO_POWER_ON_MASK)) ? "auto power by tv" : ""
+                                                              (hdmitx_device.cec_func_config & (1 << AUTO_POWER_ON_MASK)) ? "auto power by tv" : "",
+                                                              (hdmitx_device.cec_func_config & (1 << AUTO_CHANGE_LANGUAGE)) ? "auto change language" : ""
                       );
                 hdmi_print(INF, CEC "HDMI aml_read_reg32(P_AO_DEBUG_REG0):0x%x\n",aml_read_reg32(P_AO_DEBUG_REG0));
                 hdmi_print(INF, CEC "HDMI hdmi_cec_func_config:0x%x\n",hdmitx_device.cec_func_config);

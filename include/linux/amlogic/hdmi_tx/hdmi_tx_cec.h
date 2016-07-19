@@ -367,7 +367,7 @@ typedef unsigned long cec_info_mask;
 #define ONE_TOUCH_PLAY_MASK                  1
 #define ONE_TOUCH_STANDBY_MASK               2
 #define AUTO_POWER_ON_MASK                   3
-
+#define AUTO_CHANGE_LANGUAGE                 5
 
 typedef struct {
     cec_hdmi_port_e hdmi_port;
