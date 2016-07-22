@@ -63,9 +63,13 @@ SET_TV_CLASS_ATTR(vdac_setting,parse_vdac_setting)
 #define DEFAULT_POLICY_FR_AUTO	1
 
 static int fr_auto_policy = DEFAULT_POLICY_FR_AUTO;
-static void policy_framerate_automation_store(char* para);
+static int fr_auto_policy_hold = DEFAULT_POLICY_FR_AUTO;
 
+static void policy_framerate_automation_switch_store(char * para);
+static void policy_framerate_automation_store(char* para);
 SET_TV_CLASS_ATTR(policy_fr_auto, policy_framerate_automation_store)
+SET_TV_CLASS_ATTR(policy_fr_auto_switch,
+        policy_framerate_automation_switch_store)
 
 #endif
 
@@ -1210,12 +1214,33 @@ static void policy_framerate_automation_store(char* para)
 
 	policy = simple_strtoul(para, NULL, 10);
 
-	if( (policy>=0) && (policy<3) )
+	if( (policy>=0) && (policy<3))
 	{
-		fr_auto_policy = policy;
+        fr_auto_policy_hold = policy;
+        fr_auto_policy = fr_auto_policy_hold;
+        snprintf(policy_fr_auto_switch, 40, "%d\n", fr_auto_policy);
 	}
+    snprintf(policy_fr_auto, 40, "%d\n", fr_auto_policy_hold);
 
 	return ;
+}
+
+static void policy_framerate_automation_switch_store(char *para)
+{
+    int policy = 0;
+
+	policy = simple_strtoul(para, NULL, 10);
+
+	if( (policy>=0) && (policy<3))
+	{
+		fr_auto_policy = policy;
+	} else if (policy == 3) {
+        fr_auto_policy = fr_auto_policy_hold;
+        tv_set_vframe_rate_end_hint();
+    }
+    snprintf(policy_fr_auto_switch, 40, "%d\n", fr_auto_policy);
+
+    return;
 }
 
 #endif
@@ -1224,6 +1249,7 @@ static  struct  class_attribute   *tv_attr[]={
 &class_TV_attr_vdac_setting,
 #ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
 &class_TV_attr_policy_fr_auto,
+&class_TV_attr_policy_fr_auto_switch,
 #endif
 };
 static int  create_tv_attr(disp_module_info_t* info)
@@ -1249,6 +1275,7 @@ static int  create_tv_attr(disp_module_info_t* info)
 
 #ifdef CONFIG_AML_VOUT_FRAMERATE_AUTOMATION
 	sprintf(policy_fr_auto, "%d", DEFAULT_POLICY_FR_AUTO);
+    sprintf(policy_fr_auto_switch, "%d", DEFAULT_POLICY_FR_AUTO);
 #endif
 
 	return   0;
