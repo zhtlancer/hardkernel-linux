@@ -105,6 +105,13 @@ static struct switch_dev sdev = { /* android ics switch device */
 	.name = "hdmi",
 };
 
+static struct hdmi_cea_timing custom_timing;
+struct hdmi_cea_timing *get_custom_timing(void)
+{
+	return &custom_timing;
+}
+EXPORT_SYMBOL(get_custom_timing);
+
 #if defined(CONFIG_ARCH_MESON64_ODROIDC2)
 /* default disable hdmiphy suspend */
 int suspend_hdmiphy = 0;
@@ -1005,6 +1012,7 @@ const char *disp_mode_t[] = {
 	"2560x1600p60hz",
 	"2560x1080p60hz",
 	"3440x1440p60hz",
+	"custombuilt",
 	NULL
 };
 

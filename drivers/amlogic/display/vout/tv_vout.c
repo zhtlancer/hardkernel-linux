@@ -46,6 +46,8 @@
 #include <linux/amlogic/vpu.h>
 #endif
 
+#include <linux/amlogic/hdmi_tx/hdmi_tx_module.h>
+
 /* Local Headers */
 #include "tvregs.h"
 #include "tv_vout.h"
@@ -544,16 +546,18 @@ static const struct vinfo_s *get_valid_vinfo(char  *mode)
 	const struct vinfo_s *vinfo = NULL;
 	int  i, count = ARRAY_SIZE(tv_info);
 	int mode_name_len = 0;
+
 	for (i = 0; i < count; i++) {
 		if (strncmp(tv_info[i].name, mode,
 			    strlen(tv_info[i].name)) == 0) {
-			if ((vinfo == NULL)
-			    || (strlen(tv_info[i].name) > mode_name_len)) {
+			if ((vinfo == NULL) ||
+			(strlen(tv_info[i].name) > mode_name_len)) {
 				vinfo = &tv_info[i];
 				mode_name_len = strlen(tv_info[i].name);
 			}
 		}
 	}
+
 	return vinfo;
 }
 
@@ -569,10 +573,32 @@ static enum tvmode_e vmode_to_tvmode(enum vmode_e mode)
 
 static struct vinfo_s *get_tv_info(enum vmode_e mode)
 {
+	struct hdmi_cea_timing *t = get_custom_timing();
 	int i = 0;
+
 	for (i = 0; i < ARRAY_SIZE(tv_info); i++) {
-		if (mode == tv_info[i].mode)
+		if (mode == tv_info[i].mode) {
+			if (mode == (enum vmode_e) TVMODE_CUSTOMBUILT) {
+				tv_info[i].width = t->h_active;
+				tv_info[i].height = t->v_active;
+				/* check progressive or interlaced */
+				/* if progressive */
+				tv_info[i].field_height
+					= (t->v_active);
+
+				tv_info[i].aspect_ratio_num = 16;
+				tv_info[i].aspect_ratio_den = 9;
+
+				tv_info[i].sync_duration_num
+					= t->v_freq / 1000;
+				tv_info[i].sync_duration_den = 1;
+
+				/* in Hz unit */
+				tv_info[i].video_clk
+					= (t->pixel_freq * 1000);
+			}
 			return &tv_info[i];
+		}
 	}
 	return NULL;
 }
