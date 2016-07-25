@@ -29,6 +29,7 @@
 #include <linux/ioctl.h>
 #include <linux/fs.h>
 #include <linux/file.h>
+#include <linux/compat.h>
 
 /*---------------------------------------------------------------------------*/
 #if defined(CONFIG_ARCH_MESON64_ODROIDC2)
@@ -43,14 +44,15 @@ static void __iomem		*gpio_base;
 static struct miscdevice	*pmisc;
 
 struct gpioctrl_iocreg	{
-	unsigned int	reg_offset;
-	unsigned int	reg_data;
-	unsigned int	bit_mask;
-	unsigned int	bit_data;
-}	__packed;
+	__u32	reg_offset;
+	__u32	reg_data;
+	__u32	bit_mask;
+	__u32	bit_data;
+};
 
-#define GPIOCTRL_IOCGREG	_IOR('g', 1, struct gpioctrl_iocreg *)
-#define GPIOCTRL_IOCWREG	_IOW('g', 2, struct gpioctrl_iocreg *)
+#define GPIOCTRL_IOCGREG	_IOR('g', 1, struct gpioctrl_iocreg)
+#define GPIOCTRL_IOCWREG	_IOW('g', 2, struct gpioctrl_iocreg)
+
 
 /*---------------------------------------------------------------------------*/
 static inline void misc_gpioctrl_set(struct gpioctrl_iocreg *iocreg)
@@ -100,10 +102,21 @@ static long misc_gpioctrl_ioctl(struct file *file, unsigned int cmd,
 }
 
 /*---------------------------------------------------------------------------*/
+#if defined(CONFIG_COMPAT)
+static long misc_gpioctrl_compat_ioctl(struct file *file, unsigned int cmd,
+					unsigned long arg)
+{
+	return	misc_gpioctrl_ioctl(file, cmd, (unsigned long)compat_ptr(arg));
+}
+#endif
+/*---------------------------------------------------------------------------*/
 static const struct file_operations	gpioctrl_misc_fops = {
 	.owner		= THIS_MODULE,
 	.open		= misc_gpioctrl_open,
 	.unlocked_ioctl	= misc_gpioctrl_ioctl,
+#if defined(CONFIG_COMPAT)
+	.compat_ioctl	= misc_gpioctrl_compat_ioctl,
+#endif
 };
 
 /*---------------------------------------------------------------------------*/
