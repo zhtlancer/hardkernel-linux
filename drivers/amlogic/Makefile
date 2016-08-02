@@ -96,6 +96,14 @@ endif
 ifneq ($(wildcard $(srctree)/../hardware/wifi),)
 	obj-$(CONFIG_RTL8192CU) += ../../../hardware/wifi/realtek/drivers/8192cu/rtl8xxx_CU/
 endif
+
+ifneq ($(wildcard $(srctree)/../hardware/wifi),)
+	obj-$(CONFIG_RTL8812AU) += ../../../hardware/wifi/realtek/drivers/rtl8812au/
+endif
+ifneq ($(wildcard $(srctree)/../hardware/wifi),)
+	obj-$(CONFIG_RTL8812AU) += ../../../hardware/wifi/realtek/drivers/rtl8812au/
+endif
+
 obj-y += bluetooth/
 obj-$(CONFIG_MESON_NFC) += nfc/
 
