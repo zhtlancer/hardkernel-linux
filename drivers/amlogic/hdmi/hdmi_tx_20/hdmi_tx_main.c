@@ -221,6 +221,16 @@ static int hdmi_detect_when_booting = 1;
 /* 1: error  2: important  3: normal  4: detailed */
 static int debug_level = IMP;
 
+void control_hdmiphy(int on)
+{
+	if (on)
+		hdmitx_device.HWOp.CntlMisc(&hdmitx_device, MISC_TMDS_PHY_OP,
+			TMDS_PHY_ENABLE);
+	else
+		hdmitx_device.HWOp.CntlMisc(&hdmitx_device, MISC_TMDS_PHY_OP,
+			TMDS_PHY_DISABLE);
+}
+
 /*****************************
 *	hdmitx attr management :
 *	enable
@@ -979,6 +989,7 @@ const char *disp_mode_t[] = {
 	"1366x768p60hz",
 	"1440x900p60hz",
 	"1600x900p60hz",
+	"1600x1200p60hz",
 	"1680x1050p60hz",
 	"1920x1200p60hz",
 	"2560x1440p60hz",
