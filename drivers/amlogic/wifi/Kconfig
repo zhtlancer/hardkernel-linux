@@ -24,3 +24,4 @@ config DHD_USE_STATIC_BUF
 endif # AM_WIFI
 
 source "../hardware/wifi/realtek/drivers/8192cu/rtl8xxx_CU/Kconfig"
+source "../hardware/wifi/realtek/drivers/rtl8812au/Kconfig"
