@@ -361,6 +361,13 @@ static int osd_set_res_bootargs(int index, enum vmode_e mode)
 		fb_def_var[index].yres_virtual = 1800;
 		fb_def_var[index].bits_per_pixel = 32;
 		break;
+	case TVMODE_1600x1200p60hz:
+		fb_def_var[index].xres = 1600;
+		fb_def_var[index].yres = 1200;
+		fb_def_var[index].xres_virtual = 1600;
+		fb_def_var[index].yres_virtual = 2400;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
 	case TVMODE_1680x1050p60hz:
 		fb_def_var[index].xres = 1680;
 		fb_def_var[index].yres = 1050;

@@ -69,6 +69,7 @@ static struct para_pair_s mode_infos[] = {
 	{"1366x768p60hz", TVMODE_1366x768p60hz},
 	{"1440x900p60hz", TVMODE_1440x900p60hz},
 	{"1600x900p60hz", TVMODE_1600x900p60hz},
+	{"1600x1200p60hz", TVMODE_1600x1200p60hz},
 	{"1680x1050p60hz", TVMODE_1680x1050p60hz},
 	{"1920x1200p60hz", TVMODE_1920x1200p60hz},
 	{"2560x1440p60hz", TVMODE_2560x1440p60hz},
