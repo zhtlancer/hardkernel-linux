@@ -734,6 +734,7 @@
                 hearbeat {
                         label = "blue:heartbeat";
                         gpios = <&gpio_ao GPIOAO_13 GPIO_ACTIVE_LOW>;
+                        default-state = "off";
                         linux,default-trigger = "heartbeat";
                 };
         };
