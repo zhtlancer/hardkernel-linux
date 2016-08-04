@@ -269,7 +269,7 @@ static int sx865x_read_values(struct sx865x *ts)
 			u16 ch;
 			data = swab16(vals[i]);
 			if (unlikely(data & 0x8000)) {
-				dev_dbg(&ts->client->dev, 
+				dev_dbg(&ts->client->dev,
 					"hibit @ %d [0x%04x]\n", i, data);
 				continue;
 			}
@@ -338,11 +338,11 @@ static irqreturn_t sx865x_irq(int irq, void *handle)
 {
 	struct sx865x *ts = handle;
 
-	while (sx865x_data_available(ts) && get_pendown_status(ts)) {
+	while (sx865x_data_available(ts)) {
 		/* valid data was read in */
 		if (likely(sx865x_read_values(ts) == 0))
 			sx865x_send_event(ts);
-		else 
+		else
 			dev_dbg(&ts->client->dev, "data error!\n");
 
 		msleep(SX865X_DOWN_SCANTIME_MS);
@@ -413,7 +413,7 @@ static int sx865x_dt_probe(struct i2c_client *client, struct sx865x *ts)
 		/* AMLogic gpio irq setup */
 		ret = gpio_for_irq(ts->gpio_pendown,
 			AML_GPIO_IRQ(ts->irq_bank, FILTER_NUM7, GPIO_IRQ_FALLING));
-	
+
 		if (ret) {
 			dev_err(&client->dev,
 				"AML_GPIO_IRQ setup fail!\n");
