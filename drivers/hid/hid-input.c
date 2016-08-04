@@ -1076,11 +1076,12 @@ void hidinput_hid_event(struct hid_device *hid, struct hid_field *field, struct 
 	 * don't specify logical min and max.
 	 */
 	if ((field->flags & HID_MAIN_ITEM_VARIABLE) &&
-	    (field->logical_minimum < field->logical_maximum) &&
-	    (value < field->logical_minimum ||
-	     value > field->logical_maximum)) {
-		dbg_hid("Ignoring out-of-range value %x\n", value);
-		return;
+			(value < field->logical_minimum ||
+		value > field->logical_maximum)) {
+		if (value < field->logical_minimum)
+			value = field->logical_minimum;
+		else
+			value = field->logical_maximum;
 	}
 
 	/* report the usage code as scancode if the key status has changed */
