@@ -534,7 +534,7 @@ err_free_irq:
 	if (ts->gpio_pendown)
 		gpio_free(ts->gpio_pendown);
 	if (ts->gpio_reset)
-		gpio_free(ts->gpio_pendown);
+		gpio_free(ts->gpio_reset);
 #if defined(CONFIG_ARCH_MESON64_ODROIDC2)
 	sx865x_irq_free(client, ts);
 #else
@@ -554,7 +554,7 @@ static int sx865x_remove(struct i2c_client *client)
 	if (ts->gpio_pendown)
 		gpio_free(ts->gpio_pendown);
 	if (ts->gpio_reset)
-		gpio_free(ts->gpio_pendown);
+		gpio_free(ts->gpio_reset);
 #if defined(CONFIG_ARCH_MESON64_ODROIDC2)
 	sx865x_irq_free(client, ts);
 #else
