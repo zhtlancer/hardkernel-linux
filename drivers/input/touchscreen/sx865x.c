@@ -444,7 +444,7 @@ static void sx865x_irq_free(struct i2c_client *client, struct sx865x *ts)
 {
 	int	irq_banks[2];
 
-	meson_free_irq(ts->gpio_pendown, &irq_banks[0]);
+	meson_free_irq(gpio_to_irq(ts->gpio_pendown), &irq_banks[0]);
 
 	/* rising irq bank */
 	if (irq_banks[0] != -1)
