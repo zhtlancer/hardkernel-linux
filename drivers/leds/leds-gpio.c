@@ -35,6 +35,20 @@ struct gpio_led_data {
 			unsigned long *delay_on, unsigned long *delay_off);
 };
 
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+static bool led_onoff = true;
+static  int __init led_onoff_setup(char *s)
+{
+	if (!(strcmp(s, "off")))
+		led_onoff = false;
+	else
+		led_onoff = true;
+
+	return 0;
+}
+__setup("led_onoff=", led_onoff_setup);
+#endif
+
 static void gpio_led_work(struct work_struct *work)
 {
 	struct gpio_led_data	*led_dat =
@@ -192,8 +206,16 @@ static struct gpio_leds_priv *gpio_leds_create_of(struct platform_device *pdev)
 		led.gpio = of_get_gpio_flags(child, 0, &flags);
 		led.active_low = flags & OF_GPIO_ACTIVE_LOW;
 		led.name = of_get_property(child, "label", NULL) ? : child->name;
+#if defined(CONFIG_ARCH_MESON64_ODROIDC2)
+		if (led_onoff) {
+			led.default_trigger =
+			of_get_property(child, "linux,default-trigger", NULL);
+		} else
+			led.default_trigger = "none";
+#else
 		led.default_trigger =
 			of_get_property(child, "linux,default-trigger", NULL);
+#endif
 		state = of_get_property(child, "default-state", NULL);
 		if (state) {
 			if (!strcmp(state, "keep"))
