@@ -110,7 +110,7 @@
         compatible = "amlogic,mesonfb";
         dev_name = "mesonfb";
         status = "okay";
-        reserve-memory = <0x01800000 0x00100000>;
+        reserve-memory = <0x01B00000 0x00100000>;
         reserve-iomap = "true";
         vmode = <3>;
         scale_mode = <1>;
