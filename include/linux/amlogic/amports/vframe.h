@@ -169,6 +169,7 @@ typedef struct vframe_s {
         u32 ratio_control;
 
         u32 orientation;
+        u32 video_angle;
         enum vframe_source_type_e source_type;
         enum vframe_secam_phase_e  phase;
         enum vframe_source_mode_e source_mode;
