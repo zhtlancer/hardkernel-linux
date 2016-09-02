@@ -356,19 +356,12 @@ out:
 static int ashmem_shrink(struct shrinker *s, struct shrink_control *sc)
 {
 	struct ashmem_range *range, *next;
-	struct task_struct *owner = NULL;
 
 	/* We might recurse into filesystem code, so bail out if necessary */
 	if (sc->nr_to_scan && !(sc->gfp_mask & __GFP_FS))
 		return -1;
 	if (!sc->nr_to_scan)
 		return lru_count;
-
-#if defined(CONFIG_SMP)
-	owner = ashmem_mutex.owner;
-#endif
-	if (owner && (owner == current))
-		return -1;
 
 	mutex_lock(&ashmem_mutex);
 
@@ -379,8 +372,6 @@ static int ashmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		do_fallocate(range->asma->file,
 				FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
 				start, end - start);
-		if (!range_on_lru(range))
-			break;
 		range->purged = ASHMEM_WAS_PURGED;
 		lru_del(range);
 
