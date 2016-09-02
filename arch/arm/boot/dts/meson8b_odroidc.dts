@@ -951,7 +951,7 @@
 
     odroid_gpiomem {
         compatible = "odroid-gpiomem";
-        reg = <0x0 0xC1108000 0x0 0x1000>;
+        reg = <0xC1108000 0x1000>;
         status = "okay";
     };
 

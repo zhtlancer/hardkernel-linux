@@ -167,6 +167,8 @@ static int odroid_gpiomem_probe(struct platform_device *pdev)
 		gpiomem->regs_phys = ODROIDC2_GPIO_BASE;
 	}
 
+	printk("regs_phys = %lx\n", gpiomem->regs_phys);
+
 	dev_info(gpiomem->dev, "Initialised: Registers at 0x%08lx",
 		gpiomem->regs_phys);
 
