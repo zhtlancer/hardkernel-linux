@@ -43,6 +43,7 @@
 #include <linux/dma-mapping.h>
 /* Amlogic Headers */
 #include <linux/amlogic/vout/vout_notify.h>
+#include <linux/amlogic/hdmi_tx/hdmi_tx_module.h>
 
 /* Local Headers */
 #include "osd.h"
@@ -302,6 +303,8 @@ static u32 fb_rmem_size[2];
 #if defined(CONFIG_ARCH_MESON64_ODROIDC2)
 static int osd_set_res_bootargs(int index, enum vmode_e mode)
 {
+	struct hdmi_cea_timing *custom_timing = get_custom_timing();
+
 	osd_log_info("%s : mode %d\n", __func__, mode);
 
 	/* FIXME : need to adjust this routine */
@@ -470,6 +473,13 @@ static int osd_set_res_bootargs(int index, enum vmode_e mode)
 		fb_def_var[index].yres = 1080;
 		fb_def_var[index].xres_virtual = 1920;
 		fb_def_var[index].yres_virtual = 3240;
+		fb_def_var[index].bits_per_pixel = 32;
+		break;
+	case TVMODE_CUSTOMBUILT:
+		fb_def_var[index].xres = custom_timing->h_active;
+		fb_def_var[index].yres = custom_timing->v_active;
+		fb_def_var[index].xres_virtual = custom_timing->h_active;
+		fb_def_var[index].yres_virtual = (custom_timing->v_active * 2);
 		fb_def_var[index].bits_per_pixel = 32;
 		break;
 	default:
