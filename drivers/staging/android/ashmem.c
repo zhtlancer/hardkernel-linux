@@ -364,7 +364,6 @@ static int ashmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		return lru_count;
 
 	mutex_lock(&ashmem_mutex);
-
 	list_for_each_entry_safe(range, next, &ashmem_lru_list, lru) {
 		loff_t start = range->pgstart * PAGE_SIZE;
 		loff_t end = (range->pgend + 1) * PAGE_SIZE;
@@ -379,7 +378,7 @@ static int ashmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		if (sc->nr_to_scan <= 0)
 			break;
 	}
-		mutex_unlock(&ashmem_mutex);
+	mutex_unlock(&ashmem_mutex);
 
 	return lru_count;
 }
