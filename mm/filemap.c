@@ -1096,8 +1096,6 @@ static void shrink_readahead_size_eio(struct file *filp,
  * This is really ugly. But the goto's actually try to clarify some
  * of the logic when it comes to error handling etc.
  */
-extern bool has_cma_page(struct page *page);
-extern void wakeup_wq(bool has_cma);
 static void do_generic_file_read(struct file *filp, loff_t *ppos,
 		read_descriptor_t *desc, read_actor_t actor)
 {
@@ -1110,7 +1108,6 @@ static void do_generic_file_read(struct file *filp, loff_t *ppos,
 	unsigned long offset;      /* offset into pagecache page */
 	unsigned int prev_offset;
 	int error;
-	bool has_cma = false;
 
 	index = *ppos >> PAGE_CACHE_SHIFT;
 	prev_index = ra->prev_pos >> PAGE_CACHE_SHIFT;
@@ -1135,8 +1132,6 @@ find_page:
 			if (unlikely(page == NULL))
 				goto no_cached_page;
 		}
-		if (!has_cma)
-			has_cma = has_cma_page(page);
 		if (PageReadahead(page)) {
 			page_cache_async_readahead(mapping,
 					ra, filp, page,
@@ -1306,13 +1301,10 @@ no_cached_page:
 			desc->error = error;
 			goto out;
 		}
-		if (!has_cma)
-			has_cma = has_cma_page(page);
 		goto readpage;
 	}
 
 out:
-	wakeup_wq(has_cma);
 	ra->prev_pos = prev_index;
 	ra->prev_pos <<= PAGE_CACHE_SHIFT;
 	ra->prev_pos |= prev_offset;
@@ -1511,7 +1503,7 @@ EXPORT_SYMBOL(generic_file_aio_read);
 static int page_cache_read(struct file *file, pgoff_t offset)
 {
 	struct address_space *mapping = file->f_mapping;
-	struct page *page;
+	struct page *page; 
 	int ret;
 
 	do {
@@ -1528,7 +1520,7 @@ static int page_cache_read(struct file *file, pgoff_t offset)
 		page_cache_release(page);
 
 	} while (ret == AOP_TRUNCATED_PAGE);
-
+		
 	return ret;
 }
 
@@ -1624,7 +1616,6 @@ int filemap_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	struct page *page;
 	pgoff_t size;
 	int ret = 0;
-	bool has_cma = false;
 
 	size = (i_size_read(inode) + PAGE_CACHE_SIZE - 1) >> PAGE_CACHE_SHIFT;
 	if (offset >= size)
@@ -1635,7 +1626,6 @@ int filemap_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	 */
 	page = find_get_page(mapping, offset);
 	if (likely(page) && !(vmf->flags & FAULT_FLAG_TRIED)) {
-		has_cma = has_cma_page(page);
 		/*
 		 * We found the page, so try async readahead before
 		 * waiting for the lock.
@@ -1651,12 +1641,10 @@ retry_find:
 		page = find_get_page(mapping, offset);
 		if (!page)
 			goto no_cached_page;
-		has_cma = has_cma_page(page);
 	}
 
 	if (!lock_page_or_retry(page, vma->vm_mm, vmf->flags)) {
 		page_cache_release(page);
-		wakeup_wq(has_cma);
 		return ret | VM_FAULT_RETRY;
 	}
 
@@ -1664,8 +1652,6 @@ retry_find:
 	if (unlikely(page->mapping != mapping)) {
 		unlock_page(page);
 		put_page(page);
-		wakeup_wq(has_cma);
-		has_cma = false;
 		goto retry_find;
 	}
 	VM_BUG_ON(page->index != offset);
@@ -1685,12 +1671,10 @@ retry_find:
 	if (unlikely(offset >= size)) {
 		unlock_page(page);
 		page_cache_release(page);
-		wakeup_wq(has_cma);
 		return VM_FAULT_SIGBUS;
 	}
 
 	vmf->page = page;
-	wakeup_wq(has_cma);
 	return ret | VM_FAULT_LOCKED;
 
 no_cached_page:
@@ -1732,8 +1716,6 @@ page_not_uptodate:
 			error = -EIO;
 	}
 	page_cache_release(page);
-	wakeup_wq(has_cma);
-	has_cma = false;
 
 	if (!error || error == AOP_TRUNCATED_PAGE)
 		goto retry_find;
@@ -2423,7 +2405,7 @@ generic_file_buffered_write(struct kiocb *iocb, const struct iovec *iov,
 		written += status;
 		*ppos = pos + status;
   	}
-
+	
 	return written ? written : status;
 }
 EXPORT_SYMBOL(generic_file_buffered_write);

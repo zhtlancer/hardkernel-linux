@@ -319,14 +319,11 @@ struct page * lookup_swap_cache(swp_entry_t entry)
  * A failure return means that either the page allocation failed or that
  * the swap entry is no longer in use.
  */
-extern bool has_cma_page(struct page *page);
-extern void wakeup_wq(bool has_cma);
 struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 			struct vm_area_struct *vma, unsigned long addr)
 {
 	struct page *found_page, *new_page = NULL;
 	int err;
-	bool has_cma = false;
 
 	do {
 		/*
@@ -347,8 +344,6 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 			if (!new_page)
 				break;		/* Out of memory */
 		}
-		if (!has_cma)
-			has_cma = has_cma_page(new_page);
 
 		/*
 		 * call radix_tree_preload() while we can wait.
@@ -397,7 +392,6 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 			 */
 			lru_cache_add_anon(new_page);
 			swap_readpage(new_page);
-			wakeup_wq(has_cma);
 			return new_page;
 		}
 		radix_tree_preload_end();
@@ -410,10 +404,8 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		swapcache_free(entry, NULL);
 	} while (err != -ENOMEM);
 
-	if (new_page) {
-		wakeup_wq(has_cma);
+	if (new_page)
 		page_cache_release(new_page);
-	}
 	return found_page;
 }
 
