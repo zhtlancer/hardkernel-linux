@@ -104,6 +104,14 @@ static struct hdmitx_dev hdmitx_device;
 static struct switch_dev sdev = { /* android ics switch device */
 	.name = "hdmi",
 };
+
+static struct hdmi_cea_timing custom_timing;
+struct hdmi_cea_timing *get_custom_timing(void)
+{
+	return &custom_timing;
+}
+EXPORT_SYMBOL(get_custom_timing);
+
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 static void hdmitx_early_suspend(struct early_suspend *h)
@@ -996,6 +1004,7 @@ const char *disp_mode_t[] = {
 	"2560x1600p60hz",
 	"2560x1080p60hz",
 	"3440x1440p60hz",
+	"custombuilt",
 	NULL
 };
 
