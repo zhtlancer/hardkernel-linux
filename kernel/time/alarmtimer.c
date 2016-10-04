@@ -84,8 +84,10 @@ static int alarmtimer_rtc_add_device(struct device *dev,
 
 	if (!rtc->ops->set_alarm)
 		return -1;
+#if !defined(CONFIG_ARCH_MESON64_ODROIDC2)
 	if (!device_may_wakeup(rtc->dev.parent))
 		return -1;
+#endif
 
 	spin_lock_irqsave(&rtcdev_lock, flags);
 	if (!rtcdev) {
