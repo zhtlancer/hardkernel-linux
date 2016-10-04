@@ -187,6 +187,55 @@ static int pcf8563_set_datetime(struct i2c_client *client, struct rtc_time *tm)
 	return 0;
 }
 
+static int pcf8563_set_alarm(struct i2c_client *client,
+		struct rtc_wkalrm *alarm)
+{
+	struct pcf8563 *pcf8563 = i2c_get_clientdata(client);
+	int i, err;
+	unsigned char buf[9];
+	struct rtc_time *tm;
+
+	tm = &alarm->time;
+
+	dev_dbg(&client->dev, "%s: secs=%d, mins=%d, hours=%d, mday=%d, mon=%d, year=%d, wday=%d\n",
+		__func__,
+		tm->tm_sec, tm->tm_min, tm->tm_hour,
+		tm->tm_mday, tm->tm_mon, tm->tm_year, tm->tm_wday);
+
+	/* hours, minutes and seconds */
+	buf[PCF8563_REG_SC] = bin2bcd(tm->tm_sec);
+	buf[PCF8563_REG_MN] = bin2bcd(tm->tm_min);
+	buf[PCF8563_REG_HR] = bin2bcd(tm->tm_hour);
+
+	buf[PCF8563_REG_DM] = bin2bcd(tm->tm_mday);
+
+	/* month, 1 - 12 */
+	buf[PCF8563_REG_MO] = bin2bcd(tm->tm_mon + 1);
+
+	/* year and century */
+	buf[PCF8563_REG_YR] = bin2bcd(tm->tm_year % 100);
+	if (pcf8563->c_polarity ? (tm->tm_year >= 100) : (tm->tm_year < 100))
+		buf[PCF8563_REG_MO] |= PCF8563_MO_C;
+
+	buf[PCF8563_REG_DW] = tm->tm_wday & 0x07;
+
+	/* write register's data */
+	for (i = 0; i < 7; i++) {
+		unsigned char data[2] = { PCF8563_REG_SC + i,
+						buf[PCF8563_REG_SC + i] };
+
+		err = i2c_master_send(client, data, sizeof(data));
+		if (err != sizeof(data)) {
+			dev_err(&client->dev,
+				"%s: err=%d addr=%02x, data=%02x\n",
+				__func__, err, data[0], data[1]);
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
 #ifdef CONFIG_RTC_INTF_DEV
 static int pcf8563_rtc_ioctl(struct device *dev, unsigned int cmd, unsigned long arg)
 {
@@ -235,10 +284,16 @@ static int pcf8563_rtc_set_time(struct device *dev, struct rtc_time *tm)
 	return pcf8563_set_datetime(to_i2c_client(dev), tm);
 }
 
+static int pcf8563_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alarm)
+{
+	return pcf8563_set_alarm(to_i2c_client(dev), alarm);
+}
+
 static const struct rtc_class_ops pcf8563_rtc_ops = {
 	.ioctl		= pcf8563_rtc_ioctl,
 	.read_time	= pcf8563_rtc_read_time,
 	.set_time	= pcf8563_rtc_set_time,
+	.set_alarm	= pcf8563_rtc_set_alarm,
 };
 
 static int pcf8563_probe(struct i2c_client *client,
