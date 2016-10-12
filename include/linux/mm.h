@@ -63,6 +63,12 @@ extern int migrate_status;
 extern int mutex_status;
 extern int migrate_refcount;
 extern wait_queue_head_t migrate_wq;
+#else
+static inline bool has_cma_page(struct page *page)
+{
+	return false;
+}
+static inline void wakeup_wq(bool has_cma) { }
 #endif
 #include <asm/page.h>
 #include <asm/pgtable.h>
