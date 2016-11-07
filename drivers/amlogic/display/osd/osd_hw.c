@@ -2055,7 +2055,11 @@ static   void  osd1_update_color_mode(void)
 {
 	u32  data32 = 0;
 	if (osd_hw.color_info[OSD1] != NULL) {
+#if !defined(CONFIG_ARCH_MESON64_ODROIDC2)
 		data32 = (osd_hw.scan_mode == SCAN_MODE_INTERLACE) ? 2 : 0;
+#else
+		data32 = 0;
+#endif
 		data32 |= VSYNCOSD_RD_MPEG_REG(VIU_OSD1_BLK0_CFG_W0)
 			& 0x30007040;
 		data32 |= osd_hw.fb_gem[OSD1].canvas_idx << 16;
@@ -2078,7 +2082,11 @@ static void osd2_update_color_mode(void)
 	u32 data32 = 0;
 
 	if (osd_hw.color_info[OSD2] != NULL) {
+#if !defined(CONFIG_ARCH_MESON64_ODROIDC2)
 		data32 = (osd_hw.scan_mode == SCAN_MODE_INTERLACE) ? 2 : 0;
+#else
+		data32 = 0;
+#endif
 		data32 |= VSYNCOSD_RD_MPEG_REG(VIU_OSD2_BLK0_CFG_W0)
 			& 0x30007040;
 		data32 |= osd_hw.fb_gem[OSD2].canvas_idx << 16;
