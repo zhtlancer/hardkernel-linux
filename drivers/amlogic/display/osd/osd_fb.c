@@ -416,6 +416,7 @@ static int osd_set_res_bootargs(int index, enum vmode_e mode)
 		break;
 	case VMODE_480P:
 	case VMODE_480I:
+	case VMODE_480CVBS:
 		fb_def_var[index].xres = 720;
 		fb_def_var[index].yres = 480;
 		fb_def_var[index].xres_virtual = 720;
@@ -424,6 +425,7 @@ static int osd_set_res_bootargs(int index, enum vmode_e mode)
 		break;
 	case VMODE_576P:
 	case VMODE_576I:
+	case VMODE_576CVBS:
 		fb_def_var[index].xres = 720;
 		fb_def_var[index].yres = 576;
 		fb_def_var[index].xres_virtual = 720;
