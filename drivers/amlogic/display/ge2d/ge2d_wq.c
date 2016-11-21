@@ -180,7 +180,9 @@ static int ge2d_process_work_queue(struct ge2d_context_s *wq)
 	int ret = 0;
 	unsigned int block_mode;
 
+	spin_lock(&ge2d_manager.state_lock);
 	ge2d_manager.ge2d_state = GE2D_STATE_RUNNING;
+	spin_unlock(&ge2d_manager.state_lock);
 	pos = head->next;
 	if (pos != head) { /* current work queue not empty. */
 		if (wq != ge2d_manager.last_wq) { /* maybe */
@@ -258,9 +260,13 @@ static int ge2d_process_work_queue(struct ge2d_context_s *wq)
 	} while (pos != head);
 	ge2d_manager.last_wq = wq;
 exit:
+	spin_lock(&ge2d_manager.state_lock);
 	if (ge2d_manager.ge2d_state == GE2D_STATE_REMOVING_WQ)
 		complete(&ge2d_manager.event.process_complete);
+
 	ge2d_manager.ge2d_state = GE2D_STATE_IDLE;
+	spin_unlock(&ge2d_manager.state_lock);
+
 	return ret;
 }
 
@@ -1046,14 +1052,17 @@ int  destroy_ge2d_work_queue(struct ge2d_context_s *ge2d_work_queue)
 		list_del(&ge2d_work_queue->list);
 		empty = list_empty(&ge2d_manager.process_queue);
 		spin_unlock(&ge2d_manager.event.sem_lock);
+		spin_lock(&ge2d_manager.state_lock);
 		if ((ge2d_manager.current_wq == ge2d_work_queue) &&
 		    (ge2d_manager.ge2d_state == GE2D_STATE_RUNNING)) {
 			ge2d_manager.ge2d_state = GE2D_STATE_REMOVING_WQ;
+			spin_unlock(&ge2d_manager.state_lock);
 			wait_for_completion(
 				&ge2d_manager.event.process_complete);
 			/* condition so complex ,simplify it . */
 			ge2d_manager.last_wq = NULL;
-		} /* else we can delete it safely. */
+		} else
+			spin_unlock(&ge2d_manager.state_lock);
 
 		head = &ge2d_work_queue->work_queue;
 		list_for_each_entry_safe(pitem, tmp, head, list) {
@@ -1103,6 +1112,7 @@ int ge2d_wq_init(struct platform_device *pdev,
 
 	/* prepare bottom half */
 	spin_lock_init(&ge2d_manager.event.sem_lock);
+	spin_lock_init(&ge2d_manager.state_lock);
 	sema_init(&ge2d_manager.event.cmd_in_sem, 1);
 	init_waitqueue_head(&ge2d_manager.event.cmd_complete);
 	init_completion(&ge2d_manager.event.process_complete);

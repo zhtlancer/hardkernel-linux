@@ -586,6 +586,7 @@ struct ge2d_manager_s {
 	struct ge2d_event_s event;
 	int irq_num;
 	int ge2d_state;
+	spinlock_t state_lock;
 	int process_queue_state;
 	struct platform_device *pdev;
 };
