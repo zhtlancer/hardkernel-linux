@@ -416,7 +416,7 @@
 
         vcck_dvfs {
             dvfs_id = <1>;
-            table_count = <15>;
+            table_count = <16>;
             /* change-frequent-only; */
             /* NOTE: frequent in this table must be ascending order */
             /*             frequent(Khz)    min_uV      max_uV  */
@@ -434,7 +434,8 @@
                            1488000         1100000     1100000
                            1536000         1140000     1140000
                            1632000         1140000     1140000
-                           1728000         1140000     1140000 >;
+                           1728000         1140000     1140000
+                           1824000         1140000     1140000 >;
         };
     };
 
