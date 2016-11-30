@@ -60,6 +60,7 @@ static struct para_pair_s logo_args[] = {
 static struct para_pair_s mode_infos[] = {
 	{"640x480p60hz", TVMODE_640x480p60hz},
 	{"800x480p60hz", TVMODE_800x480p60hz},
+	{"480x800p60hz", TVMODE_480x800p60hz},
 	{"800x600p60hz", TVMODE_800x600p60hz},
 	{"1024x600p60hz", TVMODE_1024x600p60hz},
 	{"1024x768p60hz", TVMODE_1024x768p60hz},
