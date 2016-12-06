@@ -373,11 +373,9 @@ static int __init logo_init(void)
 	pr_info("%s\n", __func__);
 
 	if (logo_info.loaded == 0) {
-		if (hdmimode != cvbsmode) {
-			set_logo_vmode(hdmimode);
-			osd_set_logo_index(LOGO_DEV_OSD1);
-			osd_init_hw(1);
-		}
+		set_logo_vmode(hdmimode);
+		osd_set_logo_index(LOGO_DEV_OSD1);
+		osd_init_hw(1);
 		return 0;
 	}
 
