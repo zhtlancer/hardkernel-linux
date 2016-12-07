@@ -115,7 +115,7 @@
         vmode = <3>;
         scale_mode = <1>;
         4k2k_fb = <0>;
-        display_size_default = <1920 1080 1920 3240 32>;
+        display_size_default = <1280 720 1280 2160 32>;
     };
 
     deinterlace {
