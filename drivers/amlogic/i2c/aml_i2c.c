@@ -636,10 +636,10 @@ static int aml_i2c_xfer(struct i2c_adapter *i2c_adap, struct i2c_msg *msgs,
 			gpiod_direction_output(i2c->i2c_gdesc, !i);
 		}
 #endif
-		aml_i2c_dbg(i2c,
+		dev_err(&i2c->adap.dev,
 			"[aml_i2c_xfer] error ret = %d (%s)",
 			ret, ret == -EIO ? "-EIO" : "-ETIMEOUT");
-		aml_i2c_dbg(i2c,
+		dev_err(&i2c->adap.dev,
 			"token %d, master_no(%d) %dK addr 0x%x\n",
 			i2c->cur_token, i2c->master_no,
 			i2c->master_i2c_speed/1000,
