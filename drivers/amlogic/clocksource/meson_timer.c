@@ -476,7 +476,7 @@ void __init meson_timer_init(struct device_node *np)
 	clockevent_init_and_register();
 	{
 		int i;
-		for(i=1;i<4;i++)
+		for (i = 1; i < nr_cpu_ids; i++)
 			local_timer_setup_data(i);
 	}
 	err = register_cpu_notifier(&arch_timer_cpu_nb);
