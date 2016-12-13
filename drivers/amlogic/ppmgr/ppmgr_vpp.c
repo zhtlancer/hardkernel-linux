@@ -50,6 +50,9 @@
 #include "../amports/vdec_reg.h"
 #include "../display/osd/osd_reg.h"
 #include "ppmgr_vpp.h"
+#include <linux/amlogic/codec_mm/codec_mm.h>
+#include <linux/dma-mapping.h>
+#include <linux/dma-contiguous.h>
 /*#if MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON6*/
 /*#include <mach/mod_gate.h>*/
 /*#endif*/
@@ -76,6 +79,9 @@
 #define RECEIVER_NAME "ppmgr"
 #define PROVIDER_NAME   "ppmgr"
 
+#define MM_ALLOC_SIZE SZ_16M
+#define MAX_WIDTH  960
+#define MAX_HEIGHT 736
 #define THREAD_INTERRUPT 0
 #define THREAD_RUNNING 1
 #define INTERLACE_DROP_MODE 1
@@ -110,7 +116,7 @@ static DEFINE_SPINLOCK(lock);
 static bool ppmgr_blocking;
 static bool ppmgr_inited;
 static int ppmgr_reset_type;
-
+static int ppmgr_buffer_status;
 static struct ppframe_s vfp_pool[VF_POOL_SIZE];
 static struct vframe_s *vfp_pool_free[VF_POOL_SIZE + 1];
 static struct vframe_s *vfp_pool_ready[VF_POOL_SIZE + 1];
@@ -321,6 +327,14 @@ static int get_input_format(struct vframe_s *vf)
 	return format;
 }
 
+static void dma_flush(u32 buf_start , u32 buf_size)
+{
+	return;
+	dma_sync_single_for_device(
+		&ppmgr_device.pdev->dev, buf_start,
+		buf_size, DMA_TO_DEVICE);
+}
+
 /* extern int get_property_change(void); */
 /* extern void set_property_change(int flag); */
 /* extern int get_buff_change(void); */
@@ -373,7 +387,7 @@ static int ppmgr_event_cb(int type, void *data, void *private_data)
 		ppmgr_device.canvas_width = eventparam[0];
 		ppmgr_device.canvas_height = eventparam[1];
 		ppmgr_device.receiver_format = eventparam[2];
-		ppmgr_buffer_init(0);
+		/* ppmgr_buffer_init(0); */
 	}
 #endif
 	return 0;
@@ -444,6 +458,10 @@ static int ppmgr_receiver_event_fun(int type, void *data, void *private_data)
 		PPMGRVPP_WARN("register now\n");
 #endif
 		vf_ppmgr_reg_provider();
+		vf_notify_receiver(
+				PROVIDER_NAME,
+				VFRAME_EVENT_PROVIDER_START,
+				NULL);
 		break;
 	case VFRAME_EVENT_PROVIDER_UNREG:
 #ifdef DDD
@@ -1356,8 +1374,12 @@ static void process_vf_rotate(struct vframe_s *vf,
 	struct canvas_s cs0, cs1, cs2, cd;
 	int i;
 	u32 mode = 0;
+	int ret = 0;
 	unsigned cur_angle = 0;
 	int pic_struct = 0, interlace_mode;
+#ifdef CONFIG_POST_PROCESS_MANAGER_3D_PROCESS
+	enum platform_type_t platform_type;
+#endif
 #ifdef CONFIG_POST_PROCESS_MANAGER_PPSCALER
 	int rect_x = 0, rect_y = 0, rect_w = 0, rect_h = 0;
 	u32 ratio = 100;
@@ -1426,7 +1448,21 @@ static void process_vf_rotate(struct vframe_s *vf,
 		vfq_push(&q_ready, new_vf);
 		return;
 	}
-
+#ifdef CONFIG_POST_PROCESS_MANAGER_3D_PROCESS
+	platform_type = get_platform_type();
+	if (platform_type == PLATFORM_TV)
+		ret = ppmgr_buffer_init(1);
+	else
+		ret = ppmgr_buffer_init(0);
+#else
+	ret = ppmgr_buffer_init(0);
+#endif
+	if (ret < 0) {
+		pp_vf->dec_frame = vf;
+		*new_vf = *vf;
+		vfq_push(&q_ready, new_vf);
+		return;
+	}
 #ifdef INTERLACE_DROP_MODE
 	if (interlace_mode) {
 		mycount++;
@@ -1922,6 +1958,10 @@ static void process_vf_rotate(struct vframe_s *vf,
 	PPMGRVPP_WARN("rotate avail=%d, free=%d\n",
 		vfq_level(&q_ready), vfq_level(&q_free));
 #endif
+	if ((!ppmgr_device.use_reserved) &&
+	    (ppmgr_device.buffer_start)) {
+		dma_flush(ppmgr_device.buffer_start, ppmgr_device.buffer_size);
+	}
 }
 
 static void process_vf_change(struct vframe_s *vf,
@@ -1934,6 +1974,17 @@ static void process_vf_change(struct vframe_s *vf,
 	int pic_struct = 0, interlace_mode;
 	unsigned temp_angle = 0;
 	unsigned cur_angle = 0;
+	int ret = 0;
+#ifdef CONFIG_POST_PROCESS_MANAGER_3D_PROCESS
+	if (platform_type == PLATFORM_TV)
+		ret = ppmgr_buffer_init(1);
+	else
+		ret = ppmgr_buffer_init(0);
+#else
+	ret = ppmgr_buffer_init(0);
+#endif
+	if (ret < 0)
+		return;
 	temp_vf.duration = vf->duration;
 	temp_vf.duration_pulldown = vf->duration_pulldown;
 	temp_vf.pts = vf->pts;
@@ -2153,12 +2204,22 @@ static int process_vf_adjust(struct vframe_s *vf,
 	int sx, sy, sw, sh, dx, dy, dw, dh;
 	unsigned ratio_x;
 	unsigned ratio_y;
+	int ret = 0;
 	int i;
 	struct ppframe_s *pp_vf = to_ppframe(vf);
 	u32 mode = amvideo_get_scaler_para(&rect_x, &rect_y, &rect_w, &rect_h,
 			&ratio);
 	unsigned cur_angle = pp_vf->angle;
-
+#ifdef CONFIG_POST_PROCESS_MANAGER_3D_PROCESS
+	if (platform_type == PLATFORM_TV)
+		ret = ppmgr_buffer_init(1);
+	else
+		ret = ppmgr_buffer_init(0);
+#else
+	ret = ppmgr_buffer_init(0);
+#endif
+	if (ret < 0)
+		return -1;
 	rect_w = max(rect_w, 64);
 	rect_h = max(rect_h, 64);
 
@@ -2556,7 +2617,7 @@ static int ppmgr_task(void *data)
 				&& (!ppmgr_blocking)) {
 #ifdef CONFIG_POST_PROCESS_MANAGER_3D_PROCESS
 			int process_type = TYPE_NONE;
-			enum platform_type_t plarform_type;
+			enum platform_type_t platform_type;
 			vf = ppmgr_vf_get_dec();
 			if (!vf)
 				break;
@@ -2600,15 +2661,15 @@ static int ppmgr_task(void *data)
 					+ ppmgr_device.orientation
 					+ vf->orientation)%4;
 
-			plarform_type = get_platform_type();
-			if (plarform_type == PLATFORM_TV)
+			platform_type = get_platform_type();
+			if (platform_type == PLATFORM_TV)
 				process_type = get_tv_process_type(vf);
 			else
 				process_type = get_mid_process_type(vf);
 
 			if (process_type == TYPE_NONE) {
 				int ret = 0;
-				if (plarform_type != PLATFORM_TV)
+				if (platform_type != PLATFORM_TV)
 					ret = process_vf_deinterlace(vf,
 							context,
 							&ge2d_config);
@@ -2619,7 +2680,7 @@ static int ppmgr_task(void *data)
 						(ret > 0)?ret:0);
 
 			} else {
-				if (plarform_type == PLATFORM_TV)
+				if (platform_type == PLATFORM_TV)
 					ppmgr_vf_3d_tv(vf,
 							context, &ge2d_config);
 				else
@@ -2691,7 +2752,7 @@ static int ppmgr_task(void *data)
 			}
 #endif
 			/***recycle buffer to decoder***/
-
+		if (0) {/*mark@1120a*/
 			for (i = 0; i < VF_POOL_SIZE; i++)
 				ppmgr_vf_video_put(&vfp_pool[i]);
 
@@ -2711,9 +2772,11 @@ static int ppmgr_task(void *data)
 					vfp_pool[i].dec_frame = NULL;
 				}
 			}
+		}
 			/***recycle buffer to decoder***/
-			vf_light_unreg_provider(&ppmgr_vf_prov);
 			vf_local_init();
+			vf_light_unreg_provider(&ppmgr_vf_prov);
+			msleep(30);
 			vf_reg_provider(&ppmgr_vf_prov);
 			ppmgr_blocking = false;
 			up(&thread_sem);
@@ -2729,6 +2792,7 @@ static int ppmgr_task(void *data)
 	}
 
 	destroy_ge2d_work_queue(context);
+	ppmgr_buffer_uninit();
 	while (!kthread_should_stop()) {
 		/*	   may not call stop, wait..
 		 it is killed by SIGTERM,eixt on down_interruptible
@@ -2767,17 +2831,69 @@ int ppmgr_register(void)
 	return 0;
 }
 
+int ppmgr_buffer_uninit(void)
+{
+	if ((!ppmgr_device.use_reserved) &&
+	    (ppmgr_device.buffer_start)) {
+		PPMGRVPP_INFO("cma free addr is %x , size is  %x\n",
+		(unsigned)ppmgr_device.buffer_start ,
+		(unsigned)ppmgr_device.buffer_size);
+		codec_mm_free_for_dma(
+		"ppmgr",
+		ppmgr_device.buffer_start);
+		ppmgr_device.buffer_start = 0;
+		ppmgr_device.buffer_size = 0;
+	}
+	ppmgr_buffer_status = 0;
+	return 0;
+}
+
 int ppmgr_buffer_init(int vout_mode)
 {
 	int i, j;
 	u32 canvas_width, canvas_height;
 	u32 decbuf_size;
-	char *buf_start;
+	unsigned int buf_start;
 	int buf_size;
 	struct vinfo_s vinfo = {.width = 1280, .height = 720, };
+	/* int flags = CODEC_MM_FLAGS_DMA; */
+	int flags = CODEC_MM_FLAGS_DMA_CPU|CODEC_MM_FLAGS_CMA_CLEAR;
 #ifdef INTERLACE_DROP_MODE
 	mycount = 0;
 #endif
+	switch (ppmgr_buffer_status) {
+	case 0:/*not config*/
+		break;
+	case 1:/*config before , return ok*/
+		return 0;
+	case 2:/*config fail, won't retry , return failure*/
+		return -1;
+	default:
+		return -1;
+	}
+	if (ppmgr_device.mirror_flag) {
+		PPMGRVPP_INFO("CMA memory force config fail\n");
+		ppmgr_buffer_status = 2;
+		return -1;
+	}
+	if ((!ppmgr_device.use_reserved) &&
+	    (ppmgr_device.buffer_start == 0)) {
+		PPMGRVPP_INFO("reserved memory config fail,use CMA.\n");
+
+		ppmgr_device.buffer_start = codec_mm_alloc_for_dma(
+				"ppmgr",
+				MM_ALLOC_SIZE/PAGE_SIZE, 0, flags);
+		ppmgr_device.buffer_size = MM_ALLOC_SIZE;
+		PPMGRVPP_INFO("cma memory is %x , size is  %x\n" ,
+		(unsigned)ppmgr_device.buffer_start ,
+		(unsigned)ppmgr_device.buffer_size);
+		if (ppmgr_device.buffer_start == 0) {
+			ppmgr_buffer_status = 2;
+			PPMGRVPP_ERR("cma memory config fail\n");
+			return -1;
+		}
+	}
+	ppmgr_buffer_status = 1;
 	get_ppmgr_buf_info(&buf_start, &buf_size);
 #ifdef CONFIG_V4L_AMLOGIC_VIDEO
 	if (ppmgr_device.receiver != 0) {
@@ -2843,19 +2959,19 @@ int ppmgr_buffer_init(int vout_mode)
 		}
 
 		if (ppmgr_device.disp_width == 0) {
-			if (ppmgr_device.vinfo->width <= 1280)
+			if (ppmgr_device.vinfo->width <= MAX_WIDTH)
 				ppmgr_device.disp_width =
 					ppmgr_device.vinfo->width;
 			else
-				ppmgr_device.disp_width = 1280;
+				ppmgr_device.disp_width = MAX_WIDTH;
 		}
 
 		if (ppmgr_device.disp_height == 0) {
-			if (ppmgr_device.vinfo->height <= 736)
+			if (ppmgr_device.vinfo->height <= MAX_HEIGHT)
 				ppmgr_device.disp_height =
 						ppmgr_device.vinfo->height;
 			else
-				ppmgr_device.disp_height = 736;
+				ppmgr_device.disp_height = MAX_HEIGHT;
 		}
 		if (get_platform_type() == PLATFORM_MID_VERTICAL) {
 			int DISP_SIZE =
@@ -2990,23 +3106,19 @@ int ppmgr_buffer_init(int vout_mode)
 
 int start_ppmgr_task(void)
 {
-	enum platform_type_t plarform_type;
-	plarform_type = get_platform_type();
+	enum platform_type_t platform_type;
+	platform_type = get_platform_type();
 
 	/*    if (get_cpu_type()>= MESON_CPU_TYPE_MESON6)*/
 	/*	    switch_mod_gate_by_name("ge2d", 1);*/
 	/*#endif*/
 	if (!task) {
 		vf_local_init();
-		/*if (get_buff_change())*/
-#ifdef CONFIG_POST_PROCESS_MANAGER_3D_PROCESS
-		if (plarform_type == PLATFORM_TV)
-			ppmgr_buffer_init(1);
-		else
-			ppmgr_buffer_init(0);
-#else
-		ppmgr_buffer_init(0);
-#endif
+		ppmgr_blocking = false;
+		ppmgr_inited = true;
+		ppmgr_reset_type = 0;
+		set_buff_change(0);
+		ppmgr_buffer_status = 0;
 		task = kthread_run(ppmgr_task, 0, "ppmgr");
 	}
 	task_running = 1;

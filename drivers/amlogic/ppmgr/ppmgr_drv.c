@@ -282,12 +282,12 @@ static int parse_para(const char *para, int para_num, int *result)
 static ssize_t show_ppmgr_info(struct class *cla, struct class_attribute *attr,
 				char *buf)
 {
-	char *bstart;
+	unsigned int bstart;
 	unsigned int bsize;
 	get_ppmgr_buf_info(&bstart, &bsize);
 /* return snprintf(buf, 80, "buffer:\n start:%x.\tsize:%d\n", */
 /* (unsigned int)bstart, bsize / (1024 * 1024)); */
-	return snprintf(buf, 80, "buffer:\n start:%p.\tsize:%d\n",
+	return snprintf(buf, 80, "buffer:\n start:%x.\tsize:%d\n",
 		    bstart, bsize / (1024 * 1024));
 }
 
@@ -311,7 +311,6 @@ static ssize_t angle_write(struct class *cla, struct class_attribute *attr,
 		PPMGRDRV_ERR("ERROR converting %s to long int!\n", buf);
 		return ret;
 	}
-
 	if (angle > 3 || angle < 0) {
 		size = endp - buf;
 		return count;
@@ -675,9 +674,13 @@ static ssize_t _3dmode_write(struct class *cla,
 {
 	ssize_t size;
 	char *endp;
-	unsigned mode;
+	unsigned long mode;
 	/* unsigned mode = simple_strtoul(buf, &endp, 0); */
-	kstrtoul(buf, 0, &mode);
+	int ret = kstrtoul(buf, 0, &mode);
+	if (ret != 0) {
+		PPMGRDRV_ERR("ERROR converting %s to long int!\n", buf);
+		return ret;
+	}
 	set_ppmgr_3dmode(mode);
 	size = endp - buf;
 	return count;
@@ -699,9 +702,13 @@ static ssize_t viewmode_write(struct class *cla,
 {
 	ssize_t size;
 	char *endp;
-	unsigned mode;
+	unsigned long mode;
 	/* unsigned mode = simple_strtoul(buf, &endp, 0); */
-	kstrtoul(buf, 0, &mode);
+	int ret = kstrtoul(buf, 0, &mode);
+	if (ret != 0) {
+		PPMGRDRV_ERR("ERROR converting %s to long int!\n", buf);
+		return ret;
+	}
 	set_ppmgr_viewmode(mode);
 	size = endp - buf;
 	return count;
@@ -725,10 +732,15 @@ static ssize_t doublemode_write(struct class *cla,
 {
 	ssize_t size;
 	char *endp;
-	int flag;
+	unsigned long flag;
+	unsigned mode;
 	/* unsigned flag = simple_strtoul(buf, &endp, 0); */
-	kstrtoul(buf, 0, &flag);
-	unsigned mode = get_ppmgr_3dmode();
+	int ret = kstrtoul(buf, 0, &flag);
+	if (ret != 0) {
+		PPMGRDRV_ERR("ERROR converting %s to long int!\n", buf);
+		return ret;
+	}
+	mode = get_ppmgr_3dmode();
 	mode = (mode & (~PPMGR_3D_PROCESS_DOUBLE_TYPE)) |
 		((flag << PPMGR_3D_PROCESS_DOUBLE_TYPE_SHIFT) &
 		(PPMGR_3D_PROCESS_DOUBLE_TYPE));
@@ -753,10 +765,15 @@ static ssize_t switchmode_write(struct class *cla,
 {
 	ssize_t size;
 	char *endp;
-	int flag;
+	unsigned long flag;
+	unsigned mode;
 	/* int flag = simple_strtoul(buf, &endp, 0); */
-	kstrtoul(buf, 0, &flag);
-	unsigned mode = get_ppmgr_3dmode();
+	int ret = kstrtoul(buf, 0, &flag);
+	if (ret != 0) {
+		PPMGRDRV_ERR("ERROR converting %s to long int!\n", buf);
+		return ret;
+	}
+	mode = get_ppmgr_3dmode();
 	if (!flag)
 		mode = mode & (~PPMGR_3D_PROCESS_SWITCH_FLAG);
 	else
@@ -788,8 +805,12 @@ static ssize_t direction_3d_write(struct class *cla,
 	ssize_t size;
 	char *endp;
 	/* int flag = simple_strtoul(buf, &endp, 0); */
-	int flag;
-	kstrtoul(buf, 0, &flag);
+	unsigned long flag;
+	int ret = kstrtoul(buf, 0, &flag);
+	if (ret != 0) {
+		PPMGRDRV_ERR("ERROR converting %s to long int!\n", buf);
+		return ret;
+	}
 /*unsigned mode = get_ppmgr_3dmode();*/
 /*mode = (mode & (~PPMGR_3D_PROCESS_3D_ROTATE_DIRECTION_MASK))
  * |((flag<<PPMGR_3D_PROCESS_3D_ROTATE_DIRECTION_VAULE_SHIFT)&
@@ -816,8 +837,12 @@ static ssize_t scale_down_write(struct class *cla,
 	ssize_t size;
 	char *endp;
 	/* unsigned mode = simple_strtoul(buf, &endp, 0); */
-	unsigned mode;
-	kstrtoul(buf, 0, &mode);
+	unsigned long mode;
+	int ret = kstrtoul(buf, 0, &mode);
+	if (ret != 0) {
+		PPMGRDRV_ERR("ERROR converting %s to long int!\n", buf);
+		return ret;
+	}
 	set_ppmgr_scaledown(mode);
 	size = endp - buf;
 	return count;
@@ -875,12 +900,14 @@ static ssize_t write_depth(
 	struct class *cla, struct class_attribute *attr, const char *buf,
 	size_t count)
 {
-	int r;
-	char *endp;
+	unsigned long r;
 
 	/* r = simple_strtoul(buf, &endp, 0); */
-	kstrtoul(buf, 0, &r);
-	PPMGRDRV_WARN("r is %d\n", r);
+	int ret = kstrtoul(buf, 0, &r);
+	if (ret != 0) {
+		PPMGRDRV_ERR("ERROR converting %s to long int!\n", buf);
+		return ret;
+	}
 	set_depth(r);
 	return count;
 }
@@ -893,11 +920,14 @@ static ssize_t write_view_mode(
 	struct class *cla, struct class_attribute *attr, const char *buf,
 	size_t count)
 {
-	int r;
-	char *endp;
+	unsigned long r;
 
 	/* r = simple_strtoul(buf, &endp, 0); */
-	kstrtoul(buf, 0, &r);
+	int ret = kstrtoul(buf, 0, &r);
+	if (ret != 0) {
+		PPMGRDRV_ERR("ERROR converting %s to long int!\n", buf);
+		return ret;
+	}
 	ppmgr_view_mode = r;
 	return count;
 }
@@ -912,11 +942,14 @@ static ssize_t write_vertical_sample(
 	struct class *cla, struct class_attribute *attr, const char *buf,
 	size_t count)
 {
-	int r;
-	char *endp;
+	unsigned long r;
 
 	/* r = simple_strtoul(buf, &endp, 0); */
-	kstrtoul(buf, 0, &r);
+	int ret = kstrtoul(buf, 0, &r);
+	if (ret != 0) {
+		PPMGRDRV_ERR("ERROR converting %s to long int!\n", buf);
+		return ret;
+	}
 	ppmgr_vertical_sample = r;
 	return count;
 }
@@ -929,11 +962,14 @@ static ssize_t read_scale_width(
 static ssize_t write_scale_width(struct class *cla,
 	struct class_attribute *attr, const char *buf, size_t count)
 {
-	int r;
-	char *endp;
+	unsigned long r;
 
 	/* r = simple_strtoul(buf, &endp, 0); */
-	kstrtoul(buf, 0, &r);
+	int ret = kstrtoul(buf, 0, &r);
+	if (ret != 0) {
+		PPMGRDRV_ERR("ERROR converting %s to long int!\n", buf);
+		return ret;
+	}
 	ppmgr_scale_width = r;
 	return count;
 }
@@ -1160,9 +1196,9 @@ struct class *init_ppmgr_cls(void)
  *
  ************************************************************************/
 
-void set_ppmgr_buf_info(char *start, unsigned int size)
+void set_ppmgr_buf_info(unsigned int start, unsigned int size)
 {
-	ppmgr_device.buffer_start = (char *)start;
+	ppmgr_device.buffer_start = start;
 	ppmgr_device.buffer_size = size;
 }
 
@@ -1174,7 +1210,7 @@ int ppmgr_set_resource(unsigned long start, unsigned long end, struct device *p)
 		return -1;
 	}
 
-	set_ppmgr_buf_info((void *)start, end - start + 1);
+	set_ppmgr_buf_info(start, end - start + 1);
 	ppmgr_dev_reg.mem_start = start;
 	ppmgr_dev_reg.mem_end = end;
 	ppmgr_dev_reg.cma_dev = p;
@@ -1182,7 +1218,7 @@ int ppmgr_set_resource(unsigned long start, unsigned long end, struct device *p)
 	return 0;
 }
 
-void get_ppmgr_buf_info(char **start, unsigned int *size)
+void get_ppmgr_buf_info(unsigned int *start, unsigned int *size)
 {
 	*start = ppmgr_device.buffer_start;
 	*size = ppmgr_device.buffer_size;
@@ -1206,10 +1242,6 @@ static long ppmgr_ioctl(struct file *file, unsigned int cmd, ulong args)
 	int flag;
 	struct frame_info_t frame_info;
 #endif
-#ifdef CONFIG_POST_PROCESS_MANAGER_3D_PROCESS
-	unsigned mode = 0;
-	int flag = 0;
-#endif
 	switch (cmd) {
 #if 0
 	case PPMGR_IOC_CONFIG_FRAME:
@@ -1222,7 +1254,7 @@ static long ppmgr_ioctl(struct file *file, unsigned int cmd, ulong args)
 	case PPMGR_IOC_SET_ANGLE:
 		ret = _ppmgr_angle_write(args);
 		break;
-#ifdef CONFIG_POST_PROCESS_MANAGER_3D_PROCESS
+#if 0
 	case PPMGR_IOC_ENABLE_PP:
 		mode = (int)argp;
 		enum platform_type_t plarform_type;
@@ -1231,7 +1263,6 @@ static long ppmgr_ioctl(struct file *file, unsigned int cmd, ulong args)
 			set_ppmgr_status(mode);
 		else
 			set_ppmgr_3dmode(mode);
-
 		break;
 	case PPMGR_IOC_VIEW_MODE:
 		mode = (int)argp;
@@ -1375,8 +1406,11 @@ int init_ppmgr_device(void)
 	}
 	buff_change = 0;
 	ppmgr_register();
+#if 0
 	if (ppmgr_buffer_init(0) < 0)
 		goto unregister_dev;
+	ppmgr_buffer_uninit();
+#endif
 	/*if (start_vpp_task()<0) return -1;*/
 	ppmgr_device.use_prot = 1;
 #if HAS_VPU_PROT
@@ -1423,7 +1457,7 @@ static int ppmgr_driver_probe(struct platform_device *pdev)
 	s32 r;
 	PPMGRDRV_ERR("ppmgr_driver_probe called\n");
 	r = of_reserved_mem_device_init(&pdev->dev);
-
+	ppmgr_device.pdev = pdev;
 	init_ppmgr_device();
 
 	if (r == 0)
@@ -1460,9 +1494,15 @@ static struct rmem_multi_user rmem_ppmgr_muser = {
 
 static int __init ppmgr_mem_setup(struct reserved_mem *rmem)
 {
-	PPMGRDRV_WARN("ppmgr share mem setup\n");
+	PPMGRDRV_DBG("ppmgr share mem setup\n");
+	ppmgr_device.use_reserved = 0;
+	ppmgr_device.buffer_size = 0;
 	of_add_rmem_multi_user(rmem, &rmem_ppmgr_muser);
-
+	if (ppmgr_device.buffer_size > 0) {
+		ppmgr_device.use_reserved = 1;
+		pr_warn("ppmgr use reserved memory\n");
+	}
+	/* ppmgr_device.buffer_size = 0; */
 	return 0;
 }
 
