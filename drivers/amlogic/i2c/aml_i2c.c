@@ -297,6 +297,7 @@ static void aml_i2c_stop(struct aml_i2c *i2c)
 /* #endif */
 	}
 	aml_i2c_clear_token_list(i2c);
+	udelay(20);
 }
 
 static ssize_t aml_i2c_read(struct aml_i2c *i2c, unsigned char *buf,
