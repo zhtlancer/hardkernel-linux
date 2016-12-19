@@ -113,4 +113,6 @@ source "drivers/amlogic/watchdog/Kconfig"
 
 source "drivers/amlogic/pwm/Kconfig"
 
+source "drivers/amlogic/watchpoint/Kconfig"
+
 endmenu
