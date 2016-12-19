@@ -39,6 +39,44 @@
 #define W_APB_BIT(reg, val, start, len) \
 	WRITE_APB_REG_BITS(reg, val, start, len)
 #endif
+
+
+static inline uint32_t rd(uint32_t offset,
+							uint32_t reg)
+{
+	return (uint32_t)aml_read_vcbus(reg+offset);
+}
+
+static inline void wr(uint32_t offset,
+						uint32_t reg,
+				 const uint32_t val)
+{
+	aml_write_vcbus(reg+offset, val);
+}
+
+static inline void wr_bits(uint32_t offset,
+							uint32_t reg,
+				    const uint32_t value,
+				    const uint32_t start,
+				    const uint32_t len)
+{
+	aml_write_vcbus(reg+offset, ((aml_read_vcbus(reg+offset) &
+			     ~(((1L << (len)) - 1) << (start))) |
+			    (((value) & ((1L << (len)) - 1)) << (start))));
+}
+
+static inline uint32_t rd_bits(uint32_t offset,
+							uint32_t reg,
+				    const uint32_t start,
+				    const uint32_t len)
+{
+	uint32_t val;
+
+	val = ((aml_read_vcbus(reg+offset) >> (start)) & ((1L << (len)) - 1));
+
+	return val;
+}
+
 /* ************************************************************************* */
 /* *** enum definitions ********************************************* */
 /* ************************************************************************* */

@@ -18,6 +18,7 @@
 
 #ifndef _VINFO_H_
 #define _VINFO_H_
+#include <linux/amlogic/tvin/tvin.h>
 
 /* the MSB is represent vmode set by logo */
 #define	VMODE_LOGO_BIT_MASK	0x8000
@@ -158,9 +159,27 @@ enum tvmode_e {
 	TVMODE_MAX
 };
 
+
+/* master_display_info for display device */
+struct master_display_info_s {
+	u32 present_flag;
+	u32 features;			/* feature bits bt2020/2084 */
+	u32 primaries[3][2];		/* normalized 50000 in G,B,R order */
+	u32 white_point[2];		/* normalized 50000 */
+	u32 luminance[2];		/* max/min lumin, normalized 10000 */
+};
+
+struct hdr_info {
+	u32 hdr_support; /* RX EDID hdr support types */
+	u32 lumi_max; /* RX EDID Lumi Max value */
+	u32 lumi_avg; /* RX EDID Lumi Avg value */
+	u32 lumi_min; /* RX EDID Lumi Min value */
+};
+
 struct vinfo_s {
 	char *name;
 	enum vmode_e mode;
+	char ext_name[32];
 	u32 width;
 	u32 height;
 	u32 field_height;
@@ -171,6 +190,12 @@ struct vinfo_s {
 	u32 screen_real_width;
 	u32 screen_real_height;
 	u32 video_clk;
+	enum tvin_color_fmt_e viu_color_fmt;
+	struct hdr_info hdr_info;
+	struct master_display_info_s
+		master_display_info;
+	/* update hdmitx hdr packet, if data is NULL, disalbe packet */
+	void (*fresh_tx_hdr_pkt)(struct master_display_info_s *data);
 };
 
 struct disp_rect_s {
@@ -205,4 +230,5 @@ enum fine_tune_mode_e {
 	DOWN_HPLL,
 };
 #endif
+extern struct vinfo_s *get_invalid_vinfo(void);
 #endif /* _VINFO_H_ */
