@@ -63,7 +63,6 @@
 #include <linux/of_address.h>
 
 #define CEC_FRAME_DELAY		msecs_to_jiffies(400)
-#define CEC_DEV_NAME		"cec"
 
 static void __iomem *exit_reg;
 static struct hdmitx_dev *hdmitx_device;
@@ -71,24 +70,10 @@ static struct workqueue_struct *cec_workqueue;
 static unsigned char rx_msg[MAX_MSG];
 static unsigned char rx_len;
 static struct completion menu_comp;
-static struct completion rx_complete;
 #ifdef CONFIG_PM
 static int cec_suspend;
 static int cec_enter_standby;
 #endif
-
-static struct device *dbg_dev;
-#define CEC_DEBUG	1
-
-#define CEC_ERR(format, args...)			\
-	{if (CEC_DEBUG && dbg_dev)			\
-		dev_err(dbg_dev, format, ##args);	\
-	}
-
-#define CEC_INFO(format, args...)			\
-	{if (CEC_DEBUG && dbg_dev)			\
-		dev_info(dbg_dev, format, ##args);	\
-	}
 
 DEFINE_SPINLOCK(cec_input_key);
 
@@ -97,7 +82,7 @@ static unsigned char gbl_msg[MAX_MSG];
 struct cec_global_info_t cec_global_info;
 unsigned char rc_long_press_pwr_key = 0;
 EXPORT_SYMBOL(rc_long_press_pwr_key);
-bool cec_msg_dbg_en = 0;
+bool cec_msg_dbg_en = 1;
 
 ssize_t cec_lang_config_state(struct switch_dev *sdev, char *buf)
 {
@@ -166,6 +151,7 @@ static struct early_suspend hdmitx_cec_early_suspend_handler;
 static void hdmitx_cec_early_suspend(struct early_suspend *h)
 {
 	int phy_addr = 0;
+	hdmi_print(INF, CEC "early suspend!\n");
 	cec_global_info.cec_node_info[cec_global_info.my_node_index].
 		power_status = POWER_STANDBY;
 	cec_enter_standby = 1;
@@ -176,16 +162,19 @@ static void hdmitx_cec_early_suspend(struct early_suspend *h)
 	 * other devices connected between tv and mbox
 	 */
 	if (!hdmitx_device->hpd_state && !(phy_addr & 0xfff)) {
-		CEC_INFO("HPD low!\n");
+		hdmi_print(INF, CEC "HPD low!\n");
 		return;
 	}
+	hdmi_print(INF, CEC " return, power status:%d\n",
+		cec_global_info.cec_node_info[cec_global_info.my_node_index].
+			power_status);
 	if (hdmitx_device->cec_func_config & (1 << CEC_FUNC_MSAK)) {
 		cec_report_power_status(NULL);
 		cec_menu_status_smp(DEVICE_MENU_INACTIVE);
 		cec_inactive_source();
 		if (rc_long_press_pwr_key == 1) {
 			cec_set_standby();
-			CEC_INFO("power-off from Romote Control\n");
+			hdmi_print(INF, CEC "power-off from Romote Control\n");
 			rc_long_press_pwr_key = 0;
 		}
 	}
@@ -212,7 +201,7 @@ static void hdmitx_cec_late_resume(struct early_suspend *h)
 	 * other devices connected between tv and mbox
 	 */
 	if (!hdmitx_device->hpd_state && !(phy_addr & 0xfff)) {
-		CEC_INFO("HPD low!\n");
+		hdmi_print(INF, CEC "HPD low!\n");
 		return;
 	}
 
@@ -222,6 +211,7 @@ static void hdmitx_cec_late_resume(struct early_suspend *h)
 		cec_active_source_smp();
 		cec_menu_status_smp(DEVICE_MENU_ACTIVE);
 	}
+	hdmi_print(INF, CEC "late resume\n");
 }
 
 #endif
@@ -255,6 +245,7 @@ void cec_isr_post_process(void)
 	/* isr post process */
 	while (cec_global_info.cec_rx_msg_buf.rx_read_pos !=
 	       cec_global_info.cec_rx_msg_buf.rx_write_pos) {
+		hdmi_print(INF, CEC "cec handle rx msgs\n");
 		cec_handle_message(&(cec_global_info.cec_rx_msg_buf
 			.cec_rx_message[cec_global_info.cec_rx_msg_buf
 			.rx_read_pos]));
@@ -279,9 +270,11 @@ static int detect_tv_support_cec(unsigned addr)
 {
 	unsigned int ret = 0;
 	unsigned char msg[1];
+	cec_msg_dbg_en = 0;
 	msg[0] = (addr << 4) | 0x0;	/* 0x0, TV's root address */
 	cec_polling_online_dev(msg[0], &ret);
 	hdmi_print(LOW, CEC "TV %s support CEC\n", ret ? "is" : "not");
+	cec_msg_dbg_en = 1;
 	hdmitx_device->tv_cec_support = ret;
 	return hdmitx_device->tv_cec_support;
 }
@@ -340,6 +333,16 @@ int cec_node_init(struct hdmitx_dev *hdmitx_device)
 	cec_pre_init();
 	if (hdmitx_device->config_data.vend_data)
 		vend_data = hdmitx_device->config_data.vend_data;
+#if 0
+	if ((vend_data) && (vend_data->cec_config)) {
+		hdmitx_device->cec_func_config = vend_data->cec_config;
+		cec_config(vend_data->cec_config, 1);
+		hdmi_print(INF, CEC "cec_func_config: 0x%x; cec_config:0x%x\n",
+			hdmitx_device->cec_func_config, cec_config(0, 0));
+	}
+#endif
+	/* hdmi_print(INF, CEC "cec_config: 0x%x; ao_cec:0x%x\n", */
+	/* vend_data->cec_config, vend_data->ao_cec); */
 
 	if ((vend_data) && (vend_data->cec_osd_string)) {
 		i = strlen(vend_data->cec_osd_string);
@@ -363,8 +366,8 @@ int cec_node_init(struct hdmitx_dev *hdmitx_device)
 	if (!(hdmitx_device->cec_func_config & (1 << CEC_FUNC_MSAK)))
 		return -1;
 
-	CEC_INFO("cec_func_config: 0x%x; cec_config:0x%x\n",
-		 hdmitx_device->cec_func_config, cec_config(0, 0));
+	hdmi_print(INF, CEC "cec_func_config: 0x%x; cec_config:0x%x\n",
+		hdmitx_device->cec_func_config, cec_config(0, 0));
 
 	a = hdmitx_device->hdmi_info.vsdb_phy_addr.a;
 	b = hdmitx_device->hdmi_info.vsdb_phy_addr.b;
@@ -374,27 +377,30 @@ int cec_node_init(struct hdmitx_dev *hdmitx_device)
 	cec_phy_addr = ((a << 12) | (b << 8) | (c << 4) | (d << 0));
 
 	for (i = 0; i < 3; i++) {
-		CEC_INFO("CEC: start poll dev\n");
+		hdmi_print(INF, CEC "CEC: start poll dev\n");
 		cec_polling_online_dev(player_dev[i], &bool);
-		CEC_INFO("player_dev[%d]:0x%x\n", i, player_dev[i]);
+		hdmi_print(INF, CEC "player_dev[%d]:0x%x\n", i, player_dev[i]);
 		if (bool == 0) {   /* 0 means that no any respond */
 	/* If VSDB is not valid, use last or default physical address. */
 			cec_logicaddr_set(player_dev[i]);
 			if (hdmitx_device->hdmi_info.vsdb_phy_addr.valid == 0) {
 				phy_addr_ok = 0;
-				CEC_INFO("invalid cec PhyAddr\n");
+				hdmi_print(INF, CEC "invalid cec PhyAddr\n");
 				if (cec_try_to_wakeup_tv()) {
-					CEC_INFO("try to wake up tv success\n");
+					hdmi_print(INF, CEC
+						"try to wake up tv success\n");
 				} else if (cec_phyaddr_config(0, 0)) {
-					CEC_INFO("use last physical address\n");
+					hdmi_print(INF, CEC
+						"use last physical address\n");
 				} else {
 					cec_phyaddr_config(0x2000, 1);
-					CEC_INFO("use Def Phy address\n");
+					hdmi_print(INF, CEC
+						"use Def Phy address\n");
 				}
 			} else
 				cec_phyaddr_config(cec_phy_addr, 1);
 
-			CEC_INFO("physical address:0x%x\n",
+			hdmi_print(INF, CEC "physical address:0x%x\n",
 				cec_phyaddr_config(0, 0));
 
 			cec_global_info.cec_node_info[cec_global_info.
@@ -431,7 +437,8 @@ int cec_node_init(struct hdmitx_dev *hdmitx_device)
 
 			cec_logicaddr_set(player_dev[i]);
 
-			CEC_INFO("Set logical address: %d\n", player_dev[i]);
+			hdmi_print(INF, CEC "Set logical address: %d\n",
+				player_dev[i]);
 			cec_global_info.cec_node_info[cec_global_info.
 				my_node_index].power_status = POWER_ON;
 			if (cec_global_info.cec_node_info[
@@ -473,10 +480,10 @@ int cec_node_init(struct hdmitx_dev *hdmitx_device)
 		}
 	}
 	if (bool == 1) {
-		CEC_INFO("Can't get a valid logical address\n");
+		hdmi_print(INF, CEC "Can't get a valid logical address\n");
 		return -1;
 	} else {
-		CEC_INFO("cec node init: cec features ok !\n");
+		hdmi_print(INF, CEC "cec node init: cec features ok !\n");
 		return 0;
 	}
 }
@@ -487,7 +494,7 @@ void cec_node_uninit(struct hdmitx_dev *hdmitx_device)
 		return;
 	cec_global_info.cec_node_info[cec_global_info.my_node_index].
 		power_status = TRANS_ON_TO_STANDBY;
-	CEC_INFO("cec node uninit!\n");
+	hdmi_print(INF, CEC "cec node uninit!\n");
 	cec_global_info.cec_node_info[cec_global_info.my_node_index].
 		power_status = POWER_STANDBY;
 }
@@ -504,7 +511,7 @@ static int cec_late_check_rx_buffer(void)
 	 * start another check if rx buffer is full
 	 */
 	if ((-1) == cec_ll_rx(rx_msg, &rx_len)) {
-		CEC_INFO("buffer got unrecorgnized msg\n");
+		hdmi_print(INF, CEC, "buffer got unrecorgnized msg\n");
 		cec_rx_buf_clear();
 		return 0;
 	} else {
@@ -602,7 +609,7 @@ void cec_input_handle_message(void)
 
 	if (NULL == hdmitx_device) {
 		hdmitx_device = get_hdmitx_device();
-		CEC_INFO("Error:hdmitx_device NULL!\n");
+		hdmi_print(INF, CEC "Error:hdmitx_device NULL!\n");
 		return;
 	}
 	/* process key event messages from tv if not suspend */
@@ -631,7 +638,7 @@ void cec_input_handle_message(void)
 		 * devices we should avoid send key again when device is
 		 * resuming from uboot to prevent devicese suspend again
 		 */
-		CEC_INFO("under suspend state, ignore key\n");
+		hdmi_print(INF, CEC "under suspend state, ignore key\n");
 	}
 }
 
@@ -862,8 +869,8 @@ unsigned char check_cec_msg_valid(const struct cec_rx_message_t *pcec_message)
 	}
 
 	if ((rt == 0) & (opcode != 0)) {
-		CEC_INFO("CEC: opcode & opernum not match: %x, %x\n",
-			 opcode, opernum);
+		hdmi_print(INF, CEC "CEC: opcode & opernum not match: %x, %x\n",
+		    opcode, opernum);
 	}
 	return rt;
 }
@@ -873,6 +880,8 @@ irqreturn_t cec_isr_handler(int irq, void *dev_instance)
 	struct hdmitx_dev *hdmitx;
 	unsigned int intr_stat = 0;
 	intr_stat = cec_intr_stat();
+	if (cec_msg_dbg_en  == 1)
+		hdmi_print(INF, CEC "cec intr_stat %x\n", intr_stat);
 
 	if (intr_stat & (1<<1)) {   /* aocec tx intr */
 		tx_irq_handle();
@@ -881,9 +890,7 @@ irqreturn_t cec_isr_handler(int irq, void *dev_instance)
 	if ((-1) == cec_ll_rx(rx_msg, &rx_len))
 		return IRQ_HANDLED;
 
-	complete(&rx_complete);
-	if (!cec_suspend && !cec_global_info.hal_ctl) {
-		/* do not process messages if suspend and controled by hal */
+	if (!cec_suspend) {	/* do not process messages if suspend */
 		hdmitx = (struct hdmitx_dev *)dev_instance;
 		register_cec_rx_msg(rx_msg, rx_len);
 		mod_delayed_work(cec_workqueue, &hdmitx->cec_work, 0);
@@ -1122,7 +1129,7 @@ void cec_set_stream_path(struct cec_rx_message_t *pcec_message)
 			menu_status = DEVICE_MENU_ACTIVE;
 		if (cec_global_info.cec_node_info[cec_global_info.
 			my_node_index].power_status == POWER_STANDBY) {
-			CEC_INFO("exit standby by set stream path\n");
+			hdmi_print(INF, CEC"exit standby by set stream path\n");
 			input_event(cec_global_info.remote_cec_dev,
 				    EV_KEY, KEY_POWER, 1);
 			input_sync(cec_global_info.remote_cec_dev);
@@ -1279,7 +1286,7 @@ void cec_deck_status(struct cec_rx_message_t *pcec_message)
 				pcec_message->content.msg.operands[0];
 		cec_global_info.cec_node_info[index].real_info_mask
 		    |= INFO_MASK_DECK_INfO;
-		CEC_INFO("cec_deck_status: %x\n", cec_global_info
+		hdmi_print(INF, CEC "cec_deck_status: %x\n", cec_global_info
 		    .cec_node_info[index].specific_info.playback.deck_info);
 	}
 }
@@ -1302,14 +1309,16 @@ void cec_set_standby(void)
 void cec_set_osd_name(struct cec_rx_message_t *pcec_message)
 {
 	unsigned char index = cec_global_info.my_node_index;
-	unsigned osd_len = strlen(osd_name);
+	unsigned osd_len = strlen(cec_global_info.cec_node_info[index].
+		osd_name);
 	unsigned src_log_addr = (pcec_message->content.msg.header >> 4) & 0xf;
 	unsigned char msg[16];
 
 	if (0xf != src_log_addr) {
 		msg[0] = ((index & 0xf) << 4) | src_log_addr;
 		msg[1] = CEC_OC_SET_OSD_NAME;
-		memcpy(&msg[2], osd_name, osd_len);
+		memcpy(&msg[2], cec_global_info.cec_node_info[index].osd_name,
+		    osd_len);
 
 		cec_ll_tx(msg, 2 + osd_len);
 	}
@@ -1356,7 +1365,7 @@ void cec_set_menu_language(struct cec_rx_message_t *pcec_message)
 		    cec_global_info.cec_node_info[index].menu_lang);
 		cec_global_info.cec_node_info[index].real_info_mask
 		    |= INFO_MASK_MENU_LANGUAGE;
-		CEC_INFO("cec_set_menu_language:%c.%c.%c\n",
+		hdmi_print(INF, CEC "cec_set_menu_language:%c.%c.%c\n",
 			a, b, c);
 		complete(&menu_comp);
 	}
@@ -1484,7 +1493,7 @@ void cec_handle_message(struct cec_rx_message_t *pcec_message)
 			cec_menu_status(pcec_message);
 			break;
 		case CEC_OC_PLAY:
-			CEC_INFO("CEC_OC_PLAY:0x%x\n",
+			hdmi_print(INF, CEC "CEC_OC_PLAY:0x%x\n",
 				pcec_message->content.msg.operands[0]);
 			switch (pcec_message->content.msg.operands[0]) {
 			case 0x24:
@@ -1508,7 +1517,7 @@ void cec_handle_message(struct cec_rx_message_t *pcec_message)
 			}
 			break;
 		case CEC_OC_DECK_CONTROL:
-			CEC_INFO("CEC_OC_DECK_CONTROL:0x%x\n",
+			hdmi_print(INF, CEC "CEC_OC_DECK_CONTROL:0x%x\n",
 			    pcec_message->content.msg.operands[0]);
 			switch (pcec_message->content.msg.operands[0]) {
 			case 0x3:
@@ -1898,7 +1907,7 @@ static int cec_reboot(struct notifier_block *nb, unsigned long state, void *cmd)
 	if (!hdmitx_device->hpd_state)
 		return 0;
 	if (hdmitx_device->cec_func_config & (1 << CEC_FUNC_MSAK)) {
-		CEC_INFO("%s, notify reboot\n", __func__);
+		hdmi_print(INF, CEC "%s, notify reboot\n", __func__);
 		cec_menu_status_smp(DEVICE_MENU_INACTIVE);
 		cec_inactive_source();
 	}
@@ -1958,10 +1967,6 @@ static ssize_t show_cec_config(struct device *dev,
 static ssize_t store_cec_config(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
-	if (cec_global_info.hal_ctl) {
-		CEC_INFO("controled by hal, abort\n");
-		return count;
-	}
 	cec_usrcmd_set_config(buf, count);
 	return count;
 }
@@ -2028,230 +2033,11 @@ static DEVICE_ATTR(tv_support_cec, S_IRUGO ,
 static DEVICE_ATTR(cec_lang_config, S_IWUSR | S_IRUGO | S_IWGRP,
 	show_cec_lang_config, store_cec_lang_config);
 
-/*
- * file operations for hal
- */
-
-static int hdmitx_cec_open(struct inode *inode, struct file *file)
-{
-	cec_global_info.open_count++;
-	if (cec_global_info.open_count) {
-		cec_global_info.hal_ctl = 1;
-		/* enable all cec features */
-		cec_config(0x2f, 1);
-	}
-	return 0;
-}
-
-static int hdmitx_cec_release(struct inode *inode, struct file *file)
-{
-	cec_global_info.open_count--;
-	if (!cec_global_info.open_count) {
-		cec_global_info.hal_ctl = 0;
-		/* disable all cec features */
-		cec_config(0x0, 1);
-	}
-	return 0;
-}
-
-static ssize_t hdmitx_cec_read(struct file *f, char __user *buf,
-			   size_t size, loff_t *p)
-{
-	int ret;
-
-	rx_len = 0;
-	ret = wait_for_completion_timeout(&rx_complete, msecs_to_jiffies(50));
-	if (ret <= 0)
-		return ret;
-	if (rx_len == 0)
-		return 0;
-
-	if (copy_to_user(buf, rx_msg, rx_len))
-		return -EINVAL;
-	return rx_len;
-}
-
-static ssize_t hdmitx_cec_write(struct file *f, const char __user *buf,
-			    size_t size, loff_t *p)
-{
-	unsigned char tempbuf[16] = {};
-
-	if (size > 16)
-		size = 16;
-	if (size <= 0)
-		return 0;
-
-	if (copy_from_user(tempbuf, buf, size))
-		return -EINVAL;
-
-	return cec_ll_tx(tempbuf, size);
-}
-
-static long hdmitx_cec_ioctl(struct file *f,
-			     unsigned int cmd, unsigned long arg)
-{
-	void __user *argp = (void __user *)arg;
-	unsigned long tmp;
-	int idx = cec_global_info.my_node_index;
-	struct hdmi_port_info port_info;
-	int a, b, c, d;
-
-	switch (cmd) {
-	case CEC_IOC_GET_PHYSICAL_ADDR:
-		if (hdmitx_device->hdmi_info.vsdb_phy_addr.valid == 0)
-			return -EINVAL;
-		a = hdmitx_device->hdmi_info.vsdb_phy_addr.a;
-		b = hdmitx_device->hdmi_info.vsdb_phy_addr.b;
-		c = hdmitx_device->hdmi_info.vsdb_phy_addr.c;
-		d = hdmitx_device->hdmi_info.vsdb_phy_addr.d;
-		tmp = ((a << 12) | (b << 8) | (c << 4) | (d << 0));
-		cec_phyaddr_config(tmp, 1);
-		if (copy_to_user(argp, &tmp, _IOC_SIZE(cmd)))
-			return -EINVAL;
-		break;
-
-	case CEC_IOC_GET_VERSION:
-		tmp = CEC_VERSION_14A;
-		if (copy_to_user(argp, &tmp, _IOC_SIZE(cmd)))
-			return -EINVAL;
-		break;
-
-	case CEC_IOC_GET_VENDOR_ID:
-		tmp = vendor_id;
-		if (copy_to_user(argp, &tmp, _IOC_SIZE(cmd)))
-			return -EINVAL;
-		break;
-
-	case CEC_IOC_GET_PORT_NUM:
-		tmp = 1;
-		if (copy_to_user(argp, &tmp, _IOC_SIZE(cmd)))
-			return -EINVAL;
-		break;
-
-	case CEC_IOC_GET_PORT_INFO:
-		/* for tx only 1 port */
-		tmp  = ((hdmitx_device->hdmi_info.vsdb_phy_addr.a << 12) |
-			(hdmitx_device->hdmi_info.vsdb_phy_addr.b <<  8) |
-			(hdmitx_device->hdmi_info.vsdb_phy_addr.c <<  4) |
-			(hdmitx_device->hdmi_info.vsdb_phy_addr.d <<  0));
-		port_info.type = HDMI_OUTPUT;
-		port_info.port_id = 1;
-		port_info.cec_supported = 1;
-		/* not support arc */
-		port_info.arc_supported = 0;
-		port_info.physical_address = tmp & 0xffff;
-		if (copy_to_user(argp, &port_info, sizeof(port_info)))
-			return -EINVAL;
-		break;
-
-	case CEC_IOC_GET_SEND_FAIL_REASON:
-		tmp = get_cec_tx_fail();
-		if (copy_to_user(argp, &tmp, _IOC_SIZE(cmd)))
-			return -EINVAL;
-		break;
-
-	case CEC_IOC_SET_OPTION_WAKEUP:
-		/* TODO: */
-		break;
-
-	case CEC_IOC_SET_OPTION_ENALBE_CEC:
-		/* TODO: */
-		break;
-
-	case CEC_IOC_SET_OPTION_SYS_CTRL:
-		/* TODO: */
-		break;
-
-	case CEC_IOC_SET_OPTION_SET_LANG:
-		cec_global_info.cec_node_info[idx].menu_lang = arg;
-		break;
-
-	case CEC_IOC_GET_CONNECT_STATUS:
-		tmp = hdmitx_device->hpd_state;
-		if (copy_to_user(argp, &tmp, _IOC_SIZE(cmd)))
-			return -EINVAL;
-		break;
-
-	case CEC_IOC_ADD_LOGICAL_ADDR:
-		tmp = arg & 0xf;
-		cec_logicaddr_set(tmp);
-		/* add by hal, to init some data structure */
-		cec_global_info.my_node_index = tmp;
-		cec_global_info.cec_node_info[tmp].power_status = POWER_ON;
-		cec_logicaddr_config(cec_global_info.my_node_index, 1);
-		cec_global_info.cec_node_info[tmp].log_addr = tmp;
-
-		cec_global_info.cec_node_info[tmp].
-			specific_info.audio.sys_audio_mode = OFF;
-		cec_global_info.cec_node_info[tmp].
-			specific_info.audio.audio_status.
-			audio_mute_status = OFF;
-		cec_global_info.cec_node_info[tmp].
-			specific_info.audio.audio_status.
-			audio_volume_status = 0;
-
-		cec_global_info.cec_node_info[tmp].
-			cec_version = CEC_VERSION_14A;
-		cec_global_info.cec_node_info[tmp].vendor_id = vendor_id;
-		cec_global_info.cec_node_info[tmp].dev_type =
-			cec_log_addr_to_dev_type(tmp);
-		cec_global_info.cec_node_info[tmp].dev_type =
-			cec_log_addr_to_dev_type(tmp);
-		strcpy(cec_global_info.cec_node_info[tmp].osd_name, osd_name);
-
-		cec_global_info.cec_node_info[tmp].menu_status =
-					DEVICE_MENU_ACTIVE;
-		break;
-
-	case CEC_IOC_CLR_LOGICAL_ADDR:
-		tmp = arg & 0xf;
-		/* TODO: clear global info */
-		cec_logicaddr_set(0x0f);
-		cec_global_info.my_node_index = tmp;
-		break;
-
-	default:
-		break;
-	}
-	return 0;
-}
-
-#ifdef CONFIG_COMPAT
-static long hdmitx_cec_compat_ioctl(struct file *f,
-				    unsigned int cmd, unsigned long arg)
-{
-	arg = (unsigned long)compat_ptr(arg);
-	return hdmitx_cec_ioctl(f, cmd, arg);
-}
-#endif
-
-/* for improve rw permission */
-static char *aml_cec_class_devnode(struct device *dev, umode_t *mode)
-{
-	if (mode)
-		*mode = 0664;
-	hdmi_print(INF, "mode is %x\n", *mode);
-	return NULL;
-}
-
-static const struct file_operations hdmitx_cec_fops = {
-	.owner          = THIS_MODULE,
-	.open           = hdmitx_cec_open,
-	.read           = hdmitx_cec_read,
-	.write          = hdmitx_cec_write,
-	.release        = hdmitx_cec_release,
-	.unlocked_ioctl = hdmitx_cec_ioctl,
-#ifdef CONFIG_COMPAT
-	.compat_ioctl   = hdmitx_cec_compat_ioctl,
-#endif
-};
-
 /************************ cec high level code *****************************/
 
 static int aml_cec_probe(struct platform_device *pdev)
 {
 	int i;
-	struct device *dev, *cdev;
 #ifdef CONFIG_OF
 	struct device_node *node = pdev->dev.of_node;
 	int irq_idx = 0, r;
@@ -2260,11 +2046,10 @@ static int aml_cec_probe(struct platform_device *pdev)
 	struct pinctrl *p;
 	struct vendor_info_data *vend;
 	struct resource *res;
+	struct device *dev;
 	resource_size_t *base;
 #endif
 
-	device_rename(&pdev->dev, "cectx");
-	dbg_dev = &pdev->dev;
 	hdmitx_device = get_hdmitx_device();
 	switch_dev_register(&lang_dev);
 	cec_key_init();
@@ -2274,33 +2059,12 @@ static int aml_cec_probe(struct platform_device *pdev)
 	    sizeof(cec_global_info.cec_rx_msg_buf.cec_rx_message)
 	    /sizeof(cec_global_info.cec_rx_msg_buf.cec_rx_message[0]);
 
-	dev = dev_get_platdata(&pdev->dev);
-	if (dev) {
-		/* cdev registe */
-		cec_global_info.dev_no = register_chrdev(0, CEC_DEV_NAME,
-							 &hdmitx_cec_fops);
-		if (cec_global_info.dev_no < 0) {
-			hdmi_print(INF, "alloc chrdev failed\n");
-			return -EINVAL;
-		}
-		hdmi_print(INF, "alloc chrdev %x\n", cec_global_info.dev_no);
-		if (!dev->class->devnode)
-			dev->class->devnode = aml_cec_class_devnode;
-		cdev = device_create(dev->class, &pdev->dev,
-				     MKDEV(cec_global_info.dev_no, 0),
-				     NULL, CEC_DEV_NAME);
-		if (IS_ERR(cdev)) {
-			hdmi_print(INF, "create chrdev failed, dev:%p\n", cdev);
-			unregister_chrdev(cec_global_info.dev_no, CEC_DEV_NAME);
-			return -EINVAL;
-		}
-	}
+	cec_global_info.hdmitx_device = hdmitx_device;
 
 	init_completion(&menu_comp);
-	init_completion(&rx_complete);
 	wake_lock_init(&cec_lock, WAKE_LOCK_SUSPEND, "hdmi_cec");
-	CEC_INFO("CEC probe, fun_config:%x\n",
-		 hdmitx_device->cec_func_config);
+	hdmi_print(INF, CEC "CEC probe, fun_config:%x\n",
+		   hdmitx_device->cec_func_config);
 	/*
 	 * save default configs parsed from boot args
 	 */
@@ -2319,7 +2083,7 @@ static int aml_cec_probe(struct platform_device *pdev)
 	cec_key_timer.function = cec_key_up;
 	cec_global_info.remote_cec_dev = input_allocate_device();
 	if (!cec_global_info.remote_cec_dev)
-		CEC_INFO("No enough memory\n");
+		hdmi_print(INF, CEC "No enough memory\n");
 
 	cec_global_info.remote_cec_dev->name = "cec_input";
 
@@ -2335,7 +2099,7 @@ static int aml_cec_probe(struct platform_device *pdev)
 		set_bit(cec_key_map[i], cec_global_info.remote_cec_dev->keybit);
 
 	if (input_register_device(cec_global_info.remote_cec_dev)) {
-		CEC_INFO("Failed to register device\n");
+		hdmi_print(INF, CEC "Failed to register device\n");
 		input_free_device(cec_global_info.remote_cec_dev);
 	}
 
@@ -2356,8 +2120,11 @@ static int aml_cec_probe(struct platform_device *pdev)
 					    &pin_name);
 		if (!r) {
 			p = devm_pinctrl_get_select(&pdev->dev, pin_name);
+			hdmi_print(INF, CEC"pinmux:%p, name:%s\n", p, pin_name);
 			reg = hd_read_reg(P_AO_RTI_PIN_MUX_REG);
+			hdmi_print(INF, CEC "value:%lx\n", reg);
 			reg = hd_read_reg(P_AO_RTI_PIN_MUX_REG2);
+			hdmi_print(INF, CEC "value2:%lx\n", reg);
 		}
 	}
 
@@ -2369,6 +2136,8 @@ static int aml_cec_probe(struct platform_device *pdev)
 		if (!r) {
 			r = request_irq(irq_idx, &cec_isr_handler, IRQF_SHARED,
 					irq_name, (void *)hdmitx_device);
+			hdmi_print(INF, CEC "irq:%d, name:%s, ret:%d\n",
+				   irq_idx, irq_name, r);
 		}
 	}
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -2376,7 +2145,7 @@ static int aml_cec_probe(struct platform_device *pdev)
 		base = devm_ioremap_resource(&pdev->dev, res);
 		exit_reg = (void *)base;
 	} else {
-		CEC_INFO("no memory resource\n");
+		hdmi_print(INF, CEC "no memory resource\n");
 		exit_reg = NULL;
 	}
 
@@ -2401,8 +2170,13 @@ static int aml_cec_probe(struct platform_device *pdev)
 		hdmi_print(INF, SYS "not find cec osd string\n");
 	r = of_property_read_u32(node, "cec_config",
 		&(vend->cec_config));
+	if (r)
+		hdmi_print(INF, SYS "not find cec config\n");
 	r = of_property_read_u32(node, "ao_cec", &(vend->ao_cec));
+	if (r)
+		hdmi_print(INF, SYS "not find ao cec\n");
 
+	dev = dev_get_platdata(&pdev->dev);
 	if (dev) {
 		r = device_create_file(dev, &dev_attr_cec);
 		r = device_create_file(dev, &dev_attr_cec_config);
@@ -2413,6 +2187,8 @@ static int aml_cec_probe(struct platform_device *pdev)
 #endif
 	hdmitx_device->cec_init_ready = 1;
 	cec_global_info.cec_flag.cec_init_flag = 0;
+	hdmi_print(INF, CEC "hdmitx_device->cec_init_ready:0x%x",
+	    hdmitx_device->cec_init_ready);
 	/* for init */
 	queue_delayed_work(cec_workqueue, &hdmitx_device->cec_work, 0);
 	cec_reboot_nb.notifier_call = cec_reboot;
@@ -2426,7 +2202,7 @@ static int aml_cec_remove(struct platform_device *pdev)
 	if (!(hdmitx_device->cec_func_config & (1 << CEC_FUNC_MSAK)))
 		return 0;
 
-	CEC_INFO("cec uninit!\n");
+	hdmi_print(INF, CEC "cec uninit!\n");
 	if (cec_global_info.cec_flag.cec_init_flag == 1) {
 		free_irq(hdmitx_device->irq_cec, (void *)hdmitx_device);
 		cec_global_info.cec_flag.cec_init_flag = 0;
@@ -2448,7 +2224,6 @@ static int aml_cec_remove(struct platform_device *pdev)
 	input_unregister_device(cec_global_info.remote_cec_dev);
 	cec_global_info.cec_flag.cec_fiq_flag = 0;
 	unregister_reboot_notifier(&cec_reboot_nb);
-	unregister_chrdev(cec_global_info.dev_no, CEC_DEV_NAME);
 	return 0;
 }
 
@@ -2457,7 +2232,7 @@ static int aml_cec_pm_prepare(struct device *dev)
 {
 	if ((hdmitx_device->cec_func_config & (1 << CEC_FUNC_MSAK))) {
 		cec_suspend = 1;
-		CEC_INFO("cec prepare suspend!\n");
+		hdmi_print(INF, CEC "cec prepare suspend!\n");
 	}
 	return 0;
 }
@@ -2468,7 +2243,7 @@ static void aml_cec_pm_complete(struct device *dev)
 
 	if (exit_reg) {
 		exit = readl(exit_reg);
-		CEC_INFO("wake up flag:%x\n", exit);
+		hdmi_print(INF, CEC "wake up flag:%x\n", exit);
 	}
 	if (((exit >> 28) & 0xf) == CEC_WAKEUP) {
 		input_event(cec_global_info.remote_cec_dev,
@@ -2477,14 +2252,14 @@ static void aml_cec_pm_complete(struct device *dev)
 		input_event(cec_global_info.remote_cec_dev,
 			    EV_KEY, KEY_POWER, 0);
 		input_sync(cec_global_info.remote_cec_dev);
-		CEC_INFO("== WAKE UP BY CEC ==\n");
+		hdmi_print(INF, CEC "== WAKE UP BY CEC ==\n");
 	}
 }
 
 static int aml_cec_resume_noirq(struct device *dev)
 {
 	if ((hdmitx_device->cec_func_config & (1 << CEC_FUNC_MSAK))) {
-		CEC_INFO("cec resume noirq!\n");
+		hdmi_print(INF, CEC "cec resume noirq!\n");
 		cec_global_info.cec_node_info[cec_global_info.my_node_index].
 			power_status = TRANS_STANDBY_TO_ON;
 	}
@@ -2509,7 +2284,7 @@ static const struct of_device_id aml_cec_dt_match[] = {
 
 static struct platform_driver aml_cec_driver = {
 	.driver = {
-		.name  = "cec",
+		.name  = "amlogic-cec",
 		.owner = THIS_MODULE,
 	#ifdef CONFIG_PM
 		.pm     = &aml_cec_pm,
@@ -2554,6 +2329,22 @@ size_t cec_usrcmd_get_global_info(char *buf)
 
 	buf[0] = dev_num;
 	buf[1] = cec_global_info.active_log_dev;
+#if 0
+	hdmi_print(INF, CEC "\n");
+	hdmi_print(INF, CEC "%x\n",
+		(unsigned int)(((struct cec_global_info_to_usr_t *)0)->
+		cec_node_info_online));
+	hdmi_print(INF, CEC "%x\n", ((struct cec_global_info_to_usr_t *)buf)->
+		dev_number);
+	hdmi_print(INF, CEC "%x\n",
+	    ((struct cec_global_info_to_usr_t *)buf)->active_log_dev);
+	hdmi_print(INF, CEC "%x\n", ((struct cec_global_info_to_usr_t *)buf)->
+		cec_node_info_online[0].hdmi_port);
+	for (i = 0; i < (sizeof(struct cec_node_info_t) * dev_num) + 2; i++)
+		hdmi_print(INF, CEC "%x,", buf[i]);
+
+	hdmi_print(INF, CEC "\n");
+#endif
 	return (size_t)(sizeof(struct cec_node_info_t) * dev_num
 		+ (unsigned long)((struct cec_global_info_to_usr_t *)0)->
 		cec_node_info_online);
@@ -2585,7 +2376,7 @@ void cec_usrcmd_set_config(const char *buf, size_t count)
 	char param[16] = {0};
 
 	if (count > 32)
-		CEC_INFO("too many args\n");
+		hdmi_print(INF, CEC "too many args\n");
 
 	for (i = 0; i < count; i++) {
 		if ((buf[i] >= '0') && (buf[i] <= 'f')) {
@@ -2597,7 +2388,7 @@ void cec_usrcmd_set_config(const char *buf, size_t count)
 	}
 	value = cec_config(0, 0);
 	cec_config(param[0], 1);
-	CEC_INFO("old value:%lx, new para:%x\n", value, param[0]);
+	hdmi_print(INF, CEC "old value:%lx, new para:%x\n", value, param[0]);
 	hdmitx_device->cec_func_config = cec_config(0, 0);
 	if ((0 == (value & 0x1)) && (1 == (param[0] & 1))) {
 		hdmitx_device->cec_init_ready = 1;
@@ -2606,7 +2397,7 @@ void cec_usrcmd_set_config(const char *buf, size_t count)
 		cec_node_init(hdmitx_device);
 	} else if ((value & 0x01) && !(param[0] & 0x01)) {
 		/* toggle off cec funtion by user */
-		CEC_INFO("user disable cec\n");
+		hdmi_print(INF, CEC "user disable cec\n");
 		/* disable irq to stop rx/tx process */
 		cec_keep_reset();
 	}
@@ -2625,7 +2416,7 @@ void cec_usrcmd_set_config(const char *buf, size_t count)
 	if ((0x20 == (param[0] & 0x20)) && (0x0 == (value & 0x20)))
 		cec_get_menu_language_smp();
 
-	CEC_INFO("cec_func_config:0x%x : 0x%x\n",
+	hdmi_print(INF, CEC "cec_func_config:0x%x : 0x%x\n",
 		hdmitx_device->cec_func_config, cec_config(0, 0));
 }
 
@@ -2661,20 +2452,20 @@ void cec_usrcmd_set_dispatch(const char *buf, size_t count)
 	char msg[4] = {0};
 	char param[32] = {0};
 
-	CEC_INFO("cec usrcmd set dispatch start:\n");
+	hdmi_print(INF, CEC "cec usrcmd set dispatch start:\n");
 	/* if none HDMI out,no CEC features. */
 	if (!hdmitx_device->hpd_state) {
-		CEC_INFO("HPD low!\n");
+		hdmi_print(INF, CEC "HPD low!\n");
 		return;
 	}
 
 	if (!(hdmitx_device->cec_func_config & (1 << CEC_FUNC_MSAK))) {
-		CEC_INFO("cec function masked!\n");
+		hdmi_print(INF, CEC "cec function masked!\n");
 		return;
 	}
 
 	if (count > 32)
-		CEC_INFO("too many args\n");
+		hdmi_print(INF, CEC "too many args\n");
 
 	if (!strncmp(buf, "settiming", 9)) {
 		ret = kstrtoul(buf+9, 16, (unsigned long *)&bit_set);
@@ -2786,7 +2577,7 @@ void cec_usrcmd_set_dispatch(const char *buf, size_t count)
 	default:
 		break;
 	}
-	CEC_INFO("cec usrcmd set dispatch end!\n");
+	hdmi_print(INF, CEC "cec usrcmd set dispatch end!\n");
 }
 
 /*************************** cec high level code end ************************/
