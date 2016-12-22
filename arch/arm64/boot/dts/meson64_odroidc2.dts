@@ -596,9 +596,9 @@
 	};
 
 	/* AUDIO board specific */
-	dummy_codec:dummy{
+	pcm5102_codec:pcm5102{
 		#sound-dai-cells = <0>;
-		compatible = "amlogic, aml_dummy_codec";
+		compatible = "hardkernel, pcm5102";
 		status = "okay";
 	};
 
@@ -630,7 +630,7 @@
 			sound-dai = <&pcm_dai>;
 		};
 		codec0: codec0 {
-			sound-dai = <&dummy_codec>;
+			sound-dai = <&pcm5102_codec>;
 		};
 		codec1: codec1 {
 			sound-dai = <&spdif_codec>;
