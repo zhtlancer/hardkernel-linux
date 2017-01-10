@@ -1005,6 +1005,35 @@
         status = "okay";
     };
 
+    gpio_keys_polled {
+        compatible =
+            "gpio-keys-polled";
+        #address-clls = <1>;
+        #size-cells = <0>;
+        poll-interval = <100>;
+        autorepeat;
+        button@1 {
+            label = "GPIO Key F7";
+            linux,code = <65>;
+            gpios = "GPIOY_8";
+        };
+        button@2 {
+            label = "GPIO Key F8";
+            linux,code = <66>;
+            gpios = "GPIOX_19";
+        };
+        button@3 {
+            label = "GPIO Key F9";
+            linux,code = <67>;
+            gpios = "GPIOX_10";
+        };
+        button@4 {
+            label = "GPIO Key F10";
+            linux,code = <68>;
+            gpios = "GPIOX_9";
+        };
+    };
+
     leds {
         compatible = "gpio-leds";
         /* Blue LED */
