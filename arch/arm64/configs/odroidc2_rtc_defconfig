@@ -859,12 +859,22 @@ CONFIG_AML_REG_ACCESS=y
 #
 # CONFIG_AML_POWER_SUPPORT is not set
 # CONFIG_AML_PMU_ALGORITHM_SUPPORT is not set
+CONFIG_AML_PMU4=y
 
 #
 # Ethernet Support
 #
-# CONFIG_AM_PHY is not set
+CONFIG_AM_PHY=y
 CONFIG_PHYLIB=y
+
+#
+# MII PHY device drivers
+#
+CONFIG_AML_PHY=y
+# CONFIG_AML_SMSC is not set
+# CONFIG_AML_ICPLUS is not set
+# CONFIG_AML_MICREL is not set
+# CONFIG_AML_REALTEK is not set
 
 #
 # MMC/SD/SDIO Host Controller Drivers
@@ -904,7 +914,6 @@ CONFIG_AM_VOUT=y
 CONFIG_AM_TV_OUTPUT=y
 CONFIG_AML_VOUT_FRAMERATE_AUTOMATION=y
 # CONFIG_AML_VDAC_HW_SWITCH is not set
-# CONFIG_AM_LCD_OUTPUT is not set
 
 #
 # Amlogic OSD Module
@@ -929,9 +938,14 @@ CONFIG_AM_GE2D=y
 CONFIG_AM_LOGO=y
 
 #
+# Amlogic LCD Output Module
+#
+# CONFIG_AML_LCD is not set
+
+#
 # Amlogic Backlight Support
 #
-# CONFIG_AMLOGIC_BACKLIGHT is not set
+# CONFIG_AML_BACKLIGHT is not set
 # CONFIG_AMLOGIC_LED is not set
 
 #
@@ -1064,6 +1078,7 @@ CONFIG_MESON_INPUT_KEYBOARD=y
 CONFIG_ADC_KEYPADS_AM=y
 CONFIG_AML_GPIO_KEY=y
 # CONFIG_SENSOR_DEVICES is not set
+# CONFIG_AMLOGIC_AVIN_DETECT is not set
 # CONFIG_AMLOGIC_MESON_CPUFREQ is not set
 CONFIG_AMLOGIC_SCPI_CPUFREQ=y
 CONFIG_MESON_SUSPEND=y
@@ -1083,15 +1098,6 @@ CONFIG_AM_DVB=y
 # CONFIG_AM_CI is not set
 # CONFIG_AM_PCMCIA is not set
 # CONFIG_AM_IOBUS is not set
-# CONFIG_AM_SI2157 is not set
-# CONFIG_AM_SI2177 is not set
-# CONFIG_AM_AVL6211 is not set
-# CONFIG_AM_SI2168 is not set
-# CONFIG_AM_MXL101 is not set
-CONFIG_AM_AVL68xx=y
-CONFIG_AM_MXL241_FE=y
-CONFIG_AM_MXL683_FE=y
-# CONFIG_AM_R840 is not set
 
 #
 # MESON MHU mailbox Support
@@ -1120,6 +1126,17 @@ CONFIG_AML_WDT=y
 CONFIG_GX_WDT=y
 CONFIG_MESON_PWM=m
 CONFIG_MESON_PWM_CTRL=m
+
+#
+# AMLOGIC SPI Hardware bus support
+#
+# CONFIG_AMLOGIC_SPICC_MASTER is not set
+# CONFIG_AMLOGIC_CPU_INFO is not set
+
+#
+# defend img file update support
+#
+# CONFIG_DEFEND_IMG is not set
 
 #
 # Generic Driver Options
@@ -1482,6 +1499,7 @@ CONFIG_NET_VENDOR_WIZNET=y
 #
 # MII PHY device drivers
 #
+# CONFIG_AMLOGIC_PHY is not set
 # CONFIG_AT803X_PHY is not set
 # CONFIG_AMD_PHY is not set
 # CONFIG_MARVELL_PHY is not set
@@ -1791,6 +1809,7 @@ CONFIG_CONSOLE_POLL=y
 # CONFIG_SERIAL_XILINX_PS_UART is not set
 # CONFIG_SERIAL_ARC is not set
 # CONFIG_SERIAL_FSL_LPUART is not set
+# CONFIG_SUPPORT_SYSRQ is not set
 # CONFIG_TTY_PRINTK is not set
 # CONFIG_VIRTIO_CONSOLE is not set
 # CONFIG_IPMI_HANDLER is not set
@@ -2863,6 +2882,9 @@ CONFIG_USB_PHY=y
 CONFIG_USB_ISP1301=y
 # CONFIG_USB_RCAR_PHY is not set
 CONFIG_USB_ULPI=y
+# CONFIG_AMLOGIC_USBPHY is not set
+# CONFIG_AMLOGIC_USB2PHY is not set
+# CONFIG_AMLOGIC_USB3PHY is not set
 CONFIG_USB_GADGET=y
 # CONFIG_USB_GADGET_DEBUG is not set
 # CONFIG_USB_GADGET_DEBUG_FILES is not set
