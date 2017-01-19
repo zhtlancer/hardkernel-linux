@@ -42,6 +42,12 @@
                         &clk800_cfg>;
 	};
 
+	gpiomem {
+		compatible = "amlogic,meson-gpiomem";
+		reg = <0x0 0xc8834000 0x0 0x1000>;
+		status = "okay";
+	};
+
 	memory@00000000 {
                 device_type = "memory";
                 linux,usable-memory = <0x0 0x1000000 0x0 0x7f000000>;
