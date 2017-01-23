@@ -1064,4 +1064,8 @@
 #define USB_VENDOR_ID_PLANAR	0x1EF1
 #define USB_DEVICE_ID_PLANAR_PS5561T_TOUCH	0x0001
 
+/* Silicon Intergrated System SiS9255 DRWO-TECH HDMI capacitive Screen */
+#define USB_VENDOR_ID_SiS	0x0457
+#define USB_DEVICE_ID_SiS_SiS9255_DRWO_TOUCH	0x0817
+
 #endif
