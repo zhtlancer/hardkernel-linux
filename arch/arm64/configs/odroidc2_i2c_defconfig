@@ -1064,18 +1064,12 @@ CONFIG_AMLOGIC_IONVIDEO=y
 # V4L2 Video Support
 #
 CONFIG_V4L_AMLOGIC_VIDEO=y
-CONFIG_V4L_AMLOGIC_VIDEO2=y
+# CONFIG_V4L_AMLOGIC_VIDEO2 is not set
 
 #
 # Amlogic TVIN Drivers
 #
-CONFIG_TVIN=y
-CONFIG_TVIN_VDIN=y
-# CONFIG_TVIN_AFE is not set
-# CONFIG_TVIN_HDMI is not set
-# CONFIG_TVIN_BT656 is not set
-# CONFIG_VIUIN is not set
-# CONFIG_TVIN_ISP is not set
+# CONFIG_TVIN is not set
 
 #
 # Amlogic VECM Drivers
