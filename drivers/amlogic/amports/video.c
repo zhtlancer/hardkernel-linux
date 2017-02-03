@@ -3542,16 +3542,6 @@ static irqreturn_t vsync_isr(int irq, void *dev_id)
 	/* toggle_3d_fa_frame  determine the out frame is L or R or blank */
 	judge_3d_fa_out_mode();
 #endif
-	if (vf) {
-		/* force set bitdepth to 8bit mode when src is 8bit */
-		if (is_meson_gxtvbb_cpu() && (bit_depth_flag == 8)
-			&& (vf->bitdepth != 10)) {
-			if (((READ_VCBUS_REG(VD1_IF0_GEN_REG3) >> 8)
-				& 0x1) == 1)
-				WRITE_VCBUS_REG_BITS(VD1_IF0_GEN_REG3,
-					0x0, 8, 2);
-		}
-	}
 	while (vf) {
 		if (vpts_expire(cur_dispbuf, vf) || show_nosync) {
 			amlog_mask(LOG_MASK_TIMESTAMP,
