@@ -369,7 +369,6 @@ vpp_process_speed_check(s32 width_in,
 		struct vpp_frame_par_s *next_frame_par,
 		const struct vinfo_s *vinfo, struct vframe_s *vf)
 {
-	u32 cur_ratio;
 	/* #if (MESON_CPU_TYPE >= MESON_CPU_TYPE_MESON8) */
 	if ((get_cpu_type() >= MESON_CPU_MAJOR_ID_M8) && !is_meson_mtvd_cpu()) {
 		if ((width_in <= 0) || (height_in <= 0) || (height_out <= 0)
@@ -377,15 +376,6 @@ vpp_process_speed_check(s32 width_in,
 			return SPEED_CHECK_DONE;
 
 		if (height_in > height_out) {
-			if (get_cpu_type() ==
-				MESON_CPU_MAJOR_ID_GXTVBB) {
-				cur_ratio = div_u64((u64)height_in *
-						(u64)vinfo->height *
-						1000,
-						height_out * 2160);
-					if (cur_ratio > MIN_RATIO_1000)
-						return SPEED_CHECK_VSKIP;
-			}
 			if (vf->type & VIDTYPE_VIU_422) {
 				/*TODO vpu */
 				if (get_cpu_type() == MESON_CPU_MAJOR_ID_GXBB) {
