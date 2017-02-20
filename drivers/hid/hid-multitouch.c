@@ -1590,6 +1590,11 @@ static const struct hid_device_id mt_devices[] = {
 		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC1FF7,
 				USB_DEVICE_ID_VIEWSONIC_CDE7061T) },
 
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC13FF,
+				USB_DEVICE_ID_VIEWSONIC_EP5502T) },
+
 /* Greatouch HDMI capacitive Screen */
 	{ .driver_data = MT_CLS_DEFAULT,
 		HID_USB_DEVICE(USB_VENDOR_ID_GREATOUCH,
