@@ -369,6 +369,7 @@ enum system_audio_status_e {
 #define ONE_TOUCH_PLAY_MASK                  1
 #define ONE_TOUCH_STANDBY_MASK               2
 #define AUTO_POWER_ON_MASK                   3
+#define ONE_TOUCH_SHUTDOWN_MASK              4
 
 
 struct cec_node_info_t {
