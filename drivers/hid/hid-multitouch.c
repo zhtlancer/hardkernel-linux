@@ -1233,6 +1233,16 @@ static const struct hid_device_id mt_devices[] = {
 		MT_USB_DEVICE(USB_VENDOR_ID_ELO,
 			USB_DEVICE_ID_ELO_5020) },
 
+	/* Elo TouchSystems IntelliTouch Plus panel */
+	{ .driver_data = MT_CLS_DUAL_CONTACT_ID,
+		MT_USB_DEVICE(USB_VENDOR_ID_ELO,
+			USB_DEVICE_ID_ELO_3243L0027) },
+
+	/* Elo TouchSystems IntelliTouch Plus panel */
+	{ .driver_data = MT_CLS_DUAL_CONTACT_ID,
+		MT_USB_DEVICE(USB_VENDOR_ID_ELO,
+			USB_DEVICE_ID_ELO_3243L2400) },
+
 	/* Flatfrog Panels */
 	{ .driver_data = MT_CLS_FLATFROG,
 		MT_USB_DEVICE(USB_VENDOR_ID_FLATFROG,
@@ -1560,6 +1570,56 @@ static const struct hid_device_id mt_devices[] = {
 	{ .driver_data = MT_CLS_DEFAULT,
 		HID_USB_DEVICE(USB_VENDOR_ID_SiS,
 				USB_DEVICE_ID_SiS_SiS9255_DRWO_TOUCH) },
+
+/* InFocus HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_INFOCUS,
+				USB_DEVICE_ID_INFOCUS_INF4030P) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC2575,
+				USB_DEVICE_ID_VIEWSONIC_TD2740) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC2575,
+				USB_DEVICE_ID_VIEWSONIC_TD2430) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC1BFD,
+				USB_DEVICE_ID_VIEWSONIC_TD2210V1) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC28C8,
+				USB_DEVICE_ID_VIEWSONIC_TD2210V2) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC0FB8,
+				USB_DEVICE_ID_VIEWSONIC_TD2421) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC1FF7,
+				USB_DEVICE_ID_VIEWSONIC_CDE7061T) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC13FF,
+				USB_DEVICE_ID_VIEWSONIC_EP5502T) },
+
+/* Greatouch HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_GREATOUCH,
+				USB_DEVICE_ID_GREATOUCH_MT_8K) },
+
+/* WAVESHARE HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_WAVESHARE,
+				USB_DEVICE_ID_WAVESHARE_10_1) },
 
 	/* Generic MT device */
 	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_MULTITOUCH, HID_ANY_ID, HID_ANY_ID) },
