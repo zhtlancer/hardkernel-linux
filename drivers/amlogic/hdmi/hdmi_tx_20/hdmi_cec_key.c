@@ -20,6 +20,7 @@
 #include <linux/amlogic/hdmi_tx/hdmi_tx_module.h>
 #include <linux/delay.h>
 #include <linux/timer.h>
+#include <linux/reboot.h>
 
 struct hdmitx_dev *hdmitx_device = NULL;
 
@@ -230,6 +231,10 @@ void cec_standby(struct cec_rx_message_t *pcec_message)
 		input_sync(cec_global_info.remote_cec_dev);
 	}
 	last_standby = cur_time;
+
+	mask = (1 << CEC_FUNC_MSAK) | (1 << ONE_TOUCH_SHUTDOWN_MASK);
+	if ((hdmitx_device->cec_func_config & mask) == mask)
+		kernel_power_off();
 }
 
 void cec_key_init(void)
