@@ -2020,7 +2020,7 @@ static void vh264_local_init(void)
 	pr_info
 	("H264 sysinfo: %dx%d duration=%d, pts_outside=%d, ",
 	 frame_width, frame_height, frame_dur, pts_outside);
-	pr_info("sync_outside=%d, use_idr_framerate=%d\n",
+	pr_debug("sync_outside=%d, use_idr_framerate=%d\n",
 	 sync_outside, use_idr_framerate);
 
 	if ((unsigned long) vh264_amstream_dec_info.param & 0x08)
@@ -2120,16 +2120,16 @@ static s32 vh264_init(void)
 	if (!mc_cpu_addr) {
 		amvdec_disable();
 
-		pr_info("vh264_init: Can not allocate mc memory.\n");
+		pr_err("vh264_init: Can not allocate mc memory.\n");
 		return -ENOMEM;
 	}
 
-	pr_info("264 ucode swap area: phyaddr %p, cpu vaddr %p\n",
+	pr_debug("264 ucode swap area: phyaddr %p, cpu vaddr %p\n",
 		(void *)mc_dma_handle, mc_cpu_addr);
 	if (debugfirmware) {
 		int r0 , r1 , r2 , r3 , r4 , r5;
 		char firmwarename[32];
-		pr_info("start load debug %d firmware ...\n", debugfirmware);
+		pr_debug("start load debug %d firmware ...\n", debugfirmware);
 
 		snprintf(firmwarename, 32, "%s%d", "vh264_mc", debugfirmware);
 		r0 = amvdec_loadmc_ex(VFORMAT_H264, firmwarename, NULL);
@@ -2235,7 +2235,7 @@ static s32 vh264_init(void)
 
 	if (vdec_request_irq(VDEC_IRQ_1, vh264_isr,
 			"vh264-irq", (void *)vh264_dec_id)) {
-		pr_info("vh264 irq register error.\n");
+		pr_err("vh264 irq register error.\n");
 		amvdec_disable();
 		return -ENOENT;
 	}
@@ -2611,8 +2611,8 @@ static int amvdec_h264_probe(struct platform_device *pdev)
 		   sei_data_buffer, sei_data_buffer_phys,
 		   (u32)sei_data_buffer_remap); */
 	}
-	pr_info("amvdec_h264 mem-addr=%lx,buff_offset=%x,buf_start=%lx\n",
-		   pdata->mem_start, buf_offset, buf_start);
+	pr_debug("amvdec_h264 mem-addr=%lx,buff_offset=%x,buf_start=%lx buf_size %x\n",
+		   pdata->mem_start, buf_offset, buf_start, buf_size);
 
 	if (vh264_init() < 0) {
 		pr_info("\namvdec_h264 init failed.\n");
@@ -2672,12 +2672,12 @@ static struct codec_profile_t amvdec_h264_profile = {
 
 static int __init amvdec_h264_driver_init_module(void)
 {
-	pr_info("amvdec_h264 module init\n");
+	pr_debug("amvdec_h264 module init\n");
 #ifdef CONFIG_GE2D_KEEP_FRAME
 	ge2d_videoh264task_init();
 #endif
 	if (platform_driver_register(&amvdec_h264_driver)) {
-		pr_info("failed to register amvdec_h264 driver\n");
+		pr_err("failed to register amvdec_h264 driver\n");
 		return -ENODEV;
 	}
 	vcodec_profile_register(&amvdec_h264_profile);
@@ -2686,7 +2686,7 @@ static int __init amvdec_h264_driver_init_module(void)
 
 static void __exit amvdec_h264_driver_remove_module(void)
 {
-	pr_info("amvdec_h264 module remove.\n");
+	pr_debug("amvdec_h264 module remove.\n");
 
 	platform_driver_unregister(&amvdec_h264_driver);
 #ifdef CONFIG_GE2D_KEEP_FRAME
