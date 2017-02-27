@@ -206,10 +206,10 @@ struct vframe_s {
 			    unsigned zoom_start_y_lines,
 			    unsigned zoom_end_y_lines, struct vframe_s *vf);
 	void *private_data;
-
+#if 1
 	/* vframe properties */
 	struct vframe_prop_s prop;
-
+#endif
 	struct list_head list;
 	struct tvafe_vga_parm_s vga_parm;
 	/* pixel aspect ratio */
