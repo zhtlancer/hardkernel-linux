@@ -209,10 +209,8 @@ s32 adec_init(struct stream_port_s *port)
 	astream_dev->datawidth = port->adatawidth;
 
 	/*wmb();don't need it...*/
-	if (af <= ARRAY_SIZE(astream_format))
-		astream_dev->format = astream_format[af];
-	else
-		astream_dev->format = NULL;
+	astream_dev->format = astream_format[af];
+
 	return 0;
 }
 
