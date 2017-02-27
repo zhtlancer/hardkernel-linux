@@ -228,7 +228,6 @@ static u32 use_cma = 2;
 static unsigned char init_flag;
 static unsigned char uninit_list;
 
-static int show_frame_num;
 static struct semaphore h265_sema;
 struct task_struct *h265_task = NULL;
 
@@ -4229,10 +4228,8 @@ static struct vframe_s *vh265_vf_get(void *op_arg)
 	else if (step == 1)
 		step = 2;
 
-	if (kfifo_get(&display_q, &vf)) {
-		show_frame_num++;
+	if (kfifo_get(&display_q, &vf))
 		return vf;
-	}
 
 	return NULL;
 }
@@ -5121,13 +5118,12 @@ static void vh265_put_timer_func(unsigned long arg)
 		rval = 0;
 		radr = 0;
 	}
-	if (show_frame_num > 60 && /*don't changed at start.*/
-		frame_dur > 0 && saved_resolution !=
+	if (frame_dur > 0 && saved_resolution !=
 		frame_width * frame_height * (96000 / frame_dur)) {
 		int fps = 96000 / frame_dur;
-		if (hevc_source_changed(VFORMAT_HEVC,
-			frame_width, frame_height, fps) > 0) /*changed clk ok*/
-			saved_resolution = frame_width * frame_height * fps;
+		saved_resolution = frame_width * frame_height * fps;
+		hevc_source_changed(VFORMAT_HEVC,
+			frame_width, frame_height, fps);
 	}
 
 	add_timer(timer);
@@ -5466,7 +5462,7 @@ static int amvdec_h265_probe(struct platform_device *pdev)
 	mutex_lock(&vh265_mutex);
 
 	fatal_error = 0;
-	show_frame_num = 0;
+
 	if (pdata == NULL) {
 		pr_info("\namvdec_h265 memory resource undefined.\n");
 		mutex_unlock(&vh265_mutex);
@@ -5505,7 +5501,7 @@ static int amvdec_h265_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 	/*set the max clk for smooth playing...*/
-	hevc_source_changed(VFORMAT_HEVC,
+	vdec_source_changed(VFORMAT_H264_4K2K,
 			4096, 2048, 30);
 	mutex_unlock(&vh265_mutex);
 
