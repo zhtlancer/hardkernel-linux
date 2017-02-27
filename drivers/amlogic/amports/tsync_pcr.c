@@ -83,9 +83,7 @@ enum pcr_init_priority_e {
 #define PAUSE_CHECK_TIME   2700
 #define PAUSE_RESUME_TIME   18000
 
-static u32 tsync_pcr_recovery_span = 10;
-
-
+static u32 tsync_pcr_recovery_span = 3;
 
 /* the delay from ts demuxer to the amvideo  */
 #define DEFAULT_VSTREAM_DELAY 18000
