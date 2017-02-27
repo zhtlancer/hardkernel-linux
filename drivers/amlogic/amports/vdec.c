@@ -174,8 +174,7 @@ s32 vdec_init(enum vformat_e vf, int is_4k)
 		}
 		vdec_dev_reg.mem_start = codec_mm_alloc_for_dma(MEM_NAME,
 			alloc_size / PAGE_SIZE, 4 + PAGE_SHIFT,
-			CODEC_MM_FLAGS_CMA_CLEAR |
-			CODEC_MM_FLAGS_FOR_VDECODER);
+			CODEC_MM_FLAGS_CMA_CLEAR);
 		if (!vdec_dev_reg.mem_start) {
 			if (retry_num < 1) {
 				pr_err("vdec base CMA allocation failed,try again\\n");
@@ -1131,8 +1130,7 @@ void pre_alloc_vdec_memory(void)
 
 	vdec_dev_reg.mem_start = codec_mm_alloc_for_dma(MEM_NAME,
 		CMA_ALLOC_SIZE / PAGE_SIZE, 4 + PAGE_SHIFT,
-		CODEC_MM_FLAGS_CMA_CLEAR |
-		CODEC_MM_FLAGS_FOR_VDECODER);
+		CODEC_MM_FLAGS_CMA_CLEAR);
 	if (!vdec_dev_reg.mem_start)
 		return;
 	pr_debug("vdec base memory alloced %p\n",
