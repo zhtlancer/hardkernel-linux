@@ -390,7 +390,8 @@ void tsync_pcr_pcrscr_set(void)
 	}
 
 	if (first_apts && !(tsync_pcr_inited_flag & complete_init_flag)
-		&& (first_apts < min_checkinpts)) {
+		&& (first_apts < min_checkinpts
+		&& tsync_pcr_inited_mode >= INIT_PRIORITY_AUDIO)) {
 		tsync_pcr_inited_flag |= TSYNC_PCR_INITCHECK_APTS;
 		ref_pcr = first_apts;
 		timestamp_pcrscr_set(ref_pcr);
@@ -413,7 +414,8 @@ void tsync_pcr_pcrscr_set(void)
 	}
 
 	if (first_vpts && !(tsync_pcr_inited_flag & complete_init_flag)
-		&& (first_vpts < min_checkinpts)) {
+		&& (first_vpts < min_checkinpts
+		&& tsync_pcr_inited_mode >= INIT_PRIORITY_VIDEO)) {
 		tsync_pcr_inited_flag |= TSYNC_PCR_INITCHECK_VPTS;
 		ref_pcr = first_vpts - tsync_pcr_ref_latency * 2;
 		timestamp_pcrscr_set(ref_pcr);
