@@ -29,7 +29,7 @@
 
 
 #include "register_ops.h"
-#define debug_print pr_debug
+#define debug_print pr_info
 /*
 HHI_VDEC_CLK_CNTL
 0x1078[11:9] (fclk = 2000MHz)
