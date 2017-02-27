@@ -170,7 +170,6 @@ struct vframe_s {
 	u32 index;
 	u32 type;
 	u32 type_backup;
-	u32 type_original;
 	u32 blend_mode;
 	u32 duration;
 	u32 duration_pulldown;

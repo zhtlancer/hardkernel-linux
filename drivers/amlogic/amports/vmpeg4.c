@@ -454,7 +454,6 @@ static irqreturn_t vmpeg4_isr(int irq, void *dev_id)
 #endif
 			vf->canvas0Addr = vf->canvas1Addr =
 				index2canvas(buffer_index);
-			vf->type_original = vf->type;
 
 			set_aspect_ratio(vf, READ_VREG(MP4_PIC_RATIO));
 
@@ -491,7 +490,6 @@ static irqreturn_t vmpeg4_isr(int irq, void *dev_id)
 #endif
 			vf->canvas0Addr = vf->canvas1Addr =
 					index2canvas(buffer_index);
-			vf->type_original = vf->type;
 
 			set_aspect_ratio(vf, READ_VREG(MP4_PIC_RATIO));
 
@@ -534,7 +532,6 @@ static irqreturn_t vmpeg4_isr(int irq, void *dev_id)
 #endif
 			vf->canvas0Addr = vf->canvas1Addr =
 					index2canvas(buffer_index);
-			vf->type_original = vf->type;
 
 			set_aspect_ratio(vf, READ_VREG(MP4_PIC_RATIO));
 
