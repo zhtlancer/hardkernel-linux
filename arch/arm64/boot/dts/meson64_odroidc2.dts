@@ -495,6 +495,7 @@
 #endif
 
 	gpio_keys_polled {
+			status = "disabled";
 			compatible =
 				"gpio-keys-polled";
 			#address-cells = <1>;
@@ -810,7 +811,7 @@
 
 	gpio_keypad{
 		compatible = "amlogic, gpio_keypad";
-		status = "okay";
+		status = "disabled";
 		scan_period = <20>;
 		key_num = <1>;
 		key_name = "power";
