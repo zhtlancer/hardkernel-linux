@@ -1,7 +1,17 @@
+menu "ODROID Specific Hardware"
+
 if ARCH_ROCKCHIP
 config ODROIDN1_SYSFS
 	bool "Hardkernel ODROID-N1 sysfs Support"
 	default y
 	help
 	   Hardkernel sysfs support based on RK3399
+
+config ODROID_ENCODER_SWITCH
+    tristate "Enable the Encoder(rotary) switch Driver"
+	default	n
+	help
+	    Enable Encoder(rotary) switch driver.
+
 endif
+endmenu

@@ -231,6 +231,10 @@
 		};
 	};
 
+	odroid_encoder {
+		compatible = "odroid-encoder";
+		status = "ok";
+	};
 };
 
 &cpu_l0 {
