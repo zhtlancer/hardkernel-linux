@@ -820,6 +820,11 @@
 		irq_keydown = <7>;
 		reg = <0x0 0xc8100000 0x0 0x200>;
 	};
+
+	odroid_encoder {
+		compatible = "odroid-encoder";
+		status = "ok";
+	};
 };
 
 &i2c_a {

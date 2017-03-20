@@ -6,5 +6,13 @@ config ODROID_USBIO_SENSOR
 	default	n
 	help
 	    Enable USBIO Board + Accelermeter Sensor Board driver.
+
+config ODROID_ENCODER_SWITCH
+    tristate "Enable the Encoder(rotary) switch Driver"
+	depends on ARCH_MESON64_ODROIDC2
+	default	n
+	help
+	    Enable Encoder(rotary) switch driver.
+
 endmenu
 
