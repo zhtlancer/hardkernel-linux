@@ -202,7 +202,7 @@ enum DRIVER_STATE {
 	DRV_ERR_PUSH_BT_IRQ,
 };
 
-#define	DRV_ERROR_STATE(x, y)	(x |= (1 << y)i)
+#define	DRV_ERROR_STATE(x, y)	(x |= (1 << y))
 
 struct encoder {
 	struct miscdevice	misc;
