@@ -1545,6 +1545,66 @@ static const struct hid_device_id mt_devices[] = {
 		HID_USB_DEVICE(USB_VENDOR_ID_INFOCUS,
 				USB_DEVICE_ID_INFOCUS_INF4030P) },
 
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC2575,
+				USB_DEVICE_ID_VIEWSONIC_TD2740) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC2575,
+				USB_DEVICE_ID_VIEWSONIC_TD2430) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC1BFD,
+				USB_DEVICE_ID_VIEWSONIC_TD2210V1) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC28C8,
+				USB_DEVICE_ID_VIEWSONIC_TD2210V2) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC0FB8,
+				USB_DEVICE_ID_VIEWSONIC_TD2421) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC1FF7,
+				USB_DEVICE_ID_VIEWSONIC_CDE7061T) },
+
+/* ViewSonic HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_VIEWSONIC13FF,
+				USB_DEVICE_ID_VIEWSONIC_EP5502T) },
+
+/* Greatouch HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_GREATOUCH,
+				USB_DEVICE_ID_GREATOUCH_MT_8K) },
+
+/* WAVESHARE HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_WAVESHARE,
+				USB_DEVICE_ID_WAVESHARE_10_1) },
+
+/* SAMSUNG HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG_2619,
+				USB_DEVICE_ID_LH65DMEXTBC) },
+
+/* SAMSUNG HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_SAMSUNG_04E8,
+				USB_DEVICE_ID_LH55PMFXTBC) },
+
+/* Planar PS5562T HDMI capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_PLANAR_2309,
+				USB_DEVICE_ID_PLANAR_PS5562T_TOUCH) },
+
 	/* Generic MT device */
 	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_MULTITOUCH, HID_ANY_ID, HID_ANY_ID) },
 	{ }
