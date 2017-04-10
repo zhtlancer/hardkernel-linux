@@ -1006,6 +1006,7 @@
     };
 
     gpio_keys_polled {
+        status = "disabled";
         compatible =
             "gpio-keys-polled";
         #address-clls = <1>;
