@@ -1124,4 +1124,8 @@
 #define USB_VENDOR_ID_CJTOUCH	0x24b8
 #define USB_DEVICE_ID_CCA_UL01_DM	0x0001
 
+/* NEC HDMI capacitive Screen */
+#define USB_VENDOR_ID_NEC_1926	0x1926
+#define USB_DEVICE_ID_V652_TM	0x036A
+
 #endif
