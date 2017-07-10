@@ -354,7 +354,12 @@ static irqreturn_t encoder_port_irq(int irq, void *handle)
 static irqreturn_t encoder_push_bt_irq(int irq, void *handle)
 {
 	struct encoder *encoder = handle;
-	int state;
+	static int state = -1;
+
+	if (state == -1) {
+		state = !!gpio_get_value(encoder->cfg.push_bt.gpio);
+		return	IRQ_HANDLED;
+	}
 
 	state = !!gpio_get_value(encoder->cfg.push_bt.gpio);
 
