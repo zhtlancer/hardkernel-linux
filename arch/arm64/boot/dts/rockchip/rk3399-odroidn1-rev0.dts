@@ -86,19 +86,19 @@
 };
 
 &isp0 {
-	status = "okay";
+	status = "disabled";
 };
 
 &isp1 {
-	status = "okay";
+	status = "disabled";
 };
 
 &isp0_mmu {
-	status = "okay";
+	status = "disabled";
 };
 
 &isp1_mmu {
-	status = "okay";
+	status = "disabled";
 };
 
 &vopb {
