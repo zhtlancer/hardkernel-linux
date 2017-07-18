@@ -45,7 +45,7 @@
 #include "rk3399-opp.dtsi"
 
 / {
-	compatible = "rockchip,rk3399-odroidn1", "rockchip,rk3399";
+	compatible = "rockchip,rk3399-odroidn1-rev0", "rockchip,rk3399";
 
 	backlight: backlight {
 		status = "disabled";
