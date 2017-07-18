@@ -570,7 +570,6 @@
 };
 
 &tcphy0 {
-	extcon = <&fusb0>;
 	status = "okay";
 };
 
