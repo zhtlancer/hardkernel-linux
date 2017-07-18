@@ -66,11 +66,6 @@
 	};
 };
 
-&backlight {
-	status = "okay";
-	enable-gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
-};
-
 &hdmi {
 	status = "okay";
 	rockchip,phy-table =
@@ -168,12 +163,6 @@
 };
 
 &pinctrl {
-	lcd-panel {
-		lcd_panel_reset: lcd-panel-reset {
-			rockchip,pins = <4 30 RK_FUNC_GPIO &pcfg_pull_up>;
-		};
-	};
-
 	hdmiin {
 		hdmiin_gpios: hdmiin_gpios {
 		rockchip,pins =
