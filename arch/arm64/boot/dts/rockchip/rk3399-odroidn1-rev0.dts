@@ -123,6 +123,10 @@
 	status = "okay";
 };
 
+&rk_key {
+	status = "disabled";
+};
+
 &pinctrl {
 	hdmiin {
 		hdmiin_gpios: hdmiin_gpios {
@@ -136,4 +140,3 @@
 		};
 	};
 };
-
