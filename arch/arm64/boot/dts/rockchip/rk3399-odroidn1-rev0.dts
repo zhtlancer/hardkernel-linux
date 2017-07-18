@@ -57,13 +57,6 @@
 	rt5651-sound {
 		status = "disabled";
 	};
-
-	hdmiin-sound {
-		compatible = "rockchip,rockchip-rt5651-tc358749x-sound";
-		rockchip,cpu = <&i2s0>;
-		rockchip,codec = <&rt5651 &rt5651 &tc358749x>;
-		status = "okay";
-	};
 };
 
 &hdmi {
@@ -74,10 +67,6 @@
 		<297000000 0x8039 0x0005 0x028d>,
 		<594000000 0x8039 0x0000 0x019d>,
 		<000000000 0x0000 0x0000 0x0000>;
-};
-
-&hdmi_in_vopb {
-	status = "disabled";
 };
 
 &route_hdmi {
@@ -94,24 +83,6 @@
 
 &i2s2 {
 	status = "okay";
-};
-
-&i2c1 {
-	status = "okay";
-	tc358749x: tc358749x@0f {
-		compatible = "toshiba,tc358749x";
-		reg = <0x0f>;
-		power-gpios = <&gpio2 6 GPIO_ACTIVE_HIGH>;
-		power18-gpios = <&gpio2 9 GPIO_ACTIVE_HIGH>;
-		power33-gpios = <&gpio2 5 GPIO_ACTIVE_HIGH>;
-		csi-ctl-gpios = <&gpio2 10 GPIO_ACTIVE_HIGH>;
-		stanby-gpios = <&gpio2 8 GPIO_ACTIVE_HIGH>;
-		reset-gpios = <&gpio2 7 GPIO_ACTIVE_HIGH>;
-		int-gpios = <&gpio2 12 GPIO_ACTIVE_HIGH>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&hdmiin_gpios>;
-		status = "okay";
-	};
 };
 
 &isp0 {
