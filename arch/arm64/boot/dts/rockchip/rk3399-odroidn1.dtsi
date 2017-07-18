@@ -110,6 +110,24 @@
 		regulator-always-on;
 	};
 
+	vcc5v0_host31: vcc5v0-host31-regulator {
+		compatible = "regulator-fixed";
+		enable-active-high;
+		gpio = <&gpio0 12 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&host31_vbus_drv>;
+		regulator-name = "vcc5v0_host31";
+	};
+
+	vcc5v0_host32: vcc5v0-host32-regulator {
+		compatible = "regulator-fixed";
+		enable-active-high;
+		gpio = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&host32_vbus_drv>;
+		regulator-name = "vcc5v0_host32";
+	};
+
 	vcc5v0_sys: vcc5v0-sys {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc5v0_sys";
@@ -505,7 +523,6 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&fusb0_int>;
 		int-n-gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
-		vbus-5v-gpios = <&gpio2 0 GPIO_ACTIVE_HIGH>;
 		status = "okay";
 	};
 };
@@ -627,9 +644,9 @@
 
 &u2phy0 {
 	status = "okay";
-	extcon = <&fusb0>;
 
 	u2phy0_otg: otg-port {
+		phy-supply = <&vcc5v0_host31>;
 		status = "okay";
 	};
 
@@ -643,6 +660,7 @@
 	status = "okay";
 
 	u2phy1_otg: otg-port {
+		phy-supply = <&vcc5v0_host32>;
 		status = "okay";
 	};
 
@@ -658,7 +676,6 @@
 
 &usbdrd3_0 {
 	status = "okay";
-	extcon = <&fusb0>;
 };
 
 &usbdrd3_1 {
@@ -667,6 +684,7 @@
 
 &usbdrd_dwc3_0 {
 	status = "okay";
+	dr_mode = "host";
 };
 
 &usbdrd_dwc3_1 {
@@ -707,6 +725,16 @@
 		host_vbus_drv: host-vbus-drv {
 			rockchip,pins =
 				<4 25 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+
+		host31_vbus_drv: host31-vbus-drv {
+			rockchip,pins =
+				<0 12 RK_FUNC_GPIO &pcfg_pull_none>;
+		};
+
+		host32_vbus_drv: host32-vbus-drv {
+			rockchip,pins =
+				<0 13 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
