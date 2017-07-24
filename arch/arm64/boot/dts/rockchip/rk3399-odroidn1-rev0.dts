@@ -123,6 +123,10 @@
 	status = "okay";
 };
 
+&usbdrd_dwc3_0 {
+	dr_mode = "host";
+};
+
 &rk_key {
 	status = "disabled";
 };
