@@ -458,6 +458,10 @@ static const struct reg_s tvregs_vesa_3440x1440_enc[] = {
 	{MREG_END_MARKER,            0      }
 };
 
+static const struct reg_s tvregs_custombuilt_enc[] = {
+	{MREG_END_MARKER,            0      }
+};
+
 /* Using tvmode as index */
 static struct tvregs_set_t tvregsTab[] = {
 	{TVMODE_480I, tvregs_480i_clk, tvregs_480i_enc},
@@ -498,6 +502,7 @@ static struct tvregs_set_t tvregsTab[] = {
 	{TVMODE_VGA, tvregs_vga_640x480_clk, tvregs_vga_640x480_enc},
 	{TVMODE_SVGA, tvregs_svga_800x600_clk, tvregs_svga_800x600_enc},
 	{TVMODE_XGA, tvregs_xga_1024x768_clk, tvregs_xga_1024x768_enc},
+	{TVMODE_CUSTOMBUILT, NULL, tvregs_custombuilt_enc},
 };
 
 static const struct tvinfo_s tvinfoTab[] = {
@@ -727,6 +732,12 @@ static const struct tvinfo_s tvinfoTab[] = {
 		.xres = 1024,
 		.yres = 768,
 		.id = "xga"
+	},
+	{
+		.tvmode = TVMODE_CUSTOMBUILT,
+		.xres = 1920,
+		.yres = 1080,
+		.id = "custombuilt"
 	},
 };
 

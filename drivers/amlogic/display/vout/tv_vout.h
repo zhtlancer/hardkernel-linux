@@ -1219,7 +1219,7 @@ static struct vinfo_s tv_info[] = {
 	},
 	{
 		.name              = "custombuilt",
-		.mode              = TVMODE_CUSTOMBUILT,
+		.mode              = VMODE_CUSTOMBUILT,
 		.width             = 0,
 		.height            = 0,
 		.field_height      = 0,
