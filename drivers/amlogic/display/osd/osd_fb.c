@@ -463,7 +463,7 @@ static int osd_set_res_bootargs(int index, enum vmode_e mode)
 		fb_def_var[index].yres_virtual = 3240;
 		fb_def_var[index].bits_per_pixel = 32;
 		break;
-	case TVMODE_CUSTOMBUILT:
+	case VMODE_CUSTOMBUILT:
 		fb_def_var[index].xres = custom_timing->h_active;
 		fb_def_var[index].yres = custom_timing->v_active;
 		fb_def_var[index].xres_virtual = custom_timing->h_active;
