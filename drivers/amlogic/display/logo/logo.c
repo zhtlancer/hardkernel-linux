@@ -228,7 +228,7 @@ static int refresh_mode_and_logo(bool first)
 		}
 	}
 
-	if (cur_mode != last_mode) {
+	if ((cur_mode != last_mode) && (cur_mode != VMODE_CUSTOMBUILT)) {
 		pr_info("mode chang\n");
 		osd_enable_hw(logo_info.index, 0);
 		if (!first) {
