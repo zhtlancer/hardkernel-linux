@@ -53,10 +53,6 @@
 	test-power {
 		status = "okay";
 	};
-
-	rt5651-sound {
-		status = "disabled";
-	};
 };
 
 &hdmi {
@@ -70,10 +66,6 @@
 };
 
 &route_hdmi {
-	status = "okay";
-};
-
-&rt5651 {
 	status = "okay";
 };
 
