@@ -741,18 +741,59 @@
 			thermal-sensors = <&tsadc 0>;
 
 			trips {
-				cpu_alert1: cpu-alert1 {
+				/* fan active thermal point */
+				cpu_alert1: trip-point@1 {
+					temperature = <40000>; /* millicelsius */
+					hysteresis = <2000>; /* millicelsius */
+					type = "active";
+				};
+				cpu_alert2: trip-point@2 {
 					temperature = <50000>; /* millicelsius */
 					hysteresis = <2000>; /* millicelsius */
-					type = "passive";
+					type = "active";
 				};
-				cpu_alert2: cpu-alert2 {
+				cpu_alert3: trip-point@3 {
 					temperature = <60000>; /* millicelsius */
+					hysteresis = <2000>; /* millicelsius */
+					type = "active";
+				};
+
+				/* big cluster thermal point */
+				cpu_alert4: trip-point@4 {
+					temperature = <70000>; /* millicelsius */
 					hysteresis = <2000>; /* millicelsius */
 					type = "passive";
 				};
-				cpu_alert3: cpu-alert3 {
-					temperature = <70000>; /* millicelsius */
+				cpu_alert5: trip-point@5 {
+					temperature = <72000>; /* millicelsius */
+					hysteresis = <2000>; /* millicelsius */
+					type = "passive";
+				};
+				cpu_alert6: trip-point@6 {
+					temperature = <75000>; /* millicelsius */
+					hysteresis = <2000>; /* millicelsius */
+					type = "passive";
+				};
+				cpu_alert7: trip-point@7 {
+					temperature = <78000>; /* millicelsius */
+					hysteresis = <2000>; /* millicelsius */
+					type = "passive";
+				};
+
+				/* little cluster thermal point */
+				cpu_alert8: trip-point@8 {
+					temperature = <80000>; /* millicelsius */
+					hysteresis = <2000>; /* millicelsius */
+					type = "passive";
+				};
+				cpu_alert9: trip-point@9 {
+					temperature = <82000>; /* millicelsius */
+					hysteresis = <2000>; /* millicelsius */
+					type = "passive";
+				};
+
+				cpu_alert10: trip-point@10 {
+					temperature = <85000>; /* millicelsius */
 					hysteresis = <2000>; /* millicelsius */
 					type = "passive";
 				};
@@ -764,20 +805,69 @@
 			};
 
 			cooling-maps {
-				map0 {
+				/* fan cooling map */
+				map1 {
 					trip = <&cpu_alert1>;
 					cooling-device =
 						<&fan0 0 1>;
 				};
-				map1 {
+				map2 {
 					trip = <&cpu_alert2>;
 					cooling-device =
 						<&fan0 1 2>;
 				};
-				map2 {
+				map3 {
 					trip = <&cpu_alert3>;
 					cooling-device =
 						<&fan0 2 3>;
+				};
+
+				/* cpu cooling map */
+				/* big cluster */
+				map4 {
+					trip = <&cpu_alert4>;
+					cooling-device =
+						<&cpu_b0 0 2>;
+					contribution = <4096>;
+				};
+				map5 {
+					trip = <&cpu_alert5>;
+					cooling-device =
+						<&cpu_b0 2 4>;
+					contribution = <4096>;
+				};
+				map6 {
+					trip = <&cpu_alert6>;
+					cooling-device =
+						<&cpu_b0 4 7>;
+					contribution = <4096>;
+				};
+				map7 {
+					trip = <&cpu_alert7>;
+					cooling-device =
+						<&cpu_b0 4 7>;
+					contribution = <4096>;
+				};
+
+				/* little cluster */
+				map8 {
+					trip = <&cpu_alert8>;
+					cooling-device =
+						<&cpu_l0 0 2>;
+					contribution = <1024>;
+				};
+				map9 {
+					trip = <&cpu_alert9>;
+					cooling-device =
+						<&cpu_l0 2 5>;
+					contribution = <1024>;
+				};
+
+				map10 {
+					trip = <&cpu_alert10>;
+					cooling-device =
+						<&gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <1024>;
 				};
 			};
 		};
