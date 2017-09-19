@@ -702,7 +702,6 @@
 	rockchip,wakeup-config = <
 		(0
 		| RKPM_GPIO_WKUP_EN
-		| RKPM_PWM_WKUP_EN
 		)
 		>;
 		rockchip,pwm-regulator-config = <
