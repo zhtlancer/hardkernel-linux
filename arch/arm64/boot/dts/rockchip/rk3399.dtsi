@@ -743,57 +743,57 @@
 			trips {
 				/* fan active thermal point */
 				cpu_alert1: trip-point@1 {
-					temperature = <40000>; /* millicelsius */
-					hysteresis = <2000>; /* millicelsius */
+					temperature = <50000>; /* millicelsius */
+					hysteresis = <10000>; /* millicelsius */
 					type = "active";
 				};
 				cpu_alert2: trip-point@2 {
-					temperature = <50000>; /* millicelsius */
-					hysteresis = <2000>; /* millicelsius */
+					temperature = <55000>; /* millicelsius */
+					hysteresis = <10000>; /* millicelsius */
 					type = "active";
 				};
 				cpu_alert3: trip-point@3 {
 					temperature = <60000>; /* millicelsius */
-					hysteresis = <2000>; /* millicelsius */
+					hysteresis = <10000>; /* millicelsius */
 					type = "active";
 				};
 
 				/* big cluster thermal point */
 				cpu_alert4: trip-point@4 {
-					temperature = <70000>; /* millicelsius */
+					temperature = <80000>; /* millicelsius */
 					hysteresis = <2000>; /* millicelsius */
 					type = "passive";
 				};
 				cpu_alert5: trip-point@5 {
-					temperature = <72000>; /* millicelsius */
+					temperature = <82000>; /* millicelsius */
 					hysteresis = <2000>; /* millicelsius */
 					type = "passive";
 				};
 				cpu_alert6: trip-point@6 {
-					temperature = <75000>; /* millicelsius */
+					temperature = <85000>; /* millicelsius */
 					hysteresis = <2000>; /* millicelsius */
 					type = "passive";
 				};
 				cpu_alert7: trip-point@7 {
-					temperature = <78000>; /* millicelsius */
+					temperature = <88000>; /* millicelsius */
 					hysteresis = <2000>; /* millicelsius */
 					type = "passive";
 				};
 
 				/* little cluster thermal point */
 				cpu_alert8: trip-point@8 {
-					temperature = <80000>; /* millicelsius */
+					temperature = <90000>; /* millicelsius */
 					hysteresis = <2000>; /* millicelsius */
 					type = "passive";
 				};
 				cpu_alert9: trip-point@9 {
-					temperature = <82000>; /* millicelsius */
+					temperature = <92000>; /* millicelsius */
 					hysteresis = <2000>; /* millicelsius */
 					type = "passive";
 				};
 
 				cpu_alert10: trip-point@10 {
-					temperature = <85000>; /* millicelsius */
+					temperature = <95000>; /* millicelsius */
 					hysteresis = <2000>; /* millicelsius */
 					type = "passive";
 				};
