@@ -1100,4 +1100,16 @@
 /* Dell P2314T USB capacitive Screen */
 #define USB_VENDOR_ID_DELL	0x2149
 #define USB_DEVICE_ID_P2314T_TOUCH	0x2316
+
+/* DMeasyTouch USB capacitive Screen */
+#define USB_VENDOR_ID_DMEASY	0x7374
+#define USB_DEVICE_ID_DMEASY_TOUCH	0x1241
+
+/* ELO 1002L USB capacitive Screen */
+#define USB_VENDOR_ID_ELO_1002L	0x05E3
+#define USB_DEVICE_ID_ELO_1002L_TOUCH	0x0608
+
+/* LG 23ET63V USB capacitive Screen */
+#define USB_VENDOR_ID_LG_23ET63V	0x0457
+#define USB_DEVICE_ID_LG_23ET63V_TOUCH	0x1034
 #endif

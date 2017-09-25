@@ -1562,6 +1562,21 @@ static const struct hid_device_id mt_devices[] = {
 		HID_USB_DEVICE(USB_VENDOR_ID_DELL,
 				USB_DEVICE_ID_P2314T_TOUCH) },
 
+	 /* DMeasyTouch USB capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_DMEASY,
+				USB_DEVICE_ID_DMEASY_TOUCH) },
+
+	 /* ELO USB capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_ELO_1002L,
+				USB_DEVICE_ID_ELO_1002L_TOUCH) },
+
+	 /* LG 23ET63V USB capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(USB_VENDOR_ID_LG_23ET63V,
+				USB_DEVICE_ID_LG_23ET63V_TOUCH) },
+
 	/* Generic MT device */
 	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_MULTITOUCH, HID_ANY_ID, HID_ANY_ID) },
 
