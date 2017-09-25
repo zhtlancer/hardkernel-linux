@@ -95,7 +95,7 @@ static struct para_pair_s mode_infos[] = {
 	{"smpte24hz", VMODE_4K2K_SMPTE},
 	{"2160p50hz420", VMODE_4K2K_50HZ_Y420},
 	{"2160p60hz420", VMODE_4K2K_60HZ_Y420},
-	{"custombuilt", TVMODE_CUSTOMBUILT},
+	{"custombuilt", VMODE_CUSTOMBUILT},
 };
 
 struct logo_info_s {
