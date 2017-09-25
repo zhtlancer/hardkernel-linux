@@ -62,6 +62,20 @@
 		};
 	};
 
+	leds: gpio_leds {
+		compatible = "gpio-leds";
+
+		pinctrl-names = "led_pins";
+		pinctrl-0 = <&led_pins>;
+
+                /* Blue LED : GPIO4_D2 */
+                heartbeat {
+                        label = "blue:heartbeat";
+                        gpios = <&gpio4 26 GPIO_ACTIVE_HIGH>;
+                        linux,default-trigger = "heartbeat";
+                };
+	};
+
 	fan0: pwm-fan {
 		compatible = "pwm-fan";
 		status = "okay";
@@ -730,6 +744,12 @@
 	keys {
 		pwr_key: pwr-key {
 			rockchip,pins = <0 5 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+
+	leds {
+		led_pins: led-pins {
+			rockchip,pins = <4 26 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 };
