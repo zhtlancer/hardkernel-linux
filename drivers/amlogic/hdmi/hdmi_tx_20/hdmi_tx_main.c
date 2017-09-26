@@ -529,7 +529,12 @@ static int set_disp_mode_auto(void)
 			hdmitx_device.HWOp.CntlConfig(&hdmitx_device,
 				CONF_HDMI_DVI_MODE, DVI_MODE);
 			hdmi_print(IMP, SYS "change to DVI mode\n");
+		} else if (hdmitx_device.RXCap.IEEEOUI == 0x000c03) {
+			hdmitx_device.HWOp.CntlConfig(&hdmitx_device,
+				CONF_HDMI_DVI_MODE, HDMI_MODE);
+			hdmi_print(IMP, SYS "change to HDMI mode\n");
 		}
+
 		hdmitx_device.cur_VIC = vic;
 		hdmitx_device.output_blank_flag = 1;
 		if (hdmitx_device.hdcpop.hdcp14_en)
