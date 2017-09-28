@@ -136,6 +136,10 @@ enum {
 module_param(perdev_minors, int, 0444);
 MODULE_PARM_DESC(perdev_minors, "Minors numbers to allocate per device");
 
+#if defined(CONFIG_ODROID_N1_SYSFS)
+int board_boot_from_emmc(void);
+#endif
+
 static inline int mmc_blk_part_switch(struct mmc_card *card,
 				      struct mmc_blk_data *md);
 static int get_card_status(struct mmc_card *card, u32 *status, int retries);
@@ -2479,12 +2483,21 @@ static struct mmc_blk_data *mmc_blk_alloc_req(struct mmc_card *card,
 	 * partitions, devidx will not coincide with a per-physical card
 	 * index anymore so we keep track of a name index.
 	 */
+#if defined(CONFIG_ODROID_N1_SYSFS)
+	if (strncmp(dev_name(&card->host->class_dev), "sd", 2) == 0) {
+		md->name_idx = board_boot_from_emmc() ? 1 : 0;
+	} else if (strncmp(dev_name(&card->host->class_dev), "emmc", 4) == 0) {
+		md->name_idx = board_boot_from_emmc() ? 0 : 1;
+	}
+
+#else
 	if (!subname) {
 		md->name_idx = find_first_zero_bit(name_use, max_devices);
 		__set_bit(md->name_idx, name_use);
 	} else
 		md->name_idx = ((struct mmc_blk_data *)
 				dev_to_disk(parent)->private_data)->name_idx;
+#endif
 
 	md->area_type = area_type;
 
