@@ -1,0 +1,7 @@
+if ARCH_ROCKCHIP
+config ODROIDN1_SYSFS
+	bool "Hardkernel ODROID-N1 sysfs Support"
+	default y
+	help
+	   Hardkernel sysfs support based on RK3399
+endif

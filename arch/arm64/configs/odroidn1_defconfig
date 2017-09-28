@@ -4321,6 +4321,11 @@ CONFIG_RK_NAND=y
 CONFIG_RK_HEADSET=y
 
 #
+# Hardkernel features
+#
+CONFIG_ODROIDN1_SYSFS=y
+
+#
 # Firmware Drivers
 #
 CONFIG_ARM_PSCI_FW=y

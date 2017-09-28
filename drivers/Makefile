@@ -175,3 +175,6 @@ obj-$(CONFIG_NVMEM)		+= nvmem/
 obj-$(CONFIG_FPGA)		+= fpga/
 obj-$(CONFIG_RK_NAND)		+= rk_nand/
 obj-$(CONFIG_RK_HEADSET)	+= headset_observe/
+
+# misc
+obj-$(CONFIG_ODROIDN1_SYSFS)	+= hardkernel/
