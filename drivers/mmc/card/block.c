@@ -136,7 +136,7 @@ enum {
 module_param(perdev_minors, int, 0444);
 MODULE_PARM_DESC(perdev_minors, "Minors numbers to allocate per device");
 
-#if defined(CONFIG_ODROID_N1_SYSFS)
+#if defined(CONFIG_PLAT_RK3399_ODROIDN1)
 int board_boot_from_emmc(void);
 #endif
 
@@ -2483,7 +2483,7 @@ static struct mmc_blk_data *mmc_blk_alloc_req(struct mmc_card *card,
 	 * partitions, devidx will not coincide with a per-physical card
 	 * index anymore so we keep track of a name index.
 	 */
-#if defined(CONFIG_ODROID_N1_SYSFS)
+#if defined(CONFIG_PLAT_RK3399_ODROIDN1)
 	if (strncmp(dev_name(&card->host->class_dev), "sd", 2) == 0) {
 		md->name_idx = board_boot_from_emmc() ? 1 : 0;
 	} else if (strncmp(dev_name(&card->host->class_dev), "emmc", 4) == 0) {
