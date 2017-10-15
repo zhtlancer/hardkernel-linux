@@ -153,10 +153,14 @@ void machine_restart(char *cmd)
 		efi_reboot(reboot_mode, NULL);
 
 	/* Now call the architecture specific reboot code. */
+#if !defined(CONFIG_PLAT_RK3399_ODROIDN1)
 	if (arm_pm_restart)
 		arm_pm_restart(reboot_mode, cmd);
 	else
 		do_kernel_restart(cmd);
+#else
+		do_kernel_restart(cmd);
+#endif
 
 	/*
 	 * Whoops - the architecture was unable to reboot.
