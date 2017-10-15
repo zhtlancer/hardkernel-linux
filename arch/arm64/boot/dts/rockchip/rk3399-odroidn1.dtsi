@@ -186,6 +186,13 @@
 		status = "okay";
 		compatible = "odroid-sysfs";
 	};
+
+	gpio-restart {
+		compatible = "gpio-restart";
+		gpios = <&gpio1 6 GPIO_ACTIVE_HIGH>;
+		open-source;
+		priority = <255>; /* Highest priority */
+	};
 };
 
 &cpu_l0 {
