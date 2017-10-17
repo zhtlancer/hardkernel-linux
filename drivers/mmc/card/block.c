@@ -2484,10 +2484,12 @@ static struct mmc_blk_data *mmc_blk_alloc_req(struct mmc_card *card,
 	 * index anymore so we keep track of a name index.
 	 */
 #if defined(CONFIG_PLAT_RK3399_ODROIDN1)
-	if (strncmp(dev_name(&card->host->class_dev), "sd", 2) == 0) {
+	if (strncmp(dev_name(&card->host->class_dev), "mmc0", 4) == 0) {
 		md->name_idx = board_boot_from_emmc() ? 1 : 0;
-	} else if (strncmp(dev_name(&card->host->class_dev), "emmc", 4) == 0) {
+		__set_bit(md->name_idx, name_use);
+	} else if (strncmp(dev_name(&card->host->class_dev), "mmc1", 4) == 0) {
 		md->name_idx = board_boot_from_emmc() ? 0 : 1;
+		__set_bit(md->name_idx, name_use);
 	}
 
 #else
