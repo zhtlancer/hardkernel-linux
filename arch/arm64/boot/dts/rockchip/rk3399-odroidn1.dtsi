@@ -253,7 +253,7 @@
 	vdd_cpu_b: syr827@40 {
 		compatible = "silergy,syr827";
 		reg = <0x40>;
-		vin-supply = <&vcc5v0_sys>;
+		vin-supply = <&vcc3v3_sys>;
 		regulator-compatible = "fan53555-reg";
 		regulator-name = "vdd_cpu_b";
 		regulator-min-microvolt = <712500>;
@@ -271,7 +271,7 @@
 	vdd_gpu: syr828@41 {
 		compatible = "silergy,syr828";
 		reg = <0x41>;
-		vin-supply = <&vcc5v0_sys>;
+		vin-supply = <&vcc3v3_sys>;
 		regulator-compatible = "fan53555-reg";
 		regulator-name = "vdd_gpu";
 		regulator-min-microvolt = <712500>;
