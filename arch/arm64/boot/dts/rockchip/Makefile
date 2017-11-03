@@ -1,3 +1,6 @@
+ifneq ($(CONFIG_PLAT_RK3399_ODROIDN1),)
+dtb-$(CONFIG_PLAT_RK3399_ODROIDN1) += rk3399-odroidn1-rev0.dtb
+else
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3328-evb.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3366-fpga.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3366-tb.dtb
@@ -41,6 +44,7 @@ dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3399-sapphire-excavator-edp.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3399-sapphire-excavator-linux.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3399-tve1205g.dtb
 dtb-$(CONFIG_ARCH_ROCKCHIP) += rk3399-vr-android.dtb
+endif
 
 always		:= $(dtb-y)
 subdir-y	:= $(dts-dirs)
