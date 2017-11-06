@@ -531,6 +531,10 @@
 	status = "okay";
 };
 
+&pwm1 {
+	status = "okay";
+};
+
 &pwm2 {
 	status = "okay";
 };
