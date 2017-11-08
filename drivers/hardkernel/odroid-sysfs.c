@@ -29,6 +29,9 @@
 #include <linux/irq.h>
 #include <linux/sysfs.h>
 #include <linux/io.h>
+#if defined(CONFIG_HAS_WAKELOCK)
+#include <linux/wakelock.h>
+#endif
 #include <asm/setup.h>
 
 MODULE_AUTHOR("Hardkernel Co,.Ltd");
@@ -36,6 +39,9 @@ MODULE_DESCRIPTION("SYSFS driver for ODROID hardware");
 MODULE_LICENSE("GPL");
 
 static int boot_mode;
+#if defined(CONFIG_HAS_WAKELOCK)
+static struct wake_lock	sleep_wake_lock;
+#endif
 
 /*
  * Discover the boot device within MicroSD or eMMC
@@ -114,11 +120,17 @@ static int odroid_sysfs_probe(struct platform_device *pdev)
 	if (pdev->dev.of_node)
 		node = pdev->dev.of_node;
 #endif
+#if defined(CONFIG_HAS_WAKELOCK)
+		wake_lock(&sleep_wake_lock);
+#endif
 	return 0;
 }
 
 static  int odroid_sysfs_remove(struct platform_device *pdev)
 {
+#if defined(CONFIG_HAS_WAKELOCK)
+	wake_unlock(&sleep_wake_lock);
+#endif
 	return 0;
 }
 
@@ -164,11 +176,20 @@ static int __init odroid_sysfs_init(void)
 	if (0 > error)
 		return error;
 
+#if defined(CONFIG_HAS_WAKELOCK)
+	pr_info(KERN_INFO "%s(%d) : Sleep Disable Flag SET!!(Wake_lock_init)\n",
+			__func__, __LINE__);
+	wake_lock_init(&sleep_wake_lock, WAKE_LOCK_SUSPEND, "sleep_wake_lock");
+	pr_info(KERN_INFO "%s(%d) : Sleep Enable !!\n", __func__, __LINE__);
+#endif
 	return platform_driver_register(&odroid_sysfs_driver);
 }
 
 static void __exit odroid_sysfs_exit(void)
 {
+#if defined(CONFIG_HAS_WAKELOCK)
+	wake_lock_destroy(&sleep_wake_lock);
+#endif
 	platform_driver_unregister(&odroid_sysfs_driver);
 	class_unregister(&odroid_class);
 }
