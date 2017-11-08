@@ -19,6 +19,15 @@
 #include <linux/slab.h>
 #include <asm/system_info.h>
 
+#if defined(CONFIG_PLAT_RK3399_ODROIDN1)
+unsigned char cpuid[16];
+void get_rockchip_cpuid(unsigned char *buf)
+{
+	memcpy(buf, cpuid, 16);
+}
+EXPORT_SYMBOL(get_rockchip_cpuid);
+#endif
+
 static int rockchip_cpuinfo_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -42,6 +51,10 @@ static int rockchip_cpuinfo_probe(struct platform_device *pdev)
 		dev_err(dev, "invalid id len: %zu\n", len);
 		return -EINVAL;
 	}
+
+#if defined(CONFIG_PLAT_RK3399_ODROIDN1)
+	memcpy(cpuid, efuse_buf, 16);
+#endif
 
 	for (i = 0; i < 8; i++) {
 		buf[i] = efuse_buf[1 + (i << 1)];
