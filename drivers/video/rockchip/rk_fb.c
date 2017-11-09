@@ -3995,7 +3995,7 @@ static int rk_fb_alloc_buffer(struct fb_info *fbi)
 								 fbi->fix.id);
 			if (win_id_prmry < 0)
 				return -ENODEV;
-			else
+			else {
 				fb_par->ion_hdl =
 				dev_drv_prmry->win[win_id_prmry]->area[0].ion_hdl;
 				fbi->screen_base =
@@ -4019,6 +4019,7 @@ static int rk_fb_alloc_buffer(struct fb_info *fbi)
 				}
 				fbi->fix.smem_start = phy_addr;
 				fbi->fix.smem_len = len;
+			}
 #else
 			fb_mem_virt = dma_alloc_writecombine(fbi->dev,
 							     fb_mem_size,

@@ -216,9 +216,10 @@ static int sensor_convert_data(struct i2c_client *client, char high_byte, char l
 			result = ((int)high_byte << 8) | (int)low_byte;
 			if (result < LSM303D_BOUNDARY)
        			result = result* LSM303D_GRAVITY_STEP;
-    		else
+    		else {
        			result = ~( ((~result & (0x7fff>>(16-LSM303D_PRECISION)) ) + 1)
 			   			* LSM303D_GRAVITY_STEP) + 1;
+            }
 			break;
 
 		default:

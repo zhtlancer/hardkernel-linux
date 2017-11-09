@@ -189,9 +189,10 @@ static int sensor_convert_data(struct i2c_client *client, char high_byte, char l
 			result = ((int)high_byte << 8) | (int)low_byte;
 			if (result < LIS3DH_BOUNDARY)
        			result = result* LIS3DH_GRAVITY_STEP;
-    		else
+    		else {
        			result = ~( ((~result & (0x7fff>>(16-LIS3DH_PRECISION)) ) + 1) 
 			   			* LIS3DH_GRAVITY_STEP) + 1;
+			}
 			break;
 
 		default:
