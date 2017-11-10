@@ -292,7 +292,7 @@
 		interrupt-parent = <&gpio1>;
 		interrupts = <23 IRQ_TYPE_LEVEL_LOW>;
 		pinctrl-names = "default";
-		pinctrl-0 = <&pmic_int_l &pmic_dvs2>;
+		pinctrl-0 = <&pmic_int_l>;
 		rockchip,system-power-controller;
 		wakeup-source;
 		#clock-cells = <1>;
@@ -581,62 +581,61 @@
 
 	trips {
 		/* fan active thermal point */
-cpu_alert0: trip-point@0 {
+		cpu_alert0: trip-point@0 {
 				temperature = <50000>; /* millicelsius */
 				hysteresis = <10000>; /* millicelsius */
 				type = "active";
-			};
-cpu_alert1: trip-point@1 {
+		};
+		cpu_alert1: trip-point@1 {
 				temperature = <55000>; /* millicelsius */
 				hysteresis = <10000>; /* millicelsius */
 				type = "active";
-			};
-cpu_alert2: trip-point@2 {
+		};
+		cpu_alert2: trip-point@2 {
 				temperature = <60000>; /* millicelsius */
 				hysteresis = <10000>; /* millicelsius */
 				type = "active";
-			};
+		};
 
-			/* big cluster thermal point */
-cpu_alert3: trip-point@3 {
+		/* big cluster thermal point */
+		cpu_alert3: trip-point@3 {
 				temperature = <80000>; /* millicelsius */
 				hysteresis = <2000>; /* millicelsius */
 				type = "passive";
-			};
-cpu_alert4: trip-point@4 {
+		};
+		cpu_alert4: trip-point@4 {
 				temperature = <82000>; /* millicelsius */
 				hysteresis = <2000>; /* millicelsius */
 				type = "passive";
-			};
-cpu_alert5: trip-point@5 {
+		};
+		cpu_alert5: trip-point@5 {
 				temperature = <85000>; /* millicelsius */
 				hysteresis = <2000>; /* millicelsius */
 				type = "passive";
-			};
-cpu_alert6: trip-point@6 {
+		};
+		cpu_alert6: trip-point@6 {
 				temperature = <88000>; /* millicelsius */
 				hysteresis = <2000>; /* millicelsius */
 				type = "passive";
-			};
+		};
 
-			/* little cluster thermal point */
-cpu_alert7: trip-point@7 {
+		/* little cluster thermal point */
+		cpu_alert7: trip-point@7 {
 				temperature = <90000>; /* millicelsius */
 				hysteresis = <2000>; /* millicelsius */
 				type = "passive";
-			};
-cpu_alert8: trip-point@8 {
+		};
+		cpu_alert8: trip-point@8 {
 				temperature = <92000>; /* millicelsius */
 				hysteresis = <2000>; /* millicelsius */
 				type = "passive";
-			};
-
-cpu_alert9: trip-point@9 {
+		};
+		cpu_alert9: trip-point@9 {
 				 temperature = <95000>; /* millicelsius */
 				 hysteresis = <2000>; /* millicelsius */
 				 type = "passive";
-			 };
-soc_crit: soc-crit {
+		 };
+		soc_crit: soc-crit {
 			  temperature = <120000>; /* millicelsius */
 			  hysteresis = <2000>; /* millicelsius */
 			  type = "critical";
@@ -791,11 +790,6 @@ soc_crit: soc-crit {
 			rockchip,pins =
 				<1 23 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
-
-		pmic_dvs2: pmic-dvs2 {
-			rockchip,pins =
-				<1 18 RK_FUNC_GPIO &pcfg_pull_down>;
-		};
 	};
 
 	usb2 {
@@ -815,7 +809,6 @@ soc_crit: soc-crit {
 		};
 	};
 };
-
 
 &spdif {
 	status = "disabled";
@@ -855,12 +848,12 @@ soc_crit: soc-crit {
 		| RKPM_GPIO_WKUP_EN
 		)
 		>;
-		rockchip,pwm-regulator-config = <
+	rockchip,pwm-regulator-config = <
 		(0
 		| PWM2_REGULATOR_EN
 		)
 		>;
-		rockchip,power-ctrl =
+	rockchip,power-ctrl =
 		<&gpio1 17 GPIO_ACTIVE_HIGH>,
 		<&gpio1 14 GPIO_ACTIVE_HIGH>;
 };
