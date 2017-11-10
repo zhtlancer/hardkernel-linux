@@ -474,15 +474,6 @@
 	status = "okay";
 	i2c-scl-rising-time-ns = <475>;
 	i2c-scl-falling-time-ns = <26>;
-
-	fusb0: fusb30x@22 {
-		compatible = "fairchild,fusb302";
-		reg = <0x22>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&fusb0_int>;
-		int-n-gpios = <&gpio1 2 GPIO_ACTIVE_HIGH>;
-		status = "okay";
-	};
 };
 
 &i2s0 {
@@ -821,12 +812,6 @@ soc_crit: soc-crit {
 		host32_vbus_drv: host32-vbus-drv {
 			rockchip,pins =
 				<0 13 RK_FUNC_GPIO &pcfg_pull_none>;
-		};
-	};
-
-	fusb30x {
-		fusb0_int: fusb0-int {
-			rockchip,pins = <1 2 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 	};
 };
