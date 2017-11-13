@@ -47,7 +47,7 @@
 #include "rk3399-vop-clk-set.dtsi"
 
 / {
-	model = "Rockchip RK3399 ODROID-N1 Rev0.1 HW";
+	model = "ODROID-N1";
 	compatible = "rockchip,android", "rockchip,rk3399-odroidn1-rev0", "rockchip,rk3399";
 
 	test-power {
