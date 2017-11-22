@@ -48,6 +48,14 @@
 #define XVYCC444		4
 #define YCBCR420		5
 
+#if defined(CONFIG_PLAT_RK3399_ODROIDN1)
+#define VOUT_MODE_UNKNOWN	0x0
+#define VOUT_MODE_HDMI		0x1
+#define VOUT_MODE_DVI		0x2
+
+static int vout_mode;
+#endif
+
 enum hdmi_datamap {
 	RGB444_8B = 0x01,
 	RGB444_10B = 0x03,
@@ -1924,6 +1932,18 @@ static void dw_hdmi_update_power(struct dw_hdmi *hdmi)
 {
 	int force = hdmi->force;
 
+#if defined(CONFIG_PLAT_RK3399_ODROIDN1)
+	if ((vout_mode == VOUT_MODE_HDMI)
+		/* FIXME : default vout mode */
+		|| (vout_mode == VOUT_MODE_UNKNOWN)) {
+		hdmi->sink_is_hdmi = true;
+		hdmi->sink_has_audio = true;
+	} else {
+		hdmi->sink_is_hdmi = false;
+		hdmi->sink_has_audio = false;
+	}
+#endif
+
 	if (hdmi->disabled) {
 		force = DRM_FORCE_OFF;
 	} else if (force == DRM_FORCE_UNSPECIFIED) {
@@ -2422,6 +2442,21 @@ static void dw_hdmi_register_debugfs(struct device *dev, struct dw_hdmi *hdmi)
 	debugfs_create_file("phy", 0400, debugfs_dir,
 			    hdmi, &dw_hdmi_phy_fops);
 }
+
+#if defined(CONFIG_PLAT_RK3399_ODROIDN1)
+static int __init setup_vout_mode(char *str)
+{
+	if (str && strncmp("hdmi", str, 4) == 0)
+		vout_mode = VOUT_MODE_HDMI;
+	else if (str && strncmp("dvi", str, 3) == 0)
+		vout_mode = VOUT_MODE_DVI;
+	else
+		vout_mode = VOUT_MODE_UNKNOWN;
+
+	return 1;
+}
+__setup("vout=", setup_vout_mode);
+#endif
 
 int dw_hdmi_bind(struct device *dev, struct device *master,
 		 void *data, struct drm_encoder *encoder,
