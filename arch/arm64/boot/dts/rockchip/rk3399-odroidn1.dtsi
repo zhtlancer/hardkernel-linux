@@ -532,7 +532,9 @@
 	bus-width = <8>;
 	mmc-hs400-1_8v;
 	supports-emmc;
+	disable-wp;
 	non-removable;
+	broken-cd;
 	keep-power-in-suspend;
 	mmc-hs400-enhanced-strobe;
 	status = "okay";
@@ -549,9 +551,13 @@
 	bus-width = <4>;
 	cap-mmc-highspeed;
 	cap-sd-highspeed;
+	supports-highspeed;
+	card-detect-delay = <800>;
 	disable-wp;
 	num-slots = <1>;
-	//sd-uhs-sdr104;
+	mmc-ddr-1_8v;
+	sd-uhs-sdr104;
+	sd-uhs-ddr50;
 	vqmmc-supply = <&vcc_sd>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&sdmmc_clk &sdmmc_cmd &sdmmc_cd &sdmmc_bus4>;
