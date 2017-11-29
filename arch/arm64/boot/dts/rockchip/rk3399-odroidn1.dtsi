@@ -534,9 +534,9 @@
 	supports-emmc;
 	disable-wp;
 	non-removable;
-	broken-cd;
 	keep-power-in-suspend;
 	mmc-hs400-enhanced-strobe;
+	cd-gpios = <&gpio0 6 GPIO_ACTIVE_LOW>;
 	status = "okay";
 };
 
