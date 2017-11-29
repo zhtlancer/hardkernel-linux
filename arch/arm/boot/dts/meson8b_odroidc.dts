@@ -344,6 +344,13 @@
             reg = <0x60>;
         };
 
+        /* Hardkernel I2C RTC */
+        pcf8563: pcf8563@51	{
+            compatible = "nxp,pcf8563";
+            reg = <0x51>;
+            #clock-cells = <0>;
+        };
+
     };
 
     i2c@c11087c0{
