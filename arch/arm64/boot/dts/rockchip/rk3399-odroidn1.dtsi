@@ -193,6 +193,13 @@
 		open-source;
 		priority = <255>; /* Highest priority */
 	};
+
+	gpiomem {
+		compatible = "rockchip,rock-gpiomem";
+		reg = <0 0xff720000 0 0x20000>,
+		      <0 0xff780000 0 0x18000>;
+		status = "okay";
+	};
 };
 
 &cpu_l0 {
