@@ -31,6 +31,8 @@
 	aliases {
 		serial0 = &uart_AO;
 		serial1 = &uart_A;
+		serial2 = &uart_B;
+		serial3 = &uart_C;
 	};
 
 	gpu_dvfs_tbl: gpu_dvfs_tbl {
@@ -452,6 +454,32 @@
 		pinctrl-0 = <&a_uart_pins>;
 	};
 
+	uart_B: serial@c11084dc {
+		compatible = "amlogic, meson-uart";
+		reg = <0x0 0xc11084dc 0x0 0x18>;
+		interrupts = <0 75 1>;
+		status = "okay";
+		clocks = <&clock CLK_XTAL>;
+		clock-names = "clk_uart";
+		fifosize = < 64 >;
+		pinctrl-names = "default";
+		pinctrl-0 = <&b_uart_pins>;
+		resets = <&clock GCLK_IDX_UART1>;
+	};
+
+	uart_C: serial@c1108700 {
+		compatible = "amlogic, meson-uart";
+		reg = <0x0 0xc1108700 0x0 0x14>;
+		interrupts = <0 93 1>;
+		status = "okay";
+		clocks = <&clock CLK_XTAL>;
+		clock-names = "clk_uart";
+		fifosize = < 64 >;
+		pinctrl-names = "default";
+		pinctrl-0 = <&c_uart_pins>;
+		resets = <&clock GCLK_IDX_UART2>;
+	};
+
 	canvas {
 		compatible = "amlogic, meson, canvas";
 		dev_name = "amlogic-canvas";
@@ -842,17 +870,6 @@
 	odroid_encoder {
 		compatible = "odroid-encoder";
 		status = "ok";
-	};
-};
-
-&i2c_a {
-	status = "okay";
-
-	/* Hardkernel I2C RTC */
-	pcf8563: pcf8563@51	{
-		compatible = "nxp,pcf8563";
-		reg = <0x51>;
-		#clock-cells = <0>;
 	};
 };
 
