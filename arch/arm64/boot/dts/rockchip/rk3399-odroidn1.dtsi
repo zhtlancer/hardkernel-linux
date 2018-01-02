@@ -200,6 +200,37 @@
 		      <0 0xff780000 0 0x18000>;
 		status = "okay";
 	};
+
+	gpio_keys_polled {
+		status = "disabled";
+		compatible =
+			"gpio-keys-polled";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		poll-interval = <100>;
+		autorepeat;
+		button@1 {
+			label = "GPIO Key F7";
+			linux,code = <65>;
+			gpios = <&gpio1 1 GPIO_ACTIVE_HIGH>;
+		};
+		button@2 {
+			label = "GPIO Key F8";
+			linux,code = <66>;
+			gpios = <&gpio1 3 GPIO_ACTIVE_HIGH>;
+		};
+		button@3 {
+			label = "GPIO Key F9";
+			linux,code = <67>;
+			gpios = <&gpio1 4 GPIO_ACTIVE_HIGH>;
+		};
+		button@4 {
+			label = "GPIO Key F10";
+			linux,code = <68>;
+			gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
 };
 
 &cpu_l0 {
