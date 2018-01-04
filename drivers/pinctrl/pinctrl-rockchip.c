@@ -1667,6 +1667,33 @@ static int rockchip_set_pull(struct rockchip_pin_bank *bank,
 	return ret;
 }
 
+#include <linux/pinctrl/pinctrl_rockchip.h>
+
+static const struct of_device_id rockchip_pinctrl_dt_match[];
+
+int rockchip_set_pullup(int pin_num, int pull)
+{
+	struct rockchip_pin_ctrl *ctrl = (struct rockchip_pin_ctrl *)rockchip_pinctrl_dt_match[10].data;
+	struct rockchip_pin_bank *bank = ctrl->pin_banks;
+	int ret, pin;
+
+	// From pin_to_bank
+	int i = 1;
+	while (pin_num >= 32 * i)
+	{
+		bank++;
+		i++;
+	}
+
+	// Fit to bank's start pin number
+	pin = pin_num - 32 * (i - 1);
+
+	ret = rockchip_set_pull(bank, pin, pull);
+
+	return ret;
+}
+EXPORT_SYMBOL(rockchip_set_pullup);
+
 /*
  * Pinmux_ops handling
  */
@@ -2659,8 +2686,6 @@ static int rockchip_get_bank_data(struct rockchip_pin_bank *bank,
 
 	return clk_prepare(bank->clk);
 }
-
-static const struct of_device_id rockchip_pinctrl_dt_match[];
 
 /* retrieve the soc specific data */
 static struct rockchip_pin_ctrl *rockchip_pinctrl_get_soc_data(
