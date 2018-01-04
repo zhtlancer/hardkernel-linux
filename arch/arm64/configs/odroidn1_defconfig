@@ -4310,9 +4310,10 @@ CONFIG_RK_NAND=y
 CONFIG_RK_HEADSET=y
 
 #
-# Hardkernel features
+# ODROID Specific Hardware
 #
 CONFIG_ODROIDN1_SYSFS=y
+CONFIG_ODROID_ENCODER_SWITCH=y
 
 #
 # Firmware Drivers
