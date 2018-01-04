@@ -53,6 +53,12 @@
 
 #endif
 
+#if defined(CONFIG_PLAT_RK3399_ODROIDN1)
+
+#include <linux/pinctrl/pinctrl_rockchip.h>
+#include <linux/pinctrl/pinconf-generic.h>
+
+#endif
 /*----------------------------------------------------------------------------*/
 /*----------------------------------------------------------------------------*/
 /*
@@ -172,6 +178,10 @@ struct port_info {
 	u32	active;
 	/* internal pull up/down resister enable */
 	u32	pullen;
+#if defined(CONFIG_PLAT_RK3399_ODROIDN1)
+	int irq;
+	int irq_flags;
+#endif
 };
 
 struct encoder_config {
@@ -711,7 +721,7 @@ static int exynos5422_pullupdn(void *port_data, const str *port_str,
 
 /*----------------------------------------------------------------------------*/
 #if defined(CONFIG_PLAT_RK3399_ODROIDN1)
-static int rk3399_pullupdn(void *port_data, const str *port_str,
+static int rk3399_pullupdn(void *port_data, const char *port_str,
 				void *handle)
 {
 	struct encoder *encoder = handle;
@@ -721,11 +731,11 @@ static int rk3399_pullupdn(void *port_data, const str *port_str,
 
 	if (port->pullen) {
 		/* 0:pull none, 1: pull down, 2: pull up */
-		pullupdn = (port->active == 0) ? 1 : 2;
+		pullupdn = (port->active == 0) ? PIN_CONFIG_BIAS_PULL_DOWN : PIN_CONFIG_BIAS_PULL_UP;
 		ret = rockchip_set_pullup(port->gpio, pullupdn);
 		if (ret)
 			dev_err(dev, "gpio %s(%d), pullupdn = %d error!\n",
-					port_str, port->gpio, pulupdn);
+					port_str, port->gpio, pullupdn);
 	}
 	return ret;
 }
