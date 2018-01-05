@@ -170,6 +170,9 @@
 /* encoder rotation detect */
 #define	ENCODER_ARMED	3
 
+/* gpio active when low & high */
+#define ACTIVE_LOW 0
+#define ACTIVE_HIGH 1
 /*----------------------------------------------------------------------------*/
 struct port_info {
 	/* Control gpio number */
@@ -601,7 +604,7 @@ static int amlogic_pullupdn(void *port_data, const char *port_str,
 
 	if (port->pullen) {
 		/* 0:pull down, 1:pull up */
-		pullupdn = (port->active == 0) ? 1 : 0;
+		pullupdn = (port->active == ACTIVE_LOW) ? 1 : 0;
 #if defined(CONFIG_ARCH_MESON64_ODROIDC2)
 		ret = gpio_set_pullup(port->gpio, pullupdn);
 #else
@@ -708,7 +711,7 @@ static int exynos5422_pullupdn(void *port_data, const str *port_str,
 
 	if (port->pullen) {
 		/* 0:pull none, 1:pull down, 2:pull up */
-		pullupdn = (port->active == 0) ? 1 : 2;
+		pullupdn = (port->active == ACTIVE_LOW) ? 2 : 1;
 		ret = s3c_gpio_setpull(port->gpio, pullupdn);
 		if (ret)
 			dev_err(dev, "gpio %s(%d), pullupdn = %d error!\n",
@@ -730,8 +733,7 @@ static int rk3399_pullupdn(void *port_data, const char *port_str,
 	int ret = 0, pullupdn;
 
 	if (port->pullen) {
-		/* 0:pull none, 1: pull down, 2: pull up */
-		pullupdn = (port->active == 0) ? PIN_CONFIG_BIAS_PULL_DOWN : PIN_CONFIG_BIAS_PULL_UP;
+		pullupdn = (port->active == ACTIVE_LOW) ? PIN_CONFIG_BIAS_PULL_UP : PIN_CONFIG_BIAS_PULL_DOWN;
 		ret = rockchip_set_pullup(port->gpio, pullupdn);
 		if (ret)
 			dev_err(dev, "gpio %s(%d), pullupdn = %d error!\n",
