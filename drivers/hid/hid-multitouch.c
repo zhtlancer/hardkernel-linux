@@ -1582,7 +1582,7 @@ static const struct hid_device_id mt_devices[] = {
 
 	 /* Dell P2314T USB capacitive Screen */
 	{ .driver_data = MT_CLS_DEFAULT,
-		HID_USB_DEVICE(USB_VENDOR_ID_DELL,
+		HID_USB_DEVICE(USB_VENDOR_ID_COOLTOUCH,
 				USB_DEVICE_ID_P2314T_TOUCH) },
 
 	 /* DMeasyTouch USB capacitive Screen */

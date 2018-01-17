@@ -1104,7 +1104,7 @@
 #define USB_DEVICE_ID_XWC1359_7_TOUCH	0x0101
 
 /* Dell P2314T USB capacitive Screen */
-#define USB_VENDOR_ID_DELL	0x2149
+#define USB_VENDOR_ID_COOLTOUCH 0x2149
 #define USB_DEVICE_ID_P2314T_TOUCH	0x2316
 
 /* DMeasyTouch USB capacitive Screen */
