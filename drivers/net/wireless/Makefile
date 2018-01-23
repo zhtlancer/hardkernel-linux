@@ -62,5 +62,5 @@ obj-$(CONFIG_CW1200)	+= cw1200/
 obj-$(CONFIG_RSI_91X)	+= rsi/
 obj-$(CONFIG_WL_ROCKCHIP)	+= rockchip_wlan/
 
-obj-$(CONFIG_RTL8192CU) += ../../../../hardware/wifi/realtek/drivers/8192cu/rtl8xxx_CU/
+obj-$(CONFIG_RTL8192CU) += ../../../../hardware/wifi/realtek/drivers/8192cu/
 obj-$(CONFIG_RTL8812AU) += ../../../../hardware/wifi/realtek/drivers/rtl8812au/
