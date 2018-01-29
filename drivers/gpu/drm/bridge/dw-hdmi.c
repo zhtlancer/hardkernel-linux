@@ -40,8 +40,10 @@
 
 #include "dw-hdmi.h"
 #include "dw-hdmi-audio.h"
+#include "dw-hdmi-cec.h"
 #include "dw-hdmi-hdcp.h"
 
+#include <media/cec-notifier.h>
 #define HDMI_EDID_LEN		512
 #define DDC_SEGMENT_ADDR       0x30
 
@@ -203,6 +205,7 @@ struct dw_hdmi {
 	unsigned int version;
 
 	struct platform_device *audio;
+	struct platform_device *cec;
 	struct device *dev;
 	struct clk *isfr_clk;
 	struct clk *iahb_clk;
@@ -241,6 +244,7 @@ struct dw_hdmi {
 	bool bridge_is_on;		/* indicates the bridge is on */
 	bool rxsense;			/* rxsense state */
 	u8 phy_mask;			/* desired phy int mask settings */
+	u8 mc_clkdis;			/* clock disable register */
 
 	spinlock_t audio_lock;
 	struct mutex audio_mutex;
@@ -257,6 +261,7 @@ struct dw_hdmi {
 
 	void (*write)(struct dw_hdmi *hdmi, u8 val, int offset);
 	u8 (*read)(struct dw_hdmi *hdmi, int offset);
+	struct cec_notifier *cec_notifier;
 };
 
 #define HDMI_IH_PHY_STAT0_RX_SENSE \
@@ -313,10 +318,15 @@ static void hdmi_mask_writeb(struct dw_hdmi *hdmi, u8 data, unsigned int reg,
 
 static void repo_hpd_event(struct work_struct *p_work)
 {
+	bool change;
+	ktime_t ts;
 	struct dw_hdmi *hdmi = container_of(p_work, struct dw_hdmi, work.work);
 
+	ts = ktime_get();
 	if (hdmi->bridge.dev)
-		drm_helper_hpd_irq_event(hdmi->bridge.dev);
+		change = drm_helper_hpd_irq_event(hdmi->bridge.dev);
+	if (change)		
+		cec_queue_pin_hpd_event(hdmi->cec_notifier->cec_adap, hdmi->hpd_state, ts);
 #ifdef CONFIG_SWITCH
 	if (hdmi->hpd_state)
 		switch_set_state(&hdmi->switchdev, 1);
@@ -1901,8 +1911,6 @@ static void hdmi_av_composer(struct dw_hdmi *hdmi,
 /* HDMI Initialization Step B.4 */
 static void dw_hdmi_enable_video_path(struct dw_hdmi *hdmi)
 {
-	u8 clkdis;
-
 	/* control period minimum duration */
 	hdmi_writeb(hdmi, 12, HDMI_FC_CTRLDUR);
 	hdmi_writeb(hdmi, 32, HDMI_FC_EXCTRLDUR);
@@ -1914,23 +1922,22 @@ static void dw_hdmi_enable_video_path(struct dw_hdmi *hdmi)
 	hdmi_writeb(hdmi, 0x21, HDMI_FC_CH2PREAM);
 
 	/* Enable pixel clock and tmds data path */
-	clkdis = 0x7F;
-	clkdis &= ~HDMI_MC_CLKDIS_PIXELCLK_DISABLE;
-	hdmi_writeb(hdmi, clkdis, HDMI_MC_CLKDIS);
+	hdmi->mc_clkdis &= ~HDMI_MC_CLKDIS_PIXELCLK_DISABLE;
+	hdmi_writeb(hdmi, hdmi->mc_clkdis, HDMI_MC_CLKDIS);
 
-	clkdis &= ~HDMI_MC_CLKDIS_TMDSCLK_DISABLE;
-	hdmi_writeb(hdmi, clkdis, HDMI_MC_CLKDIS);
+	hdmi->mc_clkdis &= ~HDMI_MC_CLKDIS_TMDSCLK_DISABLE;
+	hdmi_writeb(hdmi, hdmi->mc_clkdis, HDMI_MC_CLKDIS);
 
 	/* Enable csc path */
 	if (is_color_space_conversion(hdmi)) {
-		clkdis &= ~HDMI_MC_CLKDIS_CSCCLK_DISABLE;
-		hdmi_writeb(hdmi, clkdis, HDMI_MC_CLKDIS);
+		hdmi->mc_clkdis &= ~HDMI_MC_CLKDIS_CSCCLK_DISABLE;
+		hdmi_writeb(hdmi, hdmi->mc_clkdis, HDMI_MC_CLKDIS);
 	}
 
 	/* Enable pixel repetition path */
 	if (hdmi->hdmi_data.video_mode.mpixelrepetitioninput) {
-		clkdis &= ~HDMI_MC_CLKDIS_PREPCLK_DISABLE;
-		hdmi_writeb(hdmi, clkdis, HDMI_MC_CLKDIS);
+		hdmi->mc_clkdis &= ~HDMI_MC_CLKDIS_PREPCLK_DISABLE;
+		hdmi_writeb(hdmi, hdmi->mc_clkdis, HDMI_MC_CLKDIS);
 	}
 
 	/* Enable color space conversion if needed */
@@ -2317,6 +2324,7 @@ static int dw_hdmi_connector_get_modes(struct drm_connector *connector)
 		hdmi->sink_is_hdmi = drm_detect_hdmi_monitor(edid);
 		hdmi->sink_has_audio = drm_detect_monitor_audio(edid);
 		drm_mode_connector_update_edid_property(connector, edid);
+		cec_notifier_set_phys_addr_from_edid(hdmi->cec_notifier, edid);
 		ret = drm_add_edid_modes(connector, edid);
 		/* Store the ELD */
 		drm_edid_to_eld(connector, edid);
@@ -2496,6 +2504,10 @@ static irqreturn_t dw_hdmi_irq(int irq, void *dev_id)
 			if (phy_stat & HDMI_PHY_HPD)
 				hdmi->rxsense = true;
 
+			if ((phy_stat & (HDMI_PHY_RX_SENSE | HDMI_PHY_HPD)) == 0)
+				cec_notifier_set_phys_addr(hdmi->cec_notifier,
+							   CEC_PHYS_ADDR_INVALID);
+
 			dw_hdmi_update_power(hdmi);
 			dw_hdmi_update_phy_mask(hdmi);
 		}
@@ -2606,6 +2618,31 @@ static int dw_hdmi_detect_phy(struct dw_hdmi *hdmi)
 	dev_err(hdmi->dev, "Unsupported HDMI PHY type (%02x)\n", phy_type);
 	return -ENODEV;
 }
+
+static void dw_hdmi_cec_enable(struct dw_hdmi *hdmi)
+{
+	mutex_lock(&hdmi->mutex);
+	hdmi->mc_clkdis &= ~HDMI_MC_CLKDIS_CECCLK_DISABLE;
+	hdmi_writeb(hdmi, hdmi->mc_clkdis, HDMI_MC_CLKDIS);
+	mutex_unlock(&hdmi->mutex);
+}
+
+static void dw_hdmi_cec_disable(struct dw_hdmi *hdmi)
+{
+	mutex_lock(&hdmi->mutex);
+	hdmi->mc_clkdis |= HDMI_MC_CLKDIS_CECCLK_DISABLE;
+	hdmi_writeb(hdmi, hdmi->mc_clkdis, HDMI_MC_CLKDIS);
+	mutex_unlock(&hdmi->mutex);
+}
+
+static const struct dw_hdmi_cec_ops dw_hdmi_cec_ops = {
+	.write = hdmi_writeb,
+	.read = hdmi_readb,
+	.enable = dw_hdmi_cec_enable,
+	.disable = dw_hdmi_cec_disable,
+};
+
+
 
 static int dw_hdmi_register(struct drm_device *drm, struct dw_hdmi *hdmi)
 {
@@ -2852,6 +2889,7 @@ int dw_hdmi_bind(struct device *dev, struct device *master,
 	struct device_node *np = dev->of_node;
 	struct platform_device_info pdevinfo;
 	struct device_node *ddc_node;
+	struct dw_hdmi_cec_data cec;
 	struct dw_hdmi *hdmi;
 	int ret;
 	u8 prod_id0;
@@ -2876,6 +2914,7 @@ int dw_hdmi_bind(struct device *dev, struct device *master,
 	hdmi->disabled = true;
 	hdmi->rxsense = true;
 	hdmi->phy_mask = (u8)~(HDMI_PHY_HPD | HDMI_PHY_RX_SENSE);
+	hdmi->mc_clkdis = 0x7f;
 	hdmi->irq = irq;
 
 	mutex_init(&hdmi->mutex);
@@ -2990,6 +3029,12 @@ int dw_hdmi_bind(struct device *dev, struct device *master,
 	if (ret)
 		goto err_iahb;
 
+	hdmi->cec_notifier = cec_notifier_get(dev);
+	if (!hdmi->cec_notifier) {
+		ret = -ENOMEM;
+		goto err_iahb;
+	}
+
 	/*
 	 * To prevent overflows in HDMI_IH_FC_STAT2, set the clk regenerator
 	 * N and cts values before enabling phy
@@ -3066,6 +3111,19 @@ int dw_hdmi_bind(struct device *dev, struct device *master,
 		hdmi->audio = platform_device_register_full(&pdevinfo);
 	}
 
+	if (config0 & HDMI_CONFIG0_CEC) {
+		cec.hdmi = hdmi;
+		cec.ops = &dw_hdmi_cec_ops;
+		cec.irq = irq;
+
+		pdevinfo.name = "dw-hdmi-cec";
+		pdevinfo.data = &cec;
+		pdevinfo.size_data = sizeof(cec);
+		pdevinfo.dma_mask = 0;
+
+		hdmi->cec = platform_device_register_full(&pdevinfo);
+	}
+
 	dev_set_drvdata(dev, hdmi);
 
 	dw_hdmi_register_debugfs(dev, hdmi);
@@ -3079,6 +3137,9 @@ int dw_hdmi_bind(struct device *dev, struct device *master,
 err_iahb:
 	if (hdmi->i2c)
 		i2c_del_adapter(&hdmi->i2c->adap);
+
+	if (hdmi->cec_notifier)
+		cec_notifier_put(hdmi->cec_notifier);
 
 	clk_disable_unprepare(hdmi->iahb_clk);
 err_isfr:
@@ -3107,8 +3168,13 @@ void dw_hdmi_unbind(struct device *dev, struct device *master, void *data)
 	if (hdmi->hdcp_dev && !IS_ERR(hdmi->hdcp_dev))
 		platform_device_unregister(hdmi->hdcp_dev);
 
+	if (!IS_ERR(hdmi->cec))
+		platform_device_unregister(hdmi->cec);
 	/* Disable all interrupts */
 	hdmi_writeb(hdmi, ~0, HDMI_IH_MUTE_PHY_STAT0);
+
+	if (hdmi->cec_notifier)
+		cec_notifier_put(hdmi->cec_notifier);
 
 #ifdef CONFIG_SWITCH
 	switch_dev_unregister(&hdmi->switchdev);

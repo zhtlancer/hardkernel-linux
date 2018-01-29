@@ -10,6 +10,7 @@ menu "Display Interface Bridges"
 config DRM_DW_HDMI
 	tristate
 	select DRM_KMS_HELPER
+	select CEC_CORE if CEC_NOTIFIER
 
 config DRM_DW_HDMI_AHB_AUDIO
 	tristate "Synopsis Designware AHB Audio interface"
@@ -37,6 +38,15 @@ config DRM_NXP_PTN3460
 	select DRM_PANEL
 	---help---
 	  NXP PTN3460 eDP-LVDS bridge chip driver.
+
+config DRM_DW_HDMI_CEC
+	tristate "Synopsis Designware CEC interface"
+	depends on DRM_DW_HDMI
+	select CEC_CORE
+	select CEC_NOTIFIER
+	help
+	  Support the CE interface which is part of the Synopsys
+	  Designware HDMI block.
 
 config DRM_PARADE_PS8622
 	tristate "Parade eDP/LVDS bridge"
