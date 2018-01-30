@@ -17,6 +17,7 @@
 #include <linux/of_device.h>
 #include <linux/of_graph.h>
 #include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/clk.h>
 
@@ -59,6 +60,8 @@ struct rockchip_dp_device {
 	struct clk               *pclk;
 	struct regmap            *grf;
 	struct reset_control     *rst;
+	struct regulator         *vcc_supply;
+	struct regulator         *vccio_supply;
 
 	const struct rockchip_dp_chip_data *data;
 
@@ -78,6 +81,24 @@ static int rockchip_dp_poweron(struct analogix_dp_plat_data *plat_data)
 {
 	struct rockchip_dp_device *dp = to_dp(plat_data);
 	int ret;
+
+	if (!IS_ERR(dp->vcc_supply)) {
+		ret = regulator_enable(dp->vcc_supply);
+		if (ret) {
+			dev_err(dp->dev,
+				"failed to enable vcc regulator: %d\n", ret);
+			return ret;
+		}
+	}
+
+	if (!IS_ERR(dp->vccio_supply)) {
+		ret = regulator_enable(dp->vccio_supply);
+		if (ret) {
+			dev_err(dp->dev,
+				"failed to enable vccio regulator: %d\n", ret);
+			return ret;
+		}
+	}
 
 	ret = clk_prepare_enable(dp->pclk);
 	if (ret < 0) {
@@ -99,6 +120,11 @@ static int rockchip_dp_powerdown(struct analogix_dp_plat_data *plat_data)
 	struct rockchip_dp_device *dp = to_dp(plat_data);
 
 	clk_disable_unprepare(dp->pclk);
+
+	if (!IS_ERR(dp->vccio_supply))
+		regulator_disable(dp->vccio_supply);
+	if (!IS_ERR(dp->vcc_supply))
+		regulator_disable(dp->vcc_supply);
 
 	return 0;
 }
@@ -187,6 +213,9 @@ rockchip_dp_drm_encoder_atomic_check(struct drm_encoder *encoder,
 	s->output_type = DRM_MODE_CONNECTOR_eDP;
 	if (info->num_bus_formats)
 		s->bus_format = info->bus_formats[0];
+	else
+		s->bus_format = MEDIA_BUS_FMT_RGB888_1X24;
+	s->tv_state = &conn_state->tv;
 
 	return 0;
 }
@@ -230,6 +259,32 @@ static int rockchip_dp_init(struct rockchip_dp_device *dp)
 	if (IS_ERR(dp->rst)) {
 		dev_err(dev, "failed to get dp reset control\n");
 		return PTR_ERR(dp->rst);
+	}
+
+	dp->vcc_supply = devm_regulator_get_optional(dev, "vcc");
+	dp->vccio_supply = devm_regulator_get_optional(dev, "vccio");
+
+	if (IS_ERR(dp->vcc_supply)) {
+		dev_err(dev, "failed to get vcc regulator: %ld\n",
+			PTR_ERR(dp->vcc_supply));
+	} else {
+		ret = regulator_enable(dp->vcc_supply);
+		if (ret) {
+			dev_err(dev,
+				"failed to enable vcc regulator: %d\n", ret);
+			return ret;
+		}
+	}
+	if (IS_ERR(dp->vccio_supply)) {
+		dev_err(dev, "failed to get vccio regulator: %ld\n",
+			PTR_ERR(dp->vccio_supply));
+	} else {
+		ret = regulator_enable(dp->vccio_supply);
+		if (ret) {
+			dev_err(dev,
+				"failed to enable vccio regulator: %d\n", ret);
+			return ret;
+		}
 	}
 
 	ret = clk_prepare_enable(dp->pclk);
@@ -376,7 +431,7 @@ static int rockchip_dp_remove(struct platform_device *pdev)
 
 static const struct dev_pm_ops rockchip_dp_pm_ops = {
 #ifdef CONFIG_PM_SLEEP
-	.suspend = analogix_dp_suspend,
+	.suspend_late = analogix_dp_suspend,
 	.resume_early = analogix_dp_resume,
 #endif
 };

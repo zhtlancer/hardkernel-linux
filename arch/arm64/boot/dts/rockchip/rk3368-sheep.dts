@@ -221,6 +221,8 @@
 		regulator-max-microvolt = <1500000>;
 		regulator-ramp-delay = <1000>;
 		fcs,suspend-voltage-selector = <1>;
+		pinctrl-0 = <&vsel_gpio>;
+		vsel-gpios = <&gpio0 0 GPIO_ACTIVE_HIGH>;
 		regulator-always-on;
 		regulator-boot-on;
 		regulator-initial-state = <3>;
@@ -428,6 +430,36 @@
 				};
 			};
 		};
+
+		battery {
+			compatible = "rk818-battery";
+			pinctrl-names = "default";
+			pinctrl-0 = <&dc_irq_gpio>;
+			ocv_table = <
+				3400 3650 3693 3707 3731 3749 3760
+				3770 3782 3796 3812 3829 3852 3882
+				3915 3951 3981 4047 4086 4132 4182>;
+			design_capacity = <8650>;
+			design_qmax = <8800>;
+			bat_res = <85>;
+			max_input_current = <2000>;
+			max_chrg_current = <1800>;
+			max_chrg_voltage = <4200>;
+			sleep_enter_current = <600>;
+			sleep_exit_current = <600>;
+			power_off_thresd = <3400>;
+			zero_algorithm_vol = <3850>;
+			fb_temperature = <115>;
+			sample_res = <10>;
+			max_soc_offset = <60>;
+			energy_mode = <0>;
+			monitor_sec = <5>;
+			virtual_power = <0>;
+			power_dc2otg = <1>;
+			support_usb_adp = <1>;
+			support_dc_adp = <1>;
+			dc_det_gpio = <&gpio0 17 GPIO_ACTIVE_LOW>;
+		};
 	};
 };
 
@@ -463,8 +495,21 @@
 	cpu-supply = <&syr827>;
 };
 
+&dfi {
+	status = "okay";
+};
+
+&dmc {
+	center-supply = <&vdd_logic>;
+	status = "okay";
+};
+
 &gpu {
 	logic-supply = <&vdd_logic>;
+};
+
+&rockchip_suspend {
+	status = "okay";
 };
 
 &i2c1 {
@@ -476,6 +521,8 @@
 		#sound-dai-cells = <0>;
 		clocks = <&cru SCLK_I2S_8CH_OUT>;
 		clock-names = "mclk";
+		pinctrl-names = "default";
+		pinctrl-0 = <&i2s_8ch_mclk>;
 		realtek,in1-differential;
 		status = "okay";
 	};
@@ -517,6 +564,7 @@
 
 &pmu_io_domains {
 	status = "okay";
+
 	pmu-supply = <&vcc_io>;
 	vop-supply = <&vcc_io>;
 };
@@ -550,21 +598,22 @@
 	status = "okay";
 };
 
-&mipi_dsi_host {
+&dsi {
 	status = "okay";
 
-	dsi_panel: panel@0 {
+	panel@0 {
 		compatible = "simple-panel-dsi";
 		reg = <0>;
 		backlight = <&backlight>;
 		enable-gpios = <&gpio0 22 GPIO_ACTIVE_HIGH>;
+
 		dsi,flags = <(MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST)>;
 		dsi,format = <MIPI_DSI_FMT_RGB888>;
 		dsi,lanes = <4>;
-		delay,prepare = <120>;
-		status = "okay";
 
-		disp_timings: display-timings {
+		prepare-delay-ms = <120>;
+
+		display-timings {
 			native-mode = <&timing0>;
 
 			timing0: timing0 {
@@ -587,7 +636,10 @@
 };
 
 &mipi_dphy {
-	rockchip,dsi-panel = <&dsi_panel>;
+	status = "okay";
+};
+
+&route_dsi {
 	status = "okay";
 };
 
@@ -600,14 +652,19 @@
 	status = "okay";
 };
 
-&hdmi {
-	status = "okay";
-};
-
 &pinctrl {
 	pmic {
 		pmic_int_l: pmic-int-l {
 			rockchip,pins = <RK_GPIO0 1 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+		vsel_gpio: vsel-gpio {
+			rockchip,pins = <0 0 RK_FUNC_GPIO &pcfg_pull_down>;
+		};
+	};
+
+	dc_det {
+		dc_irq_gpio: dc-irq-gpio {
+			rockchip,pins = <0 17 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 	};
 

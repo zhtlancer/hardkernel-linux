@@ -675,6 +675,12 @@ struct drm_driver {
 	void (*gem_prime_vunmap)(struct drm_gem_object *obj, void *vaddr);
 	int (*gem_prime_mmap)(struct drm_gem_object *obj,
 				struct vm_area_struct *vma);
+	int (*gem_prime_begin_cpu_access)(struct drm_gem_object *obj,
+					  size_t, size_t,
+					  enum dma_data_direction);
+	void (*gem_prime_end_cpu_access)(struct drm_gem_object *obj,
+					 size_t, size_t,
+					 enum dma_data_direction);
 
 	/* vga arb irq handler */
 	void (*vgaarb_irq)(struct drm_device *dev, bool state);
@@ -1127,6 +1133,14 @@ int drm_dev_set_unique(struct drm_device *dev, const char *fmt, ...);
 
 struct drm_minor *drm_minor_acquire(unsigned int minor_id);
 void drm_minor_release(struct drm_minor *minor);
+#ifdef CONFIG_DRM
+struct drm_device *drm_device_get_by_name(const char *name);
+#else
+static inline struct drm_device *drm_device_get_by_name(const char *name)
+{
+	return NULL;
+}
+#endif
 
 /*@}*/
 

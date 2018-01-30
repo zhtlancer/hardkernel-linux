@@ -37,14 +37,18 @@ struct iommu_domain;
  * @loader_protect: protect loader logo crtc's power
  * @enable_vblank: enable crtc vblank irq.
  * @disable_vblank: disable crtc vblank irq.
+ * @bandwidth: report present crtc bandwidth consume.
  */
 struct rockchip_crtc_funcs {
 	int (*loader_protect)(struct drm_crtc *crtc, bool on);
 	int (*enable_vblank)(struct drm_crtc *crtc);
 	void (*disable_vblank)(struct drm_crtc *crtc);
-	void (*wait_for_update)(struct drm_crtc *crtc);
+	size_t (*bandwidth)(struct drm_crtc *crtc,
+			    struct drm_crtc_state *crtc_state);
 	void (*cancel_pending_vblank)(struct drm_crtc *crtc, struct drm_file *file_priv);
+	int (*debugfs_init)(struct drm_minor *minor, struct drm_crtc *crtc);
 	int (*debugfs_dump)(struct drm_crtc *crtc, struct seq_file *s);
+	void (*regs_dump)(struct drm_crtc *crtc, struct seq_file *s);
 	enum drm_mode_status (*mode_valid)(struct drm_crtc *crtc,
 					   const struct drm_display_mode *mode,
 					   int output_type);
@@ -66,10 +70,18 @@ struct rockchip_atomic_commit {
 	struct drm_atomic_state *state;
 	struct drm_device *dev;
 	struct mutex lock;
+	size_t bandwidth;
+};
+
+struct rockchip_dclk_pll {
+	struct clk *pll;
+	unsigned int use_count;
 };
 
 struct rockchip_crtc_state {
 	struct drm_crtc_state base;
+	struct drm_property_blob *cabc_lut;
+	struct drm_tv_connector_state *tv_state;
 	int left_margin;
 	int right_margin;
 	int top_margin;
@@ -80,9 +92,15 @@ struct rockchip_crtc_state {
 	int afbdc_win_ptr;
 	int afbdc_win_id;
 	int afbdc_en;
+	int cabc_mode;
+	int cabc_stage_up;
+	int cabc_stage_down;
+	int cabc_global_dn;
+	int cabc_calc_pixel_num;
 	int dsp_layer_sel;
 	int output_type;
 	int output_mode;
+	int output_flags;
 	int bus_format;
 };
 
@@ -119,6 +137,14 @@ struct rockchip_logo {
  */
 struct rockchip_drm_private {
 	struct rockchip_logo *logo;
+	struct drm_property *logo_ymirror_prop;
+	struct drm_property *cabc_mode_property;
+	struct drm_property *cabc_lut_property;
+	struct drm_property *cabc_stage_up_property;
+	struct drm_property *cabc_stage_down_property;
+	struct drm_property *cabc_global_dn_property;
+	struct drm_property *cabc_calc_pixel_num_property;
+	void *backlight;
 	struct drm_fb_helper *fbdev_helper;
 	struct drm_gem_object *fbdev_bo;
 	const struct rockchip_crtc_funcs *crtc_funcs[ROCKCHIP_MAX_CRTC];
@@ -126,6 +152,7 @@ struct rockchip_drm_private {
 
 	struct rockchip_atomic_commit commit;
 	struct iommu_domain *domain;
+	struct gen_pool *secure_buffer_pool;
 #ifdef CONFIG_DRM_DMA_SYNC
 	unsigned int cpu_fence_context;
 	atomic_t cpu_fence_seqno;
@@ -133,6 +160,8 @@ struct rockchip_drm_private {
 	/* protect drm_mm on multi-threads */
 	struct mutex mm_lock;
 	struct drm_mm mm;
+	struct rockchip_dclk_pll default_pll;
+	struct rockchip_dclk_pll hdmi_pll;
 };
 
 #ifndef MODULE

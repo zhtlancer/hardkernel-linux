@@ -97,6 +97,11 @@
 			compatible = "rockchip,fb-logo";
 			reg = <0x0 0x0 0x0 0x0>;
 		};
+
+		stb_devinfo: stb-devinfo@00000000 {
+			compatible = "rockchip,stb-devinfo";
+			reg = <0x0 0x0 0x0 0x0>;
+		};
 	};
 
 	ion {
@@ -488,10 +493,12 @@
 
 &iep {
 	status = "okay";
+	/delete-property/ iommus;
 	allocator = <0>;
 };
 
 &iep_mmu {
+	dbgname = "iep";
 	compatible = "rockchip,iep_mmu";
 	status = "okay";
 };

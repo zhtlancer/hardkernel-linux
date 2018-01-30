@@ -50,6 +50,10 @@
 #define PIN_MAP_E		BIT(4)
 #define PIN_MAP_F		BIT(5)
 
+#define PACKET_IS_GOOD_CRC(header) \
+		(PD_HEADER_TYPE(header) == CMT_GOODCRC && \
+		 PD_HEADER_CNT(header) == 0)
+
 static u8 fusb30x_port_used;
 static struct fusb30x_chip *fusb30x_port_info[256];
 
@@ -339,11 +343,14 @@ static int tcpm_get_message(struct fusb30x_chip *chip)
 	u8 buf[32];
 	int len;
 
-	regmap_raw_read(chip->regmap, FUSB_REG_FIFO, buf, 3);
-	chip->rec_head = (buf[1] & 0xff) | ((buf[2] << 8) & 0xff00);
+	do {
+		regmap_raw_read(chip->regmap, FUSB_REG_FIFO, buf, 3);
+		chip->rec_head = (buf[1] & 0xff) | ((buf[2] << 8) & 0xff00);
 
-	len = PD_HEADER_CNT(chip->rec_head) << 2;
-	regmap_raw_read(chip->regmap, FUSB_REG_FIFO, buf, len + 4);
+		len = PD_HEADER_CNT(chip->rec_head) << 2;
+		regmap_raw_read(chip->regmap, FUSB_REG_FIFO, buf, len + 4);
+	/* ignore good_crc message */
+	} while (PACKET_IS_GOOD_CRC(chip->rec_head));
 
 	memcpy(chip->rec_load, buf, len);
 
@@ -352,7 +359,7 @@ static int tcpm_get_message(struct fusb30x_chip *chip)
 
 static void fusb302_flush_rx_fifo(struct fusb30x_chip *chip)
 {
-	tcpm_get_message(chip);
+	regmap_write(chip->regmap, FUSB_REG_CONTROL1, CONTROL1_RX_FLUSH);
 }
 
 static int tcpm_get_cc(struct fusb30x_chip *chip, int *CC1, int *CC2)
@@ -741,7 +748,6 @@ static void tcpc_alert(struct fusb30x_chip *chip, int *evt)
 
 	if (interrupta & INTERRUPTA_TXSENT) {
 		*evt |= EVENT_TX;
-		fusb302_flush_rx_fifo(chip);
 		chip->tx_state = tx_success;
 	}
 
@@ -1129,16 +1135,15 @@ static int vdm_send_discoveryid(struct fusb30x_chip *chip, int evt)
 		if (chip->vdm_send_state != 2)
 			break;
 	default:
-		if (evt & EVENT_TIMER_STATE) {
+		if (chip->vdm_id) {
+			chip->vdm_send_state = 0;
+			return 0;
+		} else if (evt & EVENT_TIMER_STATE) {
 			dev_warn(chip->dev, "VDM_DISCOVERY_ID time out\n");
 			chip->vdm_state = 0xff;
 			chip->work_continue = 1;
 		}
-
-		if (!chip->vdm_id)
-			break;
-		chip->vdm_send_state = 0;
-		return 0;
+		break;
 	}
 	return -EINPROGRESS;
 }
@@ -1170,16 +1175,15 @@ static int vdm_send_discoverysvid(struct fusb30x_chip *chip, int evt)
 		if (chip->vdm_send_state != 2)
 			break;
 	default:
-		if (evt & EVENT_TIMER_STATE) {
+		if (chip->vdm_svid_num) {
+			chip->vdm_send_state = 0;
+			return 0;
+		} else if (evt & EVENT_TIMER_STATE) {
 			dev_warn(chip->dev, "VDM_DISCOVERY_SVIDS time out\n");
 			chip->vdm_state = 0xff;
 			chip->work_continue = 1;
 		}
-
-		if (!chip->vdm_svid_num)
-			break;
-		chip->vdm_send_state = 0;
-		return 0;
+		break;
 	}
 	return -EINPROGRESS;
 }
@@ -1211,19 +1215,17 @@ static int vdm_send_discoverymodes(struct fusb30x_chip *chip, int evt)
 			if (chip->vdm_send_state != 2)
 				break;
 		default:
-			if (evt & EVENT_TIMER_STATE) {
+			if (chip->val_tmp & 1) {
+				chip->val_tmp &= 0xfe;
+				chip->val_tmp += 2;
+				chip->vdm_send_state = 0;
+				chip->work_continue = 1;
+			} else if (evt & EVENT_TIMER_STATE) {
 				dev_warn(chip->dev,
 					 "VDM_DISCOVERY_MODES time out\n");
 				chip->vdm_state = 0xff;
 				chip->work_continue = 1;
 			}
-
-			if (!(chip->val_tmp & 1))
-				break;
-			chip->val_tmp &= 0xfe;
-			chip->val_tmp += 2;
-			chip->vdm_send_state = 0;
-			chip->work_continue = 1;
 			break;
 		}
 	} else {
@@ -1260,17 +1262,16 @@ static int vdm_send_entermode(struct fusb30x_chip *chip, int evt)
 		if (chip->vdm_send_state != 2)
 			break;
 	default:
-		if (evt & EVENT_TIMER_STATE) {
+		if (chip->val_tmp) {
+			chip->val_tmp = 0;
+			chip->vdm_send_state = 0;
+			return 0;
+		} else if (evt & EVENT_TIMER_STATE) {
 			dev_warn(chip->dev, "VDM_ENTER_MODE time out\n");
 			chip->vdm_state = 0xff;
 			chip->work_continue = 1;
 		}
-
-		if (!chip->val_tmp)
-			break;
-		chip->val_tmp = 0;
-		chip->vdm_send_state = 0;
-		return 0;
+		break;
 	}
 	return -EINPROGRESS;
 }
@@ -1301,17 +1302,16 @@ static int vdm_send_getdpstatus(struct fusb30x_chip *chip, int evt)
 		if (chip->vdm_send_state != 2)
 			break;
 	default:
-		if (evt & EVENT_TIMER_STATE) {
+		if (chip->val_tmp) {
+			chip->val_tmp = 0;
+			chip->vdm_send_state = 0;
+			return 0;
+		} else if (evt & EVENT_TIMER_STATE) {
 			dev_warn(chip->dev, "VDM_DP_STATUS_UPDATE time out\n");
 			chip->vdm_state = 0xff;
 			chip->work_continue = 1;
 		}
-
-		if (!chip->val_tmp)
-			break;
-		chip->val_tmp = 0;
-		chip->vdm_send_state = 0;
-		return 0;
+		break;
 	}
 	return -EINPROGRESS;
 }
@@ -1341,17 +1341,16 @@ static int vdm_send_dpconfig(struct fusb30x_chip *chip, int evt)
 		if (chip->vdm_send_state != 2)
 			break;
 	default:
-		if (evt & EVENT_TIMER_STATE) {
+		if (chip->val_tmp) {
+			chip->val_tmp = 0;
+			chip->vdm_send_state = 0;
+			return 0;
+		} else if (evt & EVENT_TIMER_STATE) {
 			dev_warn(chip->dev, "vdm_send_dpconfig time out\n");
 			chip->vdm_state = 0xff;
 			chip->work_continue = 1;
 		}
-
-		if (!chip->val_tmp)
-			break;
-		chip->val_tmp = 0;
-		chip->vdm_send_state = 0;
-		return 0;
+		break;
 	}
 	return -EINPROGRESS;
 }
@@ -1397,12 +1396,14 @@ static void auto_vdm_machine(struct fusb30x_chip *chip, int evt)
 
 static void fusb_state_disabled(struct fusb30x_chip *chip, int evt)
 {
-	platform_fusb_notify(chip);
+	/* Do nothing */
 }
 
 static void fusb_state_unattached(struct fusb30x_chip *chip, int evt)
 {
 	chip->notify.is_cc_connected = 0;
+	chip->is_pd_support = 0;
+
 	if ((evt & EVENT_CC) && chip->cc_state) {
 		if (chip->cc_state & 0x04)
 			set_state(chip, attach_wait_sink);
@@ -1531,6 +1532,7 @@ static void fusb_state_src_startup(struct fusb30x_chip *chip, int evt)
 	tcpm_set_rx_enable(chip, 1);
 
 	set_state(chip, policy_src_send_caps);
+	platform_fusb_notify(chip);
 }
 
 static void fusb_state_src_discovery(struct fusb30x_chip *chip, int evt)
@@ -1551,12 +1553,13 @@ static void fusb_state_src_discovery(struct fusb30x_chip *chip, int evt)
 	default:
 		if (evt & EVENT_TIMER_STATE) {
 			set_state(chip, policy_src_send_caps);
-		} else if ((evt & EVENT_TIMER_MUX) &&
-			   (chip->hardrst_count > N_HARDRESET_COUNT)) {
-			if (chip->notify.is_pd_connected)
+		} else if (evt & EVENT_TIMER_MUX) {
+			if (!chip->is_pd_support)
+				set_state(chip, disabled);
+			else if (chip->hardrst_count > N_HARDRESET_COUNT)
 				set_state(chip, error_recovery);
 			else
-				set_state(chip, disabled);
+				set_state(chip, policy_src_send_hardrst);
 		}
 		break;
 	}
@@ -1583,6 +1586,7 @@ static void fusb_state_src_send_caps(struct fusb30x_chip *chip, int evt)
 					 chip->timer_state);
 			chip->timer_mux = T_DISABLED;
 			chip->sub_state++;
+			chip->is_pd_support = 1;
 		} else if (tmp == tx_failed) {
 			set_state(chip, policy_src_discovery);
 			break;
@@ -1604,10 +1608,12 @@ static void fusb_state_src_send_caps(struct fusb30x_chip *chip, int evt)
 			else
 				set_state(chip, disabled);
 		} else if (evt & EVENT_TIMER_MUX) {
-			if (chip->notify.is_pd_connected)
+			if (!chip->is_pd_support)
 				set_state(chip, disabled);
-			else
+			else if (chip->hardrst_count > N_HARDRESET_COUNT)
 				set_state(chip, error_recovery);
+			else
+				set_state(chip, policy_src_send_hardrst);
 		}
 		break;
 	}
@@ -1872,6 +1878,7 @@ static void fusb_state_snk_startup(struct fusb30x_chip *chip, int evt)
 	tcpm_set_polarity(chip, chip->cc_polarity);
 	tcpm_set_rx_enable(chip, 1);
 	set_state(chip, policy_snk_discovery);
+	platform_fusb_notify(chip);
 }
 
 static void fusb_state_snk_discovery(struct fusb30x_chip *chip, int evt)
@@ -1887,17 +1894,22 @@ static void fusb_state_snk_wait_caps(struct fusb30x_chip *chip, int evt)
 	if (evt & EVENT_RX) {
 		if (PD_HEADER_CNT(chip->rec_head) &&
 		    PD_HEADER_TYPE(chip->rec_head) == DMT_SOURCECAPABILITIES) {
+			chip->is_pd_support = 1;
 			chip->timer_mux = T_DISABLED;
 			set_state(chip, policy_snk_evaluate_caps);
 		}
 	} else if (evt & EVENT_TIMER_STATE) {
-		if (chip->hardrst_count <= N_HARDRESET_COUNT)
+		if (chip->hardrst_count <= N_HARDRESET_COUNT) {
 			set_state(chip, policy_snk_send_hardrst);
-		else
-			set_state(chip, disabled);
+		} else {
+			if (chip->is_pd_support)
+				set_state(chip, error_recovery);
+			else
+				set_state(chip, disabled);
+		}
 	} else if ((evt & EVENT_TIMER_MUX) &&
 		   (chip->hardrst_count > N_HARDRESET_COUNT)) {
-		if (chip->notify.is_pd_connected)
+		if (chip->is_pd_support)
 			set_state(chip, error_recovery);
 		else
 			set_state(chip, disabled);

@@ -3,7 +3,8 @@
 #include "camsys_gpio.h"
 
 #include <linux/rockchip/common.h>
-#include <dt-bindings/clock/rk_system_status.h>
+#include <dt-bindings/soc/rockchip-system-status.h>
+#include <soc/rockchip/rockchip-system-status.h>
 #include <linux/rockchip_ion.h>
 #include <linux/file.h>
 #include <linux/pm_runtime.h>
@@ -12,9 +13,6 @@
 #include <drm/rockchip_drm.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-buf.h>
-
-extern int rockchip_set_system_status(unsigned long status);
-extern int rockchip_clear_system_status(unsigned long status);
 
 static const char miscdev_name[] = CAMSYS_MARVIN_DEVNAME;
 
@@ -405,6 +403,16 @@ static int camsys_mrv_drm_iommu_cb(void *ptr, camsys_sysctrl_t *devctl)
 			attach = camsys_dev->dma_buf[index].attach;
 			dma_buf = camsys_dev->dma_buf[index].dma_buf;
 			sgt = camsys_dev->dma_buf[index].sgt;
+			camsys_trace
+			(
+			2,
+			"exist mapped buf, release it before map: attach %p,"
+			"dma_buf %p,sgt %p,fd %d,index %d",
+			attach,
+			dma_buf,
+			sgt,
+			iommu->map_fd,
+			index);
 			dma_buf_unmap_attachment
 				(attach,
 				sgt,
@@ -477,7 +485,7 @@ static int camsys_mrv_drm_iommu_cb(void *ptr, camsys_sysctrl_t *devctl)
 		}
 		if (index == camsys_dev->dma_buf_cnt) {
 			camsys_warn("can't find map fd %d", iommu->map_fd);
-			return 0;
+			return -EINVAL;
 		}
 		attach = camsys_dev->dma_buf[index].attach;
 		dma_buf = camsys_dev->dma_buf[index].dma_buf;
@@ -535,7 +543,7 @@ static int camsys_mrv_clkin_cb(void *ptr, unsigned int on)
 
 	if (CHIP_TYPE == 3399) {
 		if (on && !clk->in_on) {
-			/* rockchip_set_system_status(SYS_STATUS_ISP); */
+			rockchip_set_system_status(SYS_STATUS_ISP);
 			if (on == 1)
 				isp_clk = 210000000;
 			else
@@ -568,13 +576,14 @@ static int camsys_mrv_clkin_cb(void *ptr, unsigned int on)
 				clk_prepare_enable(clk->pclk_dphy_ref);
 			}
 
-		clk->in_on = true;
+			clk->in_on = true;
 
-		camsys_trace(1, "%s clock(f: %ld Hz) in turn on",
-			dev_name(camsys_dev->miscdev.this_device), isp_clk);
-		camsys_mrv_reset_cb(ptr, 1);
-		udelay(100);
-		camsys_mrv_reset_cb(ptr, 0);
+			camsys_trace(1, "%s clock(f: %ld Hz) in turn on",
+				     dev_name(camsys_dev->miscdev.this_device),
+				     isp_clk);
+			camsys_mrv_reset_cb(ptr, 1);
+			udelay(100);
+			camsys_mrv_reset_cb(ptr, 0);
 		} else if (!on && clk->in_on) {
 			if (strstr(camsys_dev->miscdev.name,
 				"camsys_marvin1")) {
@@ -601,14 +610,14 @@ static int camsys_mrv_clkin_cb(void *ptr, unsigned int on)
 				clk_disable_unprepare(clk->pclk_dphy_ref);
 			}
 
-		/* rockchip_clear_system_status(SYS_STATUS_ISP); */
-		clk->in_on = false;
-		camsys_trace(1, "%s clock in turn off",
-			dev_name(camsys_dev->miscdev.this_device));
-		}
+			rockchip_clear_system_status(SYS_STATUS_ISP);
+			clk->in_on = false;
+			camsys_trace(1, "%s clock in turn off",
+				     dev_name(camsys_dev->miscdev.this_device));
+			}
 	} else{
 		if (on && !clk->in_on) {
-			/* rockchip_set_system_status(SYS_STATUS_ISP); */
+			rockchip_set_system_status(SYS_STATUS_ISP);
 
 		if (on == 1)
 			isp_clk = 210000000;
@@ -630,7 +639,7 @@ static int camsys_mrv_clkin_cb(void *ptr, unsigned int on)
 		} else {
 			clk_prepare_enable(clk->clk_mipi_24m);
 		}
-			clk->in_on = true;
+		clk->in_on = true;
 
 		camsys_trace(1, "%s clock(f: %ld Hz) in turn on",
 			dev_name(camsys_dev->miscdev.this_device), isp_clk);
@@ -651,7 +660,7 @@ static int camsys_mrv_clkin_cb(void *ptr, unsigned int on)
 		}
 		/* clk_disable_unprepare(clk->pd_isp); */
 
-		/* rockchip_clear_system_status(SYS_STATUS_ISP); */
+		rockchip_clear_system_status(SYS_STATUS_ISP);
 		clk->in_on = false;
 		camsys_trace(1, "%s clock in turn off",
 			dev_name(camsys_dev->miscdev.this_device));
@@ -917,7 +926,7 @@ int camsys_mrv_probe_cb(struct platform_device *pdev, camsys_dev_t *camsys_dev)
 	int err = 0;
 	camsys_mrv_clk_t *mrv_clk = NULL;
 	struct resource register_res;
-	struct iommu_domain *domain;
+	struct iommu_domain *domain = NULL;
 	struct iommu_group *group;
 	struct device_node *np;
 
@@ -1094,8 +1103,8 @@ int camsys_mrv_probe_cb(struct platform_device *pdev, camsys_dev_t *camsys_dev)
 	mrv_clk->in_on = false;
 	mrv_clk->out_on = 0;
 
-	np = of_find_node_by_name(NULL, "isp0_mmu");
-	if (!np) {
+	np = of_parse_phandle(pdev->dev.of_node, "iommus", 0);
+	if (np) {
 		int index = 0;
 		/* iommu domain */
 		domain = iommu_domain_alloc(&platform_bus_type);
@@ -1163,9 +1172,11 @@ misc_register_failed:
 	if (!IS_ERR_OR_NULL(camsys_dev->miscdev.this_device))
 		misc_deregister(&camsys_dev->miscdev);
 err_put_cookie:
-	iommu_put_dma_cookie(domain);
+	if (domain)
+		iommu_put_dma_cookie(domain);
 err_free_domain:
-	iommu_domain_free(domain);
+	if (domain)
+		iommu_domain_free(domain);
 clk_failed:
 	if (mrv_clk != NULL) {
 		if (!IS_ERR_OR_NULL(mrv_clk->pd_isp))
@@ -1189,13 +1200,13 @@ clk_failed:
 		if (!IS_ERR_OR_NULL(mrv_clk->cif_clk_out))
 			clk_put(mrv_clk->cif_clk_out);
 
-	if (CHIP_TYPE == 3368 || CHIP_TYPE == 3366) {
-		if (!IS_ERR_OR_NULL(mrv_clk->pclk_dphyrx))
-			clk_put(mrv_clk->pclk_dphyrx);
+		if (CHIP_TYPE == 3368 || CHIP_TYPE == 3366) {
+			if (!IS_ERR_OR_NULL(mrv_clk->pclk_dphyrx))
+				clk_put(mrv_clk->pclk_dphyrx);
 
-		if (!IS_ERR_OR_NULL(mrv_clk->clk_vio0_noc))
-		clk_put(mrv_clk->clk_vio0_noc);
-	}
+			if (!IS_ERR_OR_NULL(mrv_clk->clk_vio0_noc))
+				clk_put(mrv_clk->clk_vio0_noc);
+		}
 
 		kfree(mrv_clk);
 		mrv_clk = NULL;

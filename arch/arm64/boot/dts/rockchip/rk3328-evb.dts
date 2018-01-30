@@ -97,6 +97,19 @@
 		};
 	};
 
+	hdmi-sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,mclk-fs = <128>;
+		simple-audio-card,name = "rockchip,hdmi";
+		simple-audio-card,cpu {
+			sound-dai = <&i2s0>;
+		};
+		simple-audio-card,codec {
+			sound-dai = <&hdmi>;
+		};
+	};
+
 	spdif-sound {
 		compatible = "simple-audio-card";
 		simple-audio-card,name = "rockchip,spdif";
@@ -120,6 +133,17 @@
 		regulator-boot-on;
 	};
 
+	vcc_sd: sdmmc-regulator {
+		compatible = "regulator-fixed";
+		gpio = <&gpio0 30 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&sdmmc0m1_gpio>;
+		regulator-name = "vcc_sd";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		vin-supply = <&vcc_io>;
+	};
+
 	wireless-wlan {
 		compatible = "wlan-platdata";
 		rockchip,grf = <&grf>;
@@ -137,6 +161,10 @@
 
 &cpu0 {
 	cpu-supply = <&vdd_arm>;
+};
+
+&display_subsystem {
+	status = "okay";
 };
 
 &emmc {
@@ -167,9 +195,30 @@
 	status = "disabled";
 };
 
+&gmac2phy {
+	phy-supply = <&vcc_phy>;
+	clock_in_out = "output";
+	assigned-clocks = <&cru SCLK_MAC2PHY_SRC>;
+	assigned-clock-rate = <50000000>;
+	assigned-clocks = <&cru SCLK_MAC2PHY>;
+	assigned-clock-parents = <&cru SCLK_MAC2PHY_SRC>;
+	status = "okay";
+};
+
 &gpu {
 	status = "okay";
 	mali-supply = <&vdd_logic>;
+};
+
+&hdmi {
+	#sound-dai-cells = <0>;
+	ddc-i2c-scl-high-time-ns = <9625>;
+	ddc-i2c-scl-low-time-ns = <10000>;
+	status = "okay";
+};
+
+&hdmiphy {
+	status = "okay";
 };
 
 &i2c1 {
@@ -187,6 +236,8 @@
 		wakeup-source;
 		gpio-controller;
 		#gpio-cells = <2>;
+		#clock-cells = <1>;
+		clock-output-names = "xin32k", "rk805-clkout2";
 
 		rtc {
 			status = "disabled";
@@ -307,6 +358,16 @@
 	};
 };
 
+&h265e {
+	status = "okay";
+};
+
+&i2s0 {
+	#sound-dai-cells = <0>;
+	rockchip,bclk-fs = <128>;
+	status = "okay";
+};
+
 &i2s1 {
 	#sound-dai-cells = <0>;
 	status = "okay";
@@ -340,6 +401,10 @@
 	};
 };
 
+&rkvdec {
+	status = "okay";
+};
+
 &sdio {
 	bus-width = <4>;
 	cap-sd-highspeed;
@@ -367,6 +432,7 @@
 	pinctrl-0 = <&sdmmc0_clk &sdmmc0_cmd &sdmmc0_dectn &sdmmc0_bus4>;
 	supports-sd;
 	status = "okay";
+	vmmc-supply = <&vcc_sd>;
 };
 
 &spdif {
@@ -405,7 +471,6 @@
 };
 
 &usb20_otg {
-	dr_mode = "peripheral";
 	status = "okay";
 };
 
@@ -422,5 +487,21 @@
 };
 
 &usbdrd_dwc3 {
+	status = "okay";
+};
+
+&vepu {
+	status = "okay";
+};
+
+&vop {
+	status = "okay";
+};
+
+&vop_mmu {
+	status = "okay";
+};
+
+&vpu_service {
 	status = "okay";
 };

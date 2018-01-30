@@ -42,18 +42,18 @@
 
 / {
 	chosen {
-		bootargs = "earlycon=uart8250,mmio32,0xff1b0000 swiotlb=1 firmware_class.path=/system/vendor/firmware";
+		bootargs = "earlycon=uart8250,mmio32,0xff690000 swiotlb=1 firmware_class.path=/system/vendor/firmware";
 	};
 
 	fiq_debugger: fiq-debugger {
 		compatible = "rockchip,fiq-debugger";
-		rockchip,serial-id = <3>;
-		rockchip,signal-irq = <186>;
+		rockchip,serial-id = <2>;
 		rockchip,wake-irq = <0>;
-		rockchip,irq-mode-enable = <1>;  /* If enable uart uses irq instead of fiq */
+		rockchip,irq-mode-enable = <0>;  /* If enable uart uses irq instead of fiq */
 		rockchip,baudrate = <115200>;  /* Only 115200 and 1500000 */
 		pinctrl-names = "default";
-		pinctrl-0 = <&uart3_xfer>;
+		pinctrl-0 = <&uart2_xfer>;
+		interrupts = <GIC_SPI 154 IRQ_TYPE_LEVEL_HIGH 0>;   /* signal irq */
 	};
 
 	reserved-memory {
@@ -70,7 +70,7 @@
 		linux,cma {
 			compatible = "shared-dma-pool";
 			reusable;
-			size = <0x0 0x8000000>;
+			size = <0x0 0x2000000>;
 			linux,cma-default;
 		};
 	};
@@ -97,23 +97,6 @@
 		clock-names = "aclk_rga", "hclk_rga", "clk_rga";
 		dma-coherent;
 		status = "okay";
-	};
-
-	hdmi: hdmi@ff980000 {
-		compatible = "rockchip,rk3368-hdmi";
-		reg = <0x0 0xff980000 0x0 0x20000>;
-		interrupts = <GIC_SPI 103 IRQ_TYPE_LEVEL_HIGH>;
-		clocks = <&cru PCLK_HDMI_CTRL>,
-			 <&cru SCLK_HDMI_HDCP>,
-			 <&cru SCLK_HDMI_CEC>;
-		clock-names = "pclk_hdmi", "hdcp_clk_hdmi", "cec_clk_hdmi";
-		power-domains = <&power RK3368_PD_VIO>;
-		resets = <&cru SRST_HDMI>;
-		reset-names = "hdmi";
-		pinctrl-names = "default", "gpio";
-		pinctrl-0 = <&hdmii2c_xfer &hdmi_cec>;
-		pinctrl-1 = <&i2c5_gpio>;
-		status = "disabled";
 	};
 
 	dwc_control_usb: dwc-control-usb {
@@ -158,13 +141,13 @@
 
 	memory-region = <&drm_logo>;
 	route {
-		route_mipi: route-mipi {
-			status = "okay";
+		route_dsi: route-dsi {
+			status = "disabled";
 			logo,uboot = "logo.bmp";
 			logo,kernel = "logo_kernel.bmp";
 			logo,mode = "center";
 			charge_logo,mode = "center";
-			connect = <&vop_out_mipi>;
+			connect = <&vop_out_dsi>;
 		};
 
 		route_edp: route-edp {
@@ -175,10 +158,28 @@
 			charge_logo,mode = "center";
 			connect = <&vop_out_edp>;
 		};
+
+		route_hdmi: route-hdmi {
+			status = "disabled";
+			logo,uboot = "logo.bmp";
+			logo,kernel = "logo_kernel.bmp";
+			logo,mode = "center";
+			charge_logo,mode = "center";
+			connect = <&vop_out_hdmi>;
+		};
+
+		route_lvds: route-lvds {
+			status = "disabled";
+			logo,uboot = "logo.bmp";
+			logo,kernel = "logo_kernel.bmp";
+			logo,mode = "center";
+			charge_logo,mode = "center";
+			connect = <&vop_out_lvds>;
+		};
 	};
 };
 
-&uart3 {
+&uart2 {
 	status = "okay";
 };
 
@@ -239,26 +240,6 @@
 };
 
 &pinctrl {
-	hdmi_i2c {
-		hdmii2c_xfer: hdmii2c-xfer {
-			rockchip,pins = <3 26 RK_FUNC_1 &pcfg_pull_none>,
-					<3 27 RK_FUNC_1 &pcfg_pull_none>;
-		};
-	};
-
-	hdmi_pin {
-		hdmi_cec: hdmi-cec {
-			rockchip,pins =	<3 23 RK_FUNC_1 &pcfg_pull_none>;
-		};
-	};
-
-	i2c5 {
-		i2c5_gpio: i2c5-gpio {
-			rockchip,pins = <3 26 RK_FUNC_GPIO &pcfg_pull_none>,
-					<3 27 RK_FUNC_GPIO &pcfg_pull_none>;
-		};
-	};
-
 	isp {
 		cif_clkout: cif-clkout {
 			rockchip,pins = <1 11 RK_FUNC_1 &pcfg_pull_none>;//cif_clkout

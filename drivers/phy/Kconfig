@@ -325,6 +325,7 @@ config PHY_ROCKCHIP_INNO_USB2
 	depends on ARCH_ROCKCHIP && OF
 	depends on COMMON_CLK
 	depends on USB_SUPPORT
+	select EXTCON
 	select GENERIC_PHY
 	select USB_COMMON
 	help
@@ -358,6 +359,13 @@ config PHY_ROCKCHIP_INNO_MIPI_DPHY
 	select GENERIC_PHY
 	help
 	  Enable this to support the Rockchip MIPI D-PHY with Innosilicon IP block.
+
+config PHY_ROCKCHIP_INNO_HDMI_PHY
+	tristate "Rockchip INNO HDMI PHY Driver"
+	depends on ARCH_ROCKCHIP && OF
+	select GENERIC_PHY
+	help
+	  Enable this to support the Rockchip HDMI PHY with Innosilicon IP block.
 
 config PHY_ROCKCHIP_TYPEC
 	tristate "Rockchip TYPEC PHY Driver"
@@ -424,6 +432,7 @@ config PHY_QCOM_UFS
 config PHY_TUSB1210
 	tristate "TI TUSB1210 ULPI PHY module"
 	depends on USB_ULPI_BUS
+	depends on EXTCON || !EXTCON # if EXTCON=m, this cannot be built-in
 	select GENERIC_PHY
 	help
 	  Support for TI TUSB1210 USB ULPI PHY.

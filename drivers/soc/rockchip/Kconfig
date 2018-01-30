@@ -3,15 +3,30 @@ if ARCH_ROCKCHIP || COMPILE_TEST
 #
 # Rockchip Soc drivers
 #
+config ANDROID_VERSION
+	hex "Android Version"
+	depends on ANDROID
+	default "0x07010000"
+	help
+	  The version of Android kernel supported.
+	  The value is 0xAABBCCRR, corresponding to Android A.B.C release R
+
 config ROCKCHIP_CPUINFO
-	tristate "Rockchip cpuinfo support"
+	bool "Rockchip cpuinfo support"
 	depends on ROCKCHIP_EFUSE && (ARM64 || ARM)
+	default y
 	help
 	  Say y here to enable Rockchip cpuinfo support.
 	  Set system_serial_low/high from eFuse ID.
 	  Serial can read from /proc/cpuinfo.
 
 	  If unsure, say N.
+
+config ROCKCHIP_DEVICEINFO
+	tristate "support deviceinfo partition"
+	default n
+	help
+	  Say y here if you have a deviceinfo partition.
 
 config ROCKCHIP_PM_TEST
 	bool "Rockchip pm_test support"

@@ -27,6 +27,7 @@
 #define ADC_CUR_EN		BIT(6)
 #define ADC_TS1_EN		BIT(5)
 #define ADC_TS2_EN		BIT(4)
+#define TS1_CUR_MSK		0xfc
 
 /* RK818_GGCON */
 #define OCV_SAMP_MIN_MSK	0x0c
@@ -81,6 +82,7 @@
 
 /* RK818_THERMAL_REG */
 #define FB_TEMP_MSK		0x0c
+#define HOTDIE_STS		BIT(1)
 
 /* RK818_INT_STS_MSK_REG1 */
 #define VB_LOW_INT_EN		BIT(1)
@@ -126,6 +128,7 @@ struct battery_platform_data {
 	u32 fb_temp;
 	u32 energy_mode;
 	u32 cccv_hour;
+	u32 ntc_cur;
 };
 
 enum work_mode {
@@ -154,9 +157,11 @@ static const u16 chrg_cur_sel_array[] = {
 };
 
 static const u16 chrg_cur_input_array[] = {
-	450, 800, 850, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000
+	450, 80, 850, 1000, 1250, 1500, 1750, 2000, 2250, 2500, 2750, 3000
 };
 
 void kernel_power_off(void);
+int rk818_bat_temp_notifier_register(struct notifier_block *nb);
+int rk818_bat_temp_notifier_unregister(struct notifier_block *nb);
 
 #endif

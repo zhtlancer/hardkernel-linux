@@ -127,13 +127,17 @@ static int debug_port_init(struct platform_device *pdev)
 
 	/* enable rx and lsr interrupt */
 	rk_fiq_write(t, UART_IER_RLSI | UART_IER_RDI, UART_IER);
-	/* interrupt on every character when receive,but we can enable fifo for TX
-	I found that if we enable the RX fifo, some problem may vanish such as when
-	you continuously input characters in the command line the uart irq may be disable
-	because of the uart irq is served when CPU is at IRQ exception,but it is
-	found unregistered, so it is disable.
-	hhb@rock-chips.com */
-	rk_fiq_write(t, 0xc1, UART_FCR);
+
+	/*
+	 * Interrupt on every character when received, but we can enable fifo for TX
+	 * I found that if we enable the RX fifo, some problem may vanish such as when
+	 * you continuously input characters in the command line the uart irq may be disable
+	 * because of the uart irq is served when CPU is at IRQ exception, but it is
+	 * found unregistered, so it is disable.
+	 */
+	rk_fiq_write(t, 0x01, UART_FCR);
+
+	/* disbale loop back mode */
 	rk_fiq_write(t, 0x0, UART_MCR);
 
 	return 0;
@@ -177,27 +181,30 @@ static int debug_getc(struct platform_device *pdev)
 static void debug_putc(struct platform_device *pdev, unsigned int c)
 {
 	struct rk_fiq_debugger *t;
+	unsigned int count = 10000;
 
 	t = container_of(dev_get_platdata(&pdev->dev), typeof(*t), pdata);
 
-	while (!(rk_fiq_read(t, UART_USR) & UART_USR_TX_FIFO_NOT_FULL))
-		cpu_relax();
+	while (!(rk_fiq_read(t, UART_USR) & UART_USR_TX_FIFO_NOT_FULL) && count--)
+		udelay(10);
+	/* If uart is always busy, maybe it is abnormal, reinit it */
+	if ((count == 0) && (rk_fiq_read(t, UART_USR) & UART_USR_BUSY))
+		debug_port_init(pdev);
+
 	rk_fiq_write(t, c, UART_TX);
 }
 
 static void debug_flush(struct platform_device *pdev)
 {
 	struct rk_fiq_debugger *t;
+	unsigned int count = 10000;
 	t = container_of(dev_get_platdata(&pdev->dev), typeof(*t), pdata);
 
-	while (!(rk_fiq_read_lsr(t) & UART_LSR_TEMT))
-		cpu_relax();
-}
-
-static int uart_dev_resume(struct platform_device *pdev)
-{
-	debug_port_init(pdev);
-	return 0;
+	while (!(rk_fiq_read_lsr(t) & UART_LSR_TEMT) && count--)
+		udelay(10);
+	/* If uart is always busy, maybe it is abnormal, reinit it */
+	if ((count == 0) && (rk_fiq_read(t, UART_USR) & UART_USR_BUSY))
+		debug_port_init(pdev);
 }
 
 #ifdef CONFIG_RK_CONSOLE_THREAD
@@ -442,7 +449,6 @@ void rk_serial_debug_init(void __iomem *base, phys_addr_t phy_base,
 	t->pdata.uart_init = debug_port_init;
 	t->pdata.uart_getc = debug_getc;
 	t->pdata.uart_putc = debug_putc;
-	t->pdata.uart_dev_resume = uart_dev_resume;
 #ifndef CONFIG_RK_CONSOLE_THREAD
 	t->pdata.uart_flush = debug_flush;
 #endif
@@ -544,7 +550,7 @@ static int __init rk_fiq_debugger_init(void) {
 	void __iomem *base;
 	struct device_node *np;
 	unsigned int id, ok = 0;
-	int irq, signal_irq = 0, wake_irq = 0;
+	int irq, signal_irq = -1, wake_irq = -1;
 	unsigned int baudrate = 0, irq_mode = 0;
 	phys_addr_t phy_base = 0;
 	int serial_id;
@@ -571,22 +577,19 @@ static int __init rk_fiq_debugger_init(void) {
 	if (of_property_read_u32(np, "rockchip,irq-mode-enable", &irq_mode))
 		irq_mode = -1;
 
-	if (irq_mode == 1)
+	if (irq_mode == 1) {
 		signal_irq = -1;
-	else if (of_property_read_u32(np, "rockchip,signal-irq", &signal_irq))
-		signal_irq = -1;
+	} else {
+		signal_irq = irq_of_parse_and_map(np, 0);
+		if (!signal_irq)
+			return -EINVAL;
+	}
 
 	if (of_property_read_u32(np, "rockchip,wake-irq", &wake_irq))
 		wake_irq = -1;
 
 	if (of_property_read_u32(np, "rockchip,baudrate", &baudrate))
 		baudrate = -1;
-
-	if (signal_irq > 0) {
-		signal_irq = irq_of_parse_and_map(np, 0);
-		if (!signal_irq)
-			return -EINVAL;
-	}
 
 	np = NULL;
 

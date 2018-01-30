@@ -1159,7 +1159,7 @@ struct intel_gen6_power_mgmt {
 	struct intel_rps_client semaphores, mmioflips;
 
 	/* manual wa residency calculations */
-	struct intel_rps_ei up_ei, down_ei;
+	struct intel_rps_ei ei;
 
 	/*
 	 * Protects RPS/RC6 register access and PCU communication.
@@ -3473,11 +3473,6 @@ static inline uint32_t i915_vgacntrl_reg(struct drm_device *dev)
 		return CPU_VGACNTRL;
 	else
 		return VGACNTRL;
-}
-
-static inline void __user *to_user_ptr(u64 address)
-{
-	return (void __user *)(uintptr_t)address;
 }
 
 static inline unsigned long msecs_to_jiffies_timeout(const unsigned int m)

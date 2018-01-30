@@ -313,14 +313,14 @@ struct clk *rockchip_clk_register_mmc(const char *name,
  */
 #define ROCKCHIP_DDRCLK_SIP		0x01
 #define ROCKCHIP_DDRCLK_SCPI		0x02
+#define ROCKCHIP_DDRCLK_SIP_V2		0x03
 
 struct clk *rockchip_clk_register_ddrclk(const char *name, int flags,
 					 const char *const *parent_names,
 					 u8 num_parents, int mux_offset,
 					 int mux_shift, int mux_width,
 					 int div_shift, int div_width,
-					 int ddr_flags, void __iomem *reg_base,
-					 spinlock_t *lock);
+					 int ddr_flags, void __iomem *reg_base);
 
 #define ROCKCHIP_INVERTER_HIWORD_MASK	BIT(0)
 
@@ -697,6 +697,7 @@ void rockchip_clk_register_armclk(struct rockchip_clk_provider *ctx,
 			const struct rockchip_cpuclk_rate_table *rates,
 			int nrates);
 void rockchip_clk_protect_critical(const char *const clocks[], int nclocks);
+int rockchip_pll_clk_adaptive_scaling(struct clk *clk, int sel);
 void rockchip_register_restart_notifier(struct rockchip_clk_provider *ctx,
 					unsigned int reg, void (*cb)(void));
 

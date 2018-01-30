@@ -45,6 +45,35 @@ static void rga_dma_flush_range(void *pstart, void *pend)
 #endif
 }
 
+static void rga_dma_flush_page(struct page *page)
+{
+	phys_addr_t paddr;
+	void *virt;
+
+	paddr = page_to_phys(page);
+#ifdef CONFIG_ARM
+	if (PageHighMem(page)) {
+		if (cache_is_vipt_nonaliasing()) {
+			virt = kmap_atomic(page);
+			dmac_flush_range(virt, virt + PAGE_SIZE);
+			kunmap_atomic(virt);
+		} else {
+			virt = kmap_high_get(page);
+			dmac_flush_range(virt, virt + PAGE_SIZE);
+			kunmap_high(page);
+		}
+	} else {
+		virt = page_address(page);
+		dmac_flush_range(virt, virt + PAGE_SIZE);
+	}
+
+	outer_flush_range(paddr, paddr + PAGE_SIZE);
+#elif defined(CONFIG_ARM64)
+	virt = page_address(page);
+	__dma_flush_range(virt, virt + PAGE_SIZE);
+#endif
+}
+
 #if 0
 static unsigned int armv7_va_to_pa(unsigned int v_addr)
 {
@@ -151,7 +180,8 @@ static int rga2_buf_size_cal(unsigned long yrgb_addr, unsigned long uv_addr, uns
             pageCount = (size_yrgb + PAGE_SIZE - 1) >> PAGE_SHIFT;
             break;
         case RGA2_FORMAT_BGRA_8888 :
-            size_yrgb = w*h*4;
+            stride = (w * 4 + 3) & (~3);
+            size_yrgb = stride * h;
             start = yrgb_addr >> PAGE_SHIFT;
             pageCount = (size_yrgb + PAGE_SIZE - 1) >> PAGE_SHIFT;
             break;
@@ -269,7 +299,7 @@ static int rga2_MapUserMemory(struct page **pages, uint32_t *pageTable,
 	uint32_t status;
 	unsigned long Address;
 	unsigned long pfn;
-	void *virt;
+	struct page __maybe_unused *page;
 	spinlock_t * ptl;
 	pte_t * pte;
 	pgd_t * pgd;
@@ -292,8 +322,7 @@ static int rga2_MapUserMemory(struct page **pages, uint32_t *pageTable,
 		for (i = 0; i < pageCount; i++) {
 			/* Get the physical address from page struct. */
 			pageTable[i] = page_to_phys(pages[i]);
-			virt = phys_to_virt(pageTable[i]);
-			rga_dma_flush_range(virt, virt + 4 * 1024);
+			rga_dma_flush_page(pages[i]);
 		}
 		for (i = 0; i < result; i++)
 			put_page(pages[i]);
@@ -311,17 +340,20 @@ static int rga2_MapUserMemory(struct page **pages, uint32_t *pageTable,
 			break;
 		}
 		pgd = pgd_offset(current->mm, (Memory + i) << PAGE_SHIFT);
-		if (pgd_val(*pgd) == 0) {
+		if (pgd_none(*pgd) || unlikely(pgd_bad(*pgd))) {
+			pr_err("RGA2 failed to get pgd\n");
 			status = RGA2_OUT_OF_RESOURCES;
 			break;
 		}
 		pud = pud_offset(pgd, (Memory + i) << PAGE_SHIFT);
-		if (!pud) {
+		if (pud_none(*pud) || unlikely(pud_bad(*pud))) {
+			pr_err("RGA2 failed to get pud\n");
 			status = RGA2_OUT_OF_RESOURCES;
 			break;
 		}
 		pmd = pmd_offset(pud, (Memory + i) << PAGE_SHIFT);
-		if (!pmd) {
+		if (pmd_none(*pmd) || unlikely(pmd_bad(*pmd))) {
+			pr_err("RGA2 failed to get pmd\n");
 			status = RGA2_OUT_OF_RESOURCES;
 			break;
 		}
@@ -329,6 +361,7 @@ static int rga2_MapUserMemory(struct page **pages, uint32_t *pageTable,
 					  (Memory + i) << PAGE_SHIFT,
 					  &ptl);
 		if (!pte) {
+			pr_err("RGA2 failed to get pte\n");
 			pte_unmap_unlock(pte, ptl);
 			status = RGA2_OUT_OF_RESOURCES;
 			break;
@@ -338,8 +371,7 @@ static int rga2_MapUserMemory(struct page **pages, uint32_t *pageTable,
 			   << PAGE_SHIFT)) & ~PAGE_MASK));
 		pte_unmap_unlock(pte, ptl);
 		pageTable[i] = (uint32_t)Address;
-		virt = phys_to_virt(pageTable[i]);
-		rga_dma_flush_range(virt, virt + 4 * 1024);
+		rga_dma_flush_page(pfn_to_page(pfn));
 	}
 	up_read(&current->mm->mmap_sem);
 	return status;

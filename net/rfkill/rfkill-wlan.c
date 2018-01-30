@@ -115,7 +115,9 @@ int get_wifi_chip_type(void)
     } else if (strcmp(wifi_chip_type_string, "ap6181") == 0) {
         type = WIFI_AP6181;
     } else if (strcmp(wifi_chip_type_string, "ap6234") == 0) {
-        type = WIFI_AP6234;                            
+	type = WIFI_AP6234;
+    } else if (strcmp(wifi_chip_type_string, "ap6255") == 0) {
+	type = WIFI_AP6255;
     } else if (strcmp(wifi_chip_type_string, "ap6330") == 0) {
         type = WIFI_AP6330;
     } else if (strcmp(wifi_chip_type_string, "ap6335") == 0) {
@@ -140,12 +142,16 @@ int get_wifi_chip_type(void)
         type = WIFI_RTL8723BS;
     } else if (strcmp(wifi_chip_type_string, "rtl8723cs") == 0) {
 	type = WIFI_RTL8723CS;
+    } else if (strcmp(wifi_chip_type_string, "rtl8723ds") == 0) {
+	type = WIFI_RTL8723DS;
     } else if (strcmp(wifi_chip_type_string, "rtl8723au") == 0) {
         type = WIFI_RTL8723AU;        
     } else if (strcmp(wifi_chip_type_string, "rtl8723bu") == 0) {
         type = WIFI_RTL8723BU;
     } else if (strcmp(wifi_chip_type_string, "rtl8189es") == 0) {
         type = WIFI_RTL8189ES;
+    } else if (strcmp(wifi_chip_type_string, "rtl8189fs") == 0) {
+        type = WIFI_RTL8189FS;
     } else if (strcmp(wifi_chip_type_string, "rtl8812au") == 0) {
         type = WIFI_RTL8812AU;                        
     } else if (strcmp(wifi_chip_type_string, "esp8089") == 0) {
@@ -450,7 +456,14 @@ u8 wifi_custom_mac_addr[6] = {0,0,0,0,0,0};
 static int get_wifi_addr_vendor(unsigned char *addr)
 {
 	int ret;
+	int count = 5;
 
+	while (count-- > 0) {
+		if (is_rk_vendor_ready())
+			break;
+		/* sleep 500ms wait rk vendor driver ready */
+		msleep(500);
+	}
 	ret = rk_vendor_read(WIFI_MAC_ID, addr, 6);
 	if (ret != 6 || is_zero_ether_addr(addr)) {
 		LOG("%s: rk_vendor_read wifi mac address failed (%d)\n",

@@ -239,6 +239,27 @@
 	logic-supply = <&vdd_logic>;
 };
 
+&rockchip_suspend {
+	status = "okay";
+	rockchip,sleep-mode-config = <
+		(0
+		| RKPM_SLP_ARMOFF
+		| RKPM_SLP_PMU_PLLS_PWRDN
+		| RKPM_SLP_PMU_PMUALIVE_32K
+		| RKPM_SLP_SFT_PLLS_DEEP
+		| RKPM_SLP_PMU_DIS_OSC
+		| RKPM_SLP_SFT_PD_NBSCUS
+		)
+	>;
+	rockchip,wakeup-config = <
+		(0
+		| RKPM_GPIO_WKUP_EN
+		| RKPM_USB_WKUP_EN
+		| RKPM_CLUSTER_L_WKUP_EN
+		)
+	>;
+};
+
 &emmc {
 	bus-width = <8>;
 	cap-mmc-highspeed;
@@ -291,13 +312,14 @@
 		compatible = "silergy,syr827";
 		status = "okay";
 		reg = <0x40>;
-
 		regulator-compatible = "fan53555-reg";
 		regulator-name = "vdd_arm";
 		regulator-min-microvolt = <712500>;
 		regulator-max-microvolt = <1500000>;
 		regulator-ramp-delay = <1000>;
 		fcs,suspend-voltage-selector = <1>;
+		pinctrl-0 = <&vsel_gpio>;
+		vsel-gpios = <&gpio0 0 GPIO_ACTIVE_HIGH>;
 		regulator-always-on;
 		regulator-boot-on;
 		regulator-initial-state = <3>;
@@ -503,6 +525,10 @@
 					regulator-suspend-microvolt = <5000000>;
 				};
 			};
+
+			otg_switch: OTG_SWITCH {
+				regulator-name = "otg_switch";
+			};
 		};
 
 		battery {
@@ -524,7 +550,7 @@
 			power_off_thresd = <3400>;
 			zero_algorithm_vol = <3850>;
 			fb_temperature = <115>;
-			sample_res = <10>;
+			sample_res = <20>;
 			max_soc_offset = <60>;
 			energy_mode = <0>;
 			monitor_sec = <5>;
@@ -549,6 +575,8 @@
 		clock-names = "mclk";
 		spk-con-gpio = <&gpio0 27 GPIO_ACTIVE_HIGH>;
 		hp-det-gpio = <&gpio0 23 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&i2s_8ch_mclk>;
 	};
 };
 
@@ -649,21 +677,23 @@
 	status = "okay";
 };
 
-&mipi_dsi_host {
+&dsi {
 	status = "okay";
 
-	dsi_panel: panel@0 {
+	panel@0 {
 		compatible = "simple-panel-dsi";
 		reg = <0>;
 		backlight = <&backlight>;
 		enable-gpios = <&gpio0 22 GPIO_ACTIVE_HIGH>;
+
 		dsi,flags = <(MIPI_DSI_MODE_VIDEO | MIPI_DSI_MODE_VIDEO_BURST)>;
 		dsi,format = <MIPI_DSI_FMT_RGB888>;
 		dsi,lanes = <4>;
 
-		delay,prepare = <120>;
+		prepare-delay-ms = <120>;
+		enable-delay-ms = <200>;
 
-		disp_timings: display-timings {
+		display-timings {
 			native-mode = <&timing0>;
 
 			timing0: timing0 {
@@ -685,7 +715,10 @@
 };
 
 &mipi_dphy {
-	rockchip,dsi-panel = <&dsi_panel>;
+	status = "okay";
+};
+
+&route_dsi {
 	status = "okay";
 };
 
@@ -698,6 +731,9 @@
 	pmic {
 		pmic_int_l: pmic-int-l {
 			rockchip,pins = <RK_GPIO0 1 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+		vsel_gpio: vsel-gpio {
+			rockchip,pins = <0 0 RK_FUNC_GPIO &pcfg_pull_down>;
 		};
 	};
 

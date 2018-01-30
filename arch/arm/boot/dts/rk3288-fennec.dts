@@ -48,7 +48,7 @@
 	compatible = "rockchip,rk3288-fennec", "rockchip,rk3288";
 
 	memory {
-		reg = <0x0 0x80000000>;
+		reg = <0x0 0x0 0x0 0x80000000>;
 		device_type = "memory";
 	};
 
@@ -421,6 +421,8 @@
 		hp-det-gpio = <&gpio5 19 GPIO_ACTIVE_HIGH>;
 		clock-names = "mclk";
 		clocks = <&cru SCLK_I2S0_OUT>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&i2s0_mclk>;
 		#sound-dai-cells = <0>;
 	};
 };

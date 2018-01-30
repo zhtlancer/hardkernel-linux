@@ -38,9 +38,9 @@ static struct arm_smccc_res __invoke_sip_fn_smc(unsigned long function_id,
 	return res;
 }
 
-struct arm_smccc_res sip_smc_ddr_cfg(u32 arg0, u32 arg1, u32 arg2)
+struct arm_smccc_res sip_smc_dram(u32 arg0, u32 arg1, u32 arg2)
 {
-	return __invoke_sip_fn_smc(SIP_DDR_CFG, arg0, arg1, arg2);
+	return __invoke_sip_fn_smc(SIP_DRAM_CONFIG, arg0, arg1, arg2);
 }
 
 struct arm_smccc_res sip_smc_get_atf_version(void)
@@ -66,6 +66,15 @@ int sip_smc_virtual_poweroff(void)
 	struct arm_smccc_res res;
 
 	res = __invoke_sip_fn_smc(PSCI_FN_NATIVE(1_0, SYSTEM_SUSPEND), 0, 0, 0);
+	return res.a0;
+}
+
+int sip_smc_remotectl_config(u32 func, u32 data)
+{
+	struct arm_smccc_res res;
+
+	res = __invoke_sip_fn_smc(SIP_REMOTECTL_CFG, func, data, 0);
+
 	return res.a0;
 }
 
@@ -144,13 +153,7 @@ static struct pt_regs sip_fiq_debugger_get_pt_regs(void *reg_base,
 
 	/* copy pstate */
 	memcpy(&fiq_pt_regs.pstate, reg_base + 0x110, 8);
-
-	/* EL1 mode */
-	if (fiq_pt_regs.pstate & 0x10)
-		memcpy(&fiq_pt_regs.sp, reg_base + 0xf8, 8);
-	/* EL0 mode */
-	else
-		fiq_pt_regs.sp = sp_el1;
+	fiq_pt_regs.sp = sp_el1;
 
 	/* copy pc */
 	memcpy(&fiq_pt_regs.pc, reg_base + 0x118, 8);
@@ -172,8 +175,18 @@ static struct pt_regs sip_fiq_debugger_get_pt_regs(void *reg_base,
 	fiq_pt_regs.ARM_ip = nsec_ctx->r12;
 	fiq_pt_regs.ARM_sp = nsec_ctx->svc_sp;
 	fiq_pt_regs.ARM_lr = nsec_ctx->svc_lr;
-	fiq_pt_regs.ARM_pc = nsec_ctx->mon_lr;
 	fiq_pt_regs.ARM_cpsr = nsec_ctx->mon_spsr;
+
+	/*
+	 * 'nsec_ctx->mon_lr' is not the fiq break point's PC, because it will
+	 * be override as 'psci_fiq_debugger_uart_irq_tf_cb' for optee-os to
+	 * jump to fiq_debugger handler.
+	 *
+	 * As 'nsec_ctx->und_lr' is not used for kernel, so optee-os uses it to
+	 * deliver fiq break point's PC.
+	 *
+	 */
+	fiq_pt_regs.ARM_pc = nsec_ctx->und_lr;
 #endif
 
 	return fiq_pt_regs;
@@ -285,3 +298,22 @@ void sip_fiq_debugger_enable_fiq(bool enable, uint32_t tgt_cpu)
 	__invoke_sip_fn_smc(SIP_UARTDBG_FN, tgt_cpu, 0, en);
 }
 
+/******************************************************************************/
+#ifdef CONFIG_ARM
+/*
+ * optee work on kernel 3.10 and 4.4, and we have different sip
+ * implement. We should tell optee the current rockchip sip version.
+ */
+static __init int sip_implement_version_init(void)
+{
+	struct arm_smccc_res res;
+
+	res = __invoke_sip_fn_smc(SIP_SIP_VERSION, SIP_IMPLEMENT_V2,
+				  SECURE_REG_WR, 0);
+	if (IS_SIP_ERROR(res.a0))
+		pr_err("%s: set rockchip sip version v2 failed\n", __func__);
+
+	return 0;
+}
+arch_initcall(sip_implement_version_init);
+#endif
