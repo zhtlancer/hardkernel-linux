@@ -101,6 +101,7 @@ struct panel_simple {
 	struct mipi_dsi_device *dsi;
 	bool prepared;
 	bool enabled;
+	bool power_invert;
 
 	struct device *dev;
 	const struct panel_desc *desc;
@@ -335,20 +336,60 @@ static int panel_simple_of_get_native_mode(struct panel_simple *panel)
 	return 1;
 }
 
-static int panel_simple_loader_protect(struct drm_panel *panel, bool on)
+static int panel_simple_regulator_enable(struct drm_panel *panel)
 {
 	struct panel_simple *p = to_panel_simple(panel);
-	int err;
+	int err = 0;
 
-	if (on) {
+	if (p->power_invert) {
+		if (regulator_is_enabled(p->supply) > 0)
+			regulator_disable(p->supply);
+	} else {
 		err = regulator_enable(p->supply);
 		if (err < 0) {
 			dev_err(panel->dev, "failed to enable supply: %d\n",
 				err);
 			return err;
 		}
+	}
+
+	return err;
+}
+
+static int panel_simple_regulator_disable(struct drm_panel *panel)
+{
+	struct panel_simple *p = to_panel_simple(panel);
+	int err = 0;
+
+	if (p->power_invert) {
+		if (!regulator_is_enabled(p->supply)) {
+			err = regulator_enable(p->supply);
+			if (err < 0) {
+				dev_err(panel->dev, "failed to enable supply: %d\n",
+					err);
+				return err;
+			}
+		}
 	} else {
 		regulator_disable(p->supply);
+	}
+
+	return err;
+}
+
+static int panel_simple_loader_protect(struct drm_panel *panel, bool on)
+{
+	int err;
+
+	if (on) {
+		err = panel_simple_regulator_enable(panel);
+		if (err < 0) {
+			dev_err(panel->dev, "failed to enable supply: %d\n",
+				err);
+			return err;
+		}
+	} else {
+		panel_simple_regulator_disable(panel);
 	}
 
 	return 0;
@@ -394,7 +435,7 @@ static int panel_simple_unprepare(struct drm_panel *panel)
 	if (p->enable_gpio)
 		gpiod_direction_output(p->enable_gpio, 0);
 
-	regulator_disable(p->supply);
+	panel_simple_regulator_disable(panel);
 
 	if (p->desc && p->desc->delay.unprepare)
 		msleep(p->desc->delay.unprepare);
@@ -412,7 +453,7 @@ static int panel_simple_prepare(struct drm_panel *panel)
 	if (p->prepared)
 		return 0;
 
-	err = regulator_enable(p->supply);
+	err = panel_simple_regulator_enable(panel);
 	if (err < 0) {
 		dev_err(panel->dev, "failed to enable supply: %d\n", err);
 		return err;
@@ -580,6 +621,9 @@ static int panel_simple_probe(struct device *dev, const struct panel_desc *desc)
 		return err;
 	}
 
+	panel->power_invert =
+			of_property_read_bool(dev->of_node, "power-invert");
+
 	backlight = of_parse_phandle(dev->of_node, "backlight", 0);
 	if (backlight) {
 		panel->backlight = of_find_backlight_by_node(backlight);
@@ -630,6 +674,7 @@ static int panel_simple_remove(struct device *dev)
 	drm_panel_remove(&panel->base);
 
 	panel_simple_disable(&panel->base);
+	panel_simple_unprepare(&panel->base);
 
 	if (panel->ddc)
 		put_device(&panel->ddc->dev);
@@ -922,6 +967,30 @@ static const struct panel_desc boe_mv238qum_n20 = {
 		.enable = 20,
 		.unprepare = 20,
 		.disable = 20,
+	},
+};
+
+static const struct drm_display_mode boe_mv270qum_n10_mode = {
+	.clock = 533000,
+	.hdisplay = 3840,
+	.hsync_start = 3840 + 78,
+	.hsync_end = 3840 + 78 + 28,
+	.htotal = 3840 + 78 + 28 + 54,
+	.vdisplay = 2160,
+	.vsync_start = 2160 + 47,
+	.vsync_end = 2160 + 47 + 8,
+	.vtotal = 2160 + 47 + 8 + 7,
+	.vrefresh = 60,
+	.flags = DRM_MODE_FLAG_NVSYNC | DRM_MODE_FLAG_NHSYNC,
+};
+
+static const struct panel_desc boe_mv270qum_n10 = {
+	.modes = &boe_mv270qum_n10_mode,
+	.num_modes = 1,
+	.bpc = 8,
+	.size = {
+		.width = 597,
+		.height = 336,
 	},
 };
 
@@ -1725,6 +1794,9 @@ static const struct of_device_id platform_of_match[] = {
 	}, {
 		.compatible = "boe,mv238qum-n20",
 		.data = &boe_mv238qum_n20,
+	}, {
+		.compatible = "boe,mv270qum-n10",
+		.data = &boe_mv270qum_n10,
 	}, {
 		.compatible = "boe,nv125fhm-n73",
 		.data = &boe_nv125fhm_n73,

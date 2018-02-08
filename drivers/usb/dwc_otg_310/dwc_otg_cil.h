@@ -782,7 +782,7 @@ struct dwc_otg_global_regs_backup {
 	uint32_t hptxfsiz_local;
 	uint32_t pcgcctl_local;
 	uint32_t gdfifocfg_local;
-	uint32_t dtxfsiz_local[MAX_EPS_CHANNELS];
+	uint32_t dtxfsiz_local[MAX_TX_FIFOS];
 	uint32_t gpwrdn_local;
 	uint32_t xhib_pcgcctl;
 	uint32_t xhib_gpwrdn;
@@ -848,6 +848,9 @@ struct dwc_otg_core_if {
 #define USB_MODE_NORMAL (0)
 #define USB_MODE_FORCE_HOST (1)
 #define USB_MODE_FORCE_DEVICE (2)
+
+	/* Indicates need to force a host channel halt */
+	bool hc_halt_quirk;
 
 	/* Indicate USB get VBUS 5V from PMIC(e.g. rk81x) */
 	bool pmic_vbus;

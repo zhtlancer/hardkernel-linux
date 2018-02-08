@@ -165,7 +165,7 @@ static void stmmac_clk_csr_set(struct stmmac_priv *priv)
 {
 	u32 clk_rate;
 
-	clk_rate = clk_get_rate(priv->stmmac_clk);
+	clk_rate = clk_get_rate(priv->pclk);
 
 	/* Platform provided default clk_csr would be assumed valid
 	 * for all other cases except for the below mentioned ones.
@@ -272,7 +272,13 @@ bool stmmac_eee_init(struct stmmac_priv *priv)
 {
 	char *phy_bus_name = priv->plat->phy_bus_name;
 	unsigned long flags;
+	int interface = priv->plat->interface;
 	bool ret = false;
+
+	if ((interface != PHY_INTERFACE_MODE_MII) &&
+	    (interface != PHY_INTERFACE_MODE_GMII) &&
+	    !phy_interface_mode_is_rgmii(interface))
+		goto out;
 
 	/* Using PCS we cannot dial with the phy registers at this stage
 	 * so we do not support extra feature like EEE.
@@ -2886,7 +2892,7 @@ int stmmac_dvr_probe(struct device *device,
 	}
 	clk_prepare_enable(priv->stmmac_clk);
 
-	priv->pclk = devm_clk_get(priv->device, "pclk");
+	priv->pclk = devm_clk_get(priv->device, "pclk_mac");
 	if (IS_ERR(priv->pclk)) {
 		if (PTR_ERR(priv->pclk) == -EPROBE_DEFER) {
 			ret = -EPROBE_DEFER;

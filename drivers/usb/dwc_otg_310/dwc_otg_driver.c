@@ -169,7 +169,7 @@ static struct dwc_otg_driver_module_params dwc_otg_module_params = {
 	.host_rx_fifo_size = -1,
 	.host_nperio_tx_fifo_size = -1,
 	.host_perio_tx_fifo_size = -1,
-	.max_transfer_size = -1,
+	.max_transfer_size = 131072,
 	.max_packet_count = -1,
 	.host_channels = -1,
 	.dev_endpoints = -1,
@@ -419,9 +419,11 @@ void dwc_otg_force_device(dwc_otg_core_if_t *core_if)
 static ssize_t force_usb_mode_show(struct device_driver *drv, char *buf)
 {
 	dwc_otg_device_t *otg_dev = g_otgdev;
-	dwc_otg_core_if_t *core_if = otg_dev->core_if;
 
-	return sprintf(buf, "%d\n", core_if->usb_mode);
+	if (!otg_dev)
+		return -EINVAL;
+
+	return sprintf(buf, "%d\n", otg_dev->core_if->usb_mode);
 }
 
 static ssize_t force_usb_mode_store(struct device_driver *drv, const char *buf,
@@ -511,8 +513,11 @@ static ssize_t dwc_otg_conn_en_show(struct device_driver *_drv, char *_buf)
 {
 
 	dwc_otg_device_t *otg_dev = g_otgdev;
-	dwc_otg_pcd_t *_pcd = otg_dev->pcd;
-	return sprintf(_buf, "%d\n", _pcd->conn_en);
+
+	if (!otg_dev)
+		return -EINVAL;
+
+	return sprintf(_buf, "%d\n", otg_dev->pcd->conn_en);
 
 }
 
@@ -521,10 +526,12 @@ static ssize_t dwc_otg_conn_en_store(struct device_driver *_drv,
 {
 	int enable = simple_strtoul(_buf, NULL, 10);
 	dwc_otg_device_t *otg_dev = g_otgdev;
-	dwc_otg_pcd_t *_pcd = otg_dev->pcd;
-	DWC_PRINTF("%s %d->%d\n", __func__, _pcd->conn_en, enable);
 
-	_pcd->conn_en = enable;
+	if (!otg_dev)
+		return -EINVAL;
+
+	DWC_PRINTF("%s %d->%d\n", __func__, otg_dev->pcd->conn_en, enable);
+	otg_dev->pcd->conn_en = enable;
 	return _count;
 }
 
@@ -544,9 +551,7 @@ int dwc_otg_usb_state(void)
 		/* op_state is A_HOST */
 		if (1 == otg_dev->core_if->op_state)
 			return 1;
-		/* op_state is B_PERIPHERAL */
-		else if (4 == otg_dev->core_if->op_state)
-			return 0;
+		/* op_state is B_PERIPHERAL or others */
 		else
 			return 0;
 	} else {
@@ -571,8 +576,11 @@ static DRIVER_ATTR(op_state, S_IRUGO, dwc_otg_op_state_show, NULL);
 static ssize_t vbus_status_show(struct device_driver *_drv, char *_buf)
 {
 	dwc_otg_device_t *otg_dev = g_otgdev;
-	dwc_otg_pcd_t *_pcd = otg_dev->pcd;
-	return sprintf(_buf, "%d\n", _pcd->vbus_status);
+
+	if (!otg_dev)
+		return -EINVAL;
+
+	return sprintf(_buf, "%d\n", otg_dev->pcd->vbus_status);
 }
 
 static DRIVER_ATTR(vbus_status, S_IRUGO, vbus_status_show, NULL);
@@ -1105,6 +1113,10 @@ static int host20_driver_probe(struct platform_device *_dev)
 		dwc_otg_device->common_irq_installed = 1;
 	}
 
+	/* Indicates need to force a host channel halt */
+	dwc_otg_device->core_if->hc_halt_quirk =
+		of_property_read_bool(node, "rockchip,hc-halt-quirk");
+
 	/*
 	 * Initialize the DWC_otg core.
 	 * In order to reduce the time of initialization,
@@ -1516,6 +1528,10 @@ static int otg20_driver_probe(struct platform_device *_dev)
 	dwc_otg_device->core_if->pmic_vbus = of_property_read_bool(node,
 						"rockchip,usb-pmic-vbus");
 
+	/* Indicates need to force a host channel halt */
+	dwc_otg_device->core_if->hc_halt_quirk =
+		of_property_read_bool(node, "rockchip,hc-halt-quirk");
+
 #ifndef DWC_HOST_ONLY
 	/*
 	 * Initialize the PCD
@@ -1630,131 +1646,6 @@ static struct platform_driver dwc_otg_driver = {
 };
 #endif
 
-void rk_usb_power_up(void)
-{
-	struct dwc_otg_platform_data *pldata_otg;
-#ifdef CONFIG_USB20_HOST
-	struct dwc_otg_platform_data *pldata_host;
-#endif
-#ifdef CONFIG_USB_EHCI_RK
-	struct rkehci_platform_data *pldata_ehci;
-#endif
-
-	if (is_rk3288_usb()) {
-#ifdef CONFIG_RK_USB_UART
-		/* enable USB bypass UART function  */
-		writel_relaxed(0x00c00000 | usb_to_uart_status,
-			       RK_GRF_VIRT + RK3288_GRF_UOC0_CON3);
-
-#endif
-		/* unset siddq,the analog blocks are powered up */
-#ifdef CONFIG_USB20_OTG
-		pldata_otg = &usb20otg_pdata_rk3288;
-		if (pldata_otg) {
-			if (pldata_otg->phy_status == USB_PHY_SUSPEND)
-				writel_relaxed((0x01 << 13) << 16,
-					       RK_GRF_VIRT +
-					       RK3288_GRF_UOC0_CON0);
-		}
-#endif
-#ifdef CONFIG_USB20_HOST
-		pldata_host = &usb20host_pdata_rk3288;
-		if (pldata_host) {
-			if (pldata_host->phy_status == USB_PHY_SUSPEND)
-				writel_relaxed((0x01 << 13) << 16,
-					       RK_GRF_VIRT +
-					       RK3288_GRF_UOC2_CON0);
-		}
-#endif
-#ifdef CONFIG_USB_EHCI_RK
-		pldata_ehci = &rkehci_pdata_rk3288;
-		if (pldata_ehci) {
-			if (pldata_ehci->phy_status == USB_PHY_SUSPEND)
-				writel_relaxed((0x01 << 13) << 16,
-					       RK_GRF_VIRT +
-					       RK3288_GRF_UOC1_CON0);
-		}
-#endif
-
-	} else {
-		dwc_otg_device_t *otg_dev = g_otgdev;
-
-		if (!otg_dev)
-			return;
-
-		pldata_otg = otg_dev->pldata;
-		if (pldata_otg && pldata_otg->phy_power_down)
-			pldata_otg->phy_power_down(PHY_POWER_UP);
-	}
-}
-
-void rk_usb_power_down(void)
-{
-	struct dwc_otg_platform_data *pldata_otg;
-#ifdef CONFIG_USB20_HOST
-	struct dwc_otg_platform_data *pldata_host;
-#endif
-#ifdef CONFIG_USB_EHCI_RK
-	struct rkehci_platform_data *pldata_ehci;
-#endif
-
-	if (is_rk3288_usb()) {
-#ifdef CONFIG_RK_USB_UART
-		/* disable USB bypass UART function */
-		usb_to_uart_status =
-		    readl_relaxed(RK_GRF_VIRT + RK3288_GRF_UOC0_CON3);
-		writel_relaxed(0x00c00000, RK_GRF_VIRT + RK3288_GRF_UOC0_CON3);
-#endif
-		/* set siddq,the analog blocks are powered down
-		 * note:
-		 * 1. Before asserting SIDDQ, ensure that VDATSRCENB0,
-		 * VDATDETENB0, DCDENB0, BYPASSSEL0, ADPPRBENB0,
-		 * and TESTBURNIN are set to 1'b0.
-		 * 2. Before asserting SIDDQ, ensure that phy enter suspend.*/
-#ifdef CONFIG_USB20_OTG
-		pldata_otg = &usb20otg_pdata_rk3288;
-		if (pldata_otg) {
-			if (pldata_otg->phy_status == USB_PHY_SUSPEND)
-				writel_relaxed((0x01 << 13) |
-					       ((0x01 << 13) << 16),
-					       RK_GRF_VIRT +
-					       RK3288_GRF_UOC0_CON0);
-		}
-#endif
-#ifdef CONFIG_USB20_HOST
-		pldata_host = &usb20host_pdata_rk3288;
-		if (pldata_host) {
-			if (pldata_host->phy_status == USB_PHY_SUSPEND)
-				writel_relaxed((0x01 << 13) |
-					       ((0x01 << 13) << 16),
-					       RK_GRF_VIRT +
-					       RK3288_GRF_UOC2_CON0);
-		}
-#endif
-#ifdef CONFIG_USB_EHCI_RK
-		pldata_ehci = &rkehci_pdata_rk3288;
-		if (pldata_ehci) {
-			if (pldata_ehci->phy_status == USB_PHY_SUSPEND)
-				writel_relaxed((0x01 << 13) |
-					       ((0x01 << 13) << 16),
-					       RK_GRF_VIRT +
-					       RK3288_GRF_UOC1_CON0);
-		}
-#endif
-	} else {
-		dwc_otg_device_t *otg_dev = g_otgdev;
-
-		if (!otg_dev)
-			return;
-
-		pldata_otg = otg_dev->pldata;
-		if (pldata_otg && pldata_otg->phy_power_down)
-			pldata_otg->phy_power_down(PHY_POWER_DOWN);
-	}
-}
-
-EXPORT_SYMBOL(rk_usb_power_up);
-EXPORT_SYMBOL(rk_usb_power_down);
 /**
  * This function is called when the dwc_otg_driver is installed with the
  * insmod command. It registers the dwc_otg_driver structure with the

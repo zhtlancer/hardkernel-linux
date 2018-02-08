@@ -1,3 +1,16 @@
+/*
+ * drivers/media/video/gc0329.c
+ *
+ * Copyright (C) ROCKCHIP, Inc.
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
 
 #include "generic_sensor.h"
 
@@ -445,10 +458,30 @@ static struct rk_sensor_reg sensor_init_data[] ={
 	  {0xa7, 0x00},
 	
 	  {0xfe, 0x00},
-		////////////////////asde ///////////////////
+//////////////////// flicker ///////////////////
+	{0x05, 0x02},
+	{0x06, 0x2c},
+	{0x07, 0x00},
+	{0x08, 0xb8},
+
+	{0xfe, 0x01},
+	{0x29, 0x00},	//anti-flicker step [11:8]
+	{0x2a, 0x60},	//anti-flicker step [7:0]
+
+	{0x2b, 0x02},	//exp level 0  14.28fps
+	{0x2c, 0xa0},
+	{0x2d, 0x02},	//exp level 1  12.50fps
+	{0x2e, 0xa0},
+	{0x2f, 0x02},	//exp level 2  10.00fps
+	{0x30, 0xa0},
+	{0x31, 0x02},	//exp level 3  7.14fps
+	{0x32, 0xa0},
+	{0x33, 0x20},
+	{0xfe, 0x00},
+////////////////////asde ///////////////////
 	  {0xa0, 0xaf},
 	  {0xa2, 0xff},
-	
+
 	  {0x44, 0xa2},  // YUV  order
 
 	SensorEnd
@@ -844,7 +877,7 @@ static struct sensor_v4l2ctrl_usr_s sensor_controls[] =
 
 //MUST define the current used format as the first item   
 static struct rk_sensor_datafmt sensor_colour_fmts[] = {
-	{V4L2_MBUS_FMT_YUYV8_2X8, V4L2_COLORSPACE_JPEG} 
+	{MEDIA_BUS_FMT_YUYV8_2X8, V4L2_COLORSPACE_JPEG}
 };
 //static struct soc_camera_ops sensor_ops;
 

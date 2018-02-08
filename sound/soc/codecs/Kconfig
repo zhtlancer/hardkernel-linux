@@ -68,6 +68,8 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_ES8323 if I2C
 	select SND_SOC_ES8328_SPI if SPI_MASTER
 	select SND_SOC_ES8328_I2C if I2C
+	select SND_SOC_ES8396 if I2C
+	select SND_SOC_FM1288 if I2C
 	select SND_SOC_GTM601
 	select SND_SOC_ICS43432
 	select SND_SOC_ISABELLE if I2C
@@ -436,6 +438,14 @@ config SND_SOC_CX20442
 config SND_SOC_CX2072X
 	tristate "CX2072X CODEC"
 
+config SND_SOC_CX20810
+	tristate "CX20810 is a voice capture ic."
+	depends on I2C
+	help
+	  Say Y here if you have a CX20810 ic and want to enable
+	  support for the built-in.
+	  If unsure, say N.
+
 config SND_SOC_JZ4740_CODEC
 	select REGMAP_MMIO
 	tristate
@@ -487,18 +497,29 @@ config SND_SOC_ES8328
 	tristate "Everest Semi ES8328 CODEC"
 
 config SND_SOC_ES8328_I2C
-	tristate
+	tristate "Everest Semi ES8328 CODEC I2C"
 	select SND_SOC_ES8328
 
 config SND_SOC_ES8328_SPI
 	tristate
 	select SND_SOC_ES8328
 
+config SND_SOC_ES8396
+	tristate "Everest Semi ES8396 CODEC"
+
 config SND_SOC_GTM601
 	tristate 'GTM601 UMTS modem audio codec'
 
+config SND_SOC_GVA_CODEC
+	tristate "gva codec"
+
 config SND_SOC_ICS43432
 	tristate
+
+config SND_SOC_FM1288
+	tristate "Voice Processor support for FM1288"
+	help
+	  Say Y if you want to add support for Voice Processor FM1288.
 
 config SND_SOC_ISABELLE
         tristate
@@ -553,6 +574,10 @@ config SND_SOC_PCM512x_SPI
 config SND_SOC_RK1000
 	tristate "Rockchip RK1000 CODEC"
 	depends on MFD_RK1000
+
+config SND_SOC_RK312X
+	select REGMAP_MMIO
+	tristate "Rockchip RK312X CODEC"
 
 config SND_SOC_RK3328
 	select REGMAP_MMIO

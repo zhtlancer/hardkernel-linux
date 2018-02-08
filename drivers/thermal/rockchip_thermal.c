@@ -118,12 +118,12 @@ struct rockchip_tsadc_chip {
 	void (*control)(void __iomem *reg, bool on);
 
 	/* Per-sensor methods */
-	int (*get_temp)(const struct chip_tsadc_table *table,
+	int (*get_temp)(struct chip_tsadc_table table,
 			int chn, void __iomem *reg, int *temp);
-	int (*set_alarm_temp)(const struct chip_tsadc_table *table,
-			      int chn, void __iomem *reg, int temp);
-	int (*set_tshut_temp)(const struct chip_tsadc_table *table,
-			      int chn, void __iomem *reg, int temp);
+	void (*set_alarm_temp)(struct chip_tsadc_table table,
+			       int chn, void __iomem *reg, int temp);
+	void (*set_tshut_temp)(struct chip_tsadc_table table,
+			       int chn, void __iomem *reg, int temp);
 	void (*set_tshut_mode)(int chn, void __iomem *reg, enum tshut_mode m);
 
 	/* Per-table methods */
@@ -227,6 +227,15 @@ struct rockchip_thermal_data {
 #define GRF_TSADC_VCM_EN_L			(0x10001 << 7)
 #define GRF_TSADC_VCM_EN_H			(0x10001 << 7)
 
+#define MIN_TEMP				(-40000)
+#define MAX_TEMP				(125000)
+
+#define BASE					(1024)
+#define BASE_SHIFT				(10)
+#define START_DEBOUNCE_COUNT			(100)
+#define HIGHER_DEBOUNCE_TEMP			(30)
+#define LOWER_DEBOUNCE_TEMP			(15)
+
 /**
  * struct tsadc_table - code to temperature conversion table
  * @code: the value of adc channel
@@ -317,7 +326,6 @@ static const struct tsadc_table rk3288_code_table[] = {
 	{3452, 115000},
 	{3437, 120000},
 	{3421, 125000},
-	{0, 125000},
 };
 
 static const struct tsadc_table rk3328_code_table[] = {
@@ -436,50 +444,28 @@ static const struct tsadc_table rk3399_code_table[] = {
 	{TSADCV3_DATA_MASK, 125000},
 };
 
-static u32 rk_tsadcv2_temp_to_code(const struct chip_tsadc_table *table,
+static u32 rk_tsadcv2_temp_to_code(struct chip_tsadc_table table,
 				   int temp)
 {
 	int high, low, mid;
-	unsigned long num;
-	unsigned int denom;
-	u32 error = table->data_mask;
+	u32 error = table.data_mask;
 
 	low = 0;
-	high = (table->length - 1) - 1; /* ignore the last check for table */
+	high = table.length - 1;
 	mid = (high + low) / 2;
 
 	/* Return mask code data when the temp is over table range */
-	if (temp < table->id[low].temp || temp > table->id[high].temp)
+	if (temp < table.id[low].temp || temp > table.id[high].temp)
 		goto exit;
 
 	while (low <= high) {
-		if (temp == table->id[mid].temp)
-			return table->id[mid].code;
-		else if (temp < table->id[mid].temp)
+		if (temp == table.id[mid].temp)
+			return table.id[mid].code;
+		else if (temp < table.id[mid].temp)
 			high = mid - 1;
 		else
 			low = mid + 1;
 		mid = (low + high) / 2;
-	}
-
-	/*
-	 * The conversion code granularity provided by the table. Let's
-	 * assume that the relationship between temperature and
-	 * analog value between 2 table entries is linear and interpolate
-	 * to produce less granular result.
-	 */
-	num = abs(table->id[mid + 1].code - table->id[mid].code);
-	num *= temp - table->id[mid].temp;
-	denom = table->id[mid + 1].temp - table->id[mid].temp;
-
-	switch (table->mode) {
-	case ADC_DECREMENT:
-		return table->id[mid].code - (num / denom);
-	case ADC_INCREMENT:
-		return table->id[mid].code + (num / denom);
-	default:
-		pr_err("%s: unknown table mode: %d\n", __func__, table->mode);
-		return error;
 	}
 
 exit:
@@ -489,28 +475,28 @@ exit:
 	return error;
 }
 
-static int rk_tsadcv2_code_to_temp(const struct chip_tsadc_table *table,
-				   u32 code, int *temp)
+static int rk_tsadcv2_code_to_temp(struct chip_tsadc_table table, u32 code,
+				   int *temp)
 {
 	unsigned int low = 1;
-	unsigned int high = table->length - 1;
+	unsigned int high = table.length - 1;
 	unsigned int mid = (low + high) / 2;
 	unsigned int num;
 	unsigned long denom;
 
-	WARN_ON(table->length < 2);
+	WARN_ON(table.length < 2);
 
-	switch (table->mode) {
+	switch (table.mode) {
 	case ADC_DECREMENT:
-		code &= table->data_mask;
-		if (code <= table->id[high].code)
+		code &= table.data_mask;
+		if (code < table.id[high].code)
 			return -EAGAIN;		/* Incorrect reading */
 
 		while (low <= high) {
-			if (code >= table->id[mid].code &&
-			    code < table->id[mid - 1].code)
+			if (code >= table.id[mid].code &&
+			    code < table.id[mid - 1].code)
 				break;
-			else if (code < table->id[mid].code)
+			else if (code < table.id[mid].code)
 				low = mid + 1;
 			else
 				high = mid - 1;
@@ -519,15 +505,15 @@ static int rk_tsadcv2_code_to_temp(const struct chip_tsadc_table *table,
 		}
 		break;
 	case ADC_INCREMENT:
-		code &= table->data_mask;
-		if (code < table->id[low].code)
+		code &= table.data_mask;
+		if (code < table.id[low].code)
 			return -EAGAIN;		/* Incorrect reading */
 
 		while (low <= high) {
-			if (code <= table->id[mid].code &&
-			    code > table->id[mid - 1].code)
+			if (code <= table.id[mid].code &&
+			    code > table.id[mid - 1].code)
 				break;
-			else if (code > table->id[mid].code)
+			else if (code > table.id[mid].code)
 				low = mid + 1;
 			else
 				high = mid - 1;
@@ -537,8 +523,7 @@ static int rk_tsadcv2_code_to_temp(const struct chip_tsadc_table *table,
 		break;
 	default:
 		pr_err("%s: Invalid the conversion table mode=%d\n",
-		       __func__, table->mode);
-		return -EINVAL;
+		       __func__, table.mode);
 	}
 
 	/*
@@ -547,10 +532,10 @@ static int rk_tsadcv2_code_to_temp(const struct chip_tsadc_table *table,
 	 * temperature between 2 table entries is linear and interpolate
 	 * to produce less granular result.
 	 */
-	num = table->id[mid].temp - table->id[mid - 1].temp;
-	num *= abs(table->id[mid - 1].code - code);
-	denom = abs(table->id[mid - 1].code - table->id[mid].code);
-	*temp = table->id[mid - 1].temp + (num / denom);
+	num = table.id[mid].temp - table.id[mid - 1].temp;
+	num *= abs(table.id[mid - 1].code - code);
+	denom = abs(table.id[mid - 1].code - table.id[mid].code);
+	*temp = table.id[mid - 1].temp + (num / denom);
 
 	return 0;
 }
@@ -699,7 +684,7 @@ static void rk_tsadcv3_control(void __iomem *regs, bool enable)
 	writel_relaxed(val, regs + TSADCV2_AUTO_CON);
 }
 
-static int rk_tsadcv2_get_temp(const struct chip_tsadc_table *table,
+static int rk_tsadcv2_get_temp(struct chip_tsadc_table table,
 			       int chn, void __iomem *regs, int *temp)
 {
 	u32 val;
@@ -709,57 +694,115 @@ static int rk_tsadcv2_get_temp(const struct chip_tsadc_table *table,
 	return rk_tsadcv2_code_to_temp(table, val, temp);
 }
 
-static int rk_tsadcv2_alarm_temp(const struct chip_tsadc_table *table,
-				 int chn, void __iomem *regs, int temp)
+static int predict_temp(int temp)
 {
-	u32 alarm_value;
-	u32 int_en, int_clr;
+	/*
+	 * The deviation of prediction. the temperature will not change rapidly,
+	 * so this cov_q is small
+	 */
+	int cov_q = 18;
+	/*
+	 * The deviation of tsadc's reading, deviation of tsadc is very big when
+	 * abnormal temperature is get
+	 */
+	int cov_r = 542;
+
+	int gain;
+	int temp_mid;
+	int temp_now;
+	int prob_mid;
+	int prob_now;
+	static int temp_last = 25;
+	static int prob_last = 20;
+	static int bounding_cnt;
 
 	/*
-	 * In some cases, some sensors didn't need the trip points, the
-	 * set_trips will pass {-INT_MAX, INT_MAX} to trigger tsadc alarm
-	 * in the end, ignore this case and disable the high temperature
-	 * interrupt.
+	 * Before START_DEBOUNCE_COUNT's samples of temperature, we consider
+	 * tsadc is stable, i.e. after that, the temperature may be not stable
+	 * and may have abnormal reading, so we set a bounding temperature. If
+	 * the reading from tsadc is too big, we set the delta temperature of
+	 * DEBOUNCE_TEMP/3 comparing to the last temperature.
 	 */
-	if (temp == INT_MAX) {
-		int_clr = readl_relaxed(regs + TSADCV2_INT_EN);
-		int_clr &= ~TSADCV2_INT_SRC_EN(chn);
-		writel_relaxed(int_clr, regs + TSADCV2_INT_EN);
-		return 0;
+
+	if (bounding_cnt++ > START_DEBOUNCE_COUNT) {
+		bounding_cnt = START_DEBOUNCE_COUNT;
+		if (temp - temp_last > HIGHER_DEBOUNCE_TEMP)
+			temp = temp_last + HIGHER_DEBOUNCE_TEMP / 3;
+		if (temp_last - temp > LOWER_DEBOUNCE_TEMP)
+			temp = temp_last - LOWER_DEBOUNCE_TEMP / 3;
 	}
+
+	temp_mid = temp_last;
+
+	/* calculate the probability of this time's prediction */
+	prob_mid = prob_last + cov_q;
+
+	/* calculate the Kalman Gain */
+	gain = (prob_mid * BASE) / (prob_mid + cov_r);
+
+	/* calculate the prediction of temperature */
+	temp_now = temp_mid + (gain * (temp - temp_mid) >> BASE_SHIFT);
+
+	/*
+	 * Base on this time's Kalman Gain, ajust our probability of prediction
+	 * for next time calculation
+	 */
+	prob_now = ((BASE - gain) * prob_mid) >> BASE_SHIFT;
+
+	prob_last = prob_now;
+	temp_last = temp_now;
+
+	return temp_last;
+}
+
+static int rk_tsadcv3_get_temp(struct chip_tsadc_table table,
+			       int chn, void __iomem *regs, int *temp)
+{
+	u32 val;
+	int ret;
+
+	val = readl_relaxed(regs + TSADCV2_DATA(chn));
+
+	ret = rk_tsadcv2_code_to_temp(table, val, temp);
+	if (!ret)
+		*temp = predict_temp(*temp);
+
+	return ret;
+}
+
+static void rk_tsadcv2_alarm_temp(struct chip_tsadc_table table,
+				  int chn, void __iomem *regs, int temp)
+{
+	u32 alarm_value, int_en;
 
 	/* Make sure the value is valid */
 	alarm_value = rk_tsadcv2_temp_to_code(table, temp);
-	if (alarm_value == table->data_mask)
-		return -ERANGE;
+	if (alarm_value == table.data_mask)
+		return;
 
-	writel_relaxed(alarm_value & table->data_mask,
+	writel_relaxed(alarm_value & table.data_mask,
 		       regs + TSADCV2_COMP_INT(chn));
 
 	int_en = readl_relaxed(regs + TSADCV2_INT_EN);
 	int_en |= TSADCV2_INT_SRC_EN(chn);
 	writel_relaxed(int_en, regs + TSADCV2_INT_EN);
-
-	return 0;
 }
 
-static int rk_tsadcv2_tshut_temp(const struct chip_tsadc_table *table,
-				 int chn, void __iomem *regs, int temp)
+static void rk_tsadcv2_tshut_temp(struct chip_tsadc_table table,
+				  int chn, void __iomem *regs, int temp)
 {
 	u32 tshut_value, val;
 
 	/* Make sure the value is valid */
 	tshut_value = rk_tsadcv2_temp_to_code(table, temp);
-	if (tshut_value == table->data_mask)
-		return -ERANGE;
+	if (tshut_value == table.data_mask)
+		return;
 
 	writel_relaxed(tshut_value, regs + TSADCV2_COMP_SHUT(chn));
 
 	/* TSHUT will be valid */
 	val = readl_relaxed(regs + TSADCV2_AUTO_CON);
 	writel_relaxed(val | TSADCV2_AUTO_SRC_EN(chn), regs + TSADCV2_AUTO_CON);
-
-	return 0;
 }
 
 static void rk_tsadcv2_tshut_mode(int chn, void __iomem *regs,
@@ -815,7 +858,7 @@ static const struct rockchip_tsadc_chip rk3288_tsadc_data = {
 	.initialize = rk_tsadcv2_initialize,
 	.irq_ack = rk_tsadcv2_irq_ack,
 	.control = rk_tsadcv2_control,
-	.get_temp = rk_tsadcv2_get_temp,
+	.get_temp = rk_tsadcv3_get_temp,
 	.set_alarm_temp = rk_tsadcv2_alarm_temp,
 	.set_tshut_temp = rk_tsadcv2_tshut_temp,
 	.set_tshut_mode = rk_tsadcv2_tshut_mode,
@@ -825,6 +868,30 @@ static const struct rockchip_tsadc_chip rk3288_tsadc_data = {
 		.length = ARRAY_SIZE(rk3288_code_table),
 		.data_mask = TSADCV2_DATA_MASK,
 		.mode = ADC_DECREMENT,
+	},
+};
+
+static const struct rockchip_tsadc_chip px30_tsadc_data = {
+	.chn_id[SENSOR_CPU] = 0, /* cpu sensor is channel 0 */
+	.chn_id[SENSOR_GPU] = 1, /* gpu sensor is channel 1 */
+	.chn_num = 2, /* 2 channels for tsadc */
+
+	.tshut_mode = TSHUT_MODE_CRU, /* default TSHUT via CRU */
+	.tshut_temp = 95000,
+
+	.initialize = rk_tsadcv2_initialize,
+	.irq_ack = rk_tsadcv3_irq_ack,
+	.control = rk_tsadcv3_control,
+	.get_temp = rk_tsadcv2_get_temp,
+	.set_alarm_temp = rk_tsadcv2_alarm_temp,
+	.set_tshut_temp = rk_tsadcv2_tshut_temp,
+	.set_tshut_mode = rk_tsadcv2_tshut_mode,
+
+	.table = {
+		.id = rk3328_code_table,
+		.length = ARRAY_SIZE(rk3328_code_table),
+		.data_mask = TSADCV2_DATA_MASK,
+		.mode = ADC_INCREMENT,
 	},
 };
 
@@ -928,6 +995,10 @@ static const struct rockchip_tsadc_chip rk3399_tsadc_data = {
 
 static const struct of_device_id of_rockchip_thermal_match[] = {
 	{
+		.compatible = "rockchip,px30-tsadc",
+		.data = (void *)&px30_tsadc_data,
+	},
+	{
 		.compatible = "rockchip,rk3228-tsadc",
 		.data = (void *)&rk3228_tsadc_data,
 	},
@@ -988,8 +1059,10 @@ static int rockchip_thermal_set_trips(void *_sensor, int low, int high)
 	dev_dbg(&thermal->pdev->dev, "%s: sensor %d: low: %d, high %d\n",
 		__func__, sensor->id, low, high);
 
-	return tsadc->set_alarm_temp(&tsadc->table,
-				     sensor->id, thermal->regs, high);
+	tsadc->set_alarm_temp(tsadc->table,
+			      sensor->id, thermal->regs, high);
+
+	return 0;
 }
 
 static int rockchip_thermal_get_temp(void *_sensor, int *out_temp)
@@ -999,7 +1072,7 @@ static int rockchip_thermal_get_temp(void *_sensor, int *out_temp)
 	const struct rockchip_tsadc_chip *tsadc = sensor->thermal->chip;
 	int retval;
 
-	retval = tsadc->get_temp(&tsadc->table,
+	retval = tsadc->get_temp(tsadc->table,
 				 sensor->id, thermal->regs, out_temp);
 	dev_dbg(&thermal->pdev->dev, "sensor %d - temp: %d, retval: %d\n",
 		sensor->id, *out_temp, retval);
@@ -1085,12 +1158,8 @@ rockchip_thermal_register_sensor(struct platform_device *pdev,
 	int error;
 
 	tsadc->set_tshut_mode(id, thermal->regs, thermal->tshut_mode);
-
-	error = tsadc->set_tshut_temp(&tsadc->table, id, thermal->regs,
+	tsadc->set_tshut_temp(tsadc->table, id, thermal->regs,
 			      thermal->tshut_temp);
-	if (error)
-		dev_err(&pdev->dev, "%s: invalid tshut=%d, error=%d\n",
-			__func__, thermal->tshut_temp, error);
 
 	sensor->thermal = thermal;
 	sensor->id = id;
@@ -1350,13 +1419,9 @@ static int __maybe_unused rockchip_thermal_resume(struct device *dev)
 
 		thermal->chip->set_tshut_mode(id, thermal->regs,
 					      thermal->tshut_mode);
-
-		error = thermal->chip->set_tshut_temp(&thermal->chip->table,
+		thermal->chip->set_tshut_temp(thermal->chip->table,
 					      id, thermal->regs,
 					      thermal->tshut_temp);
-		if (error)
-			dev_err(&pdev->dev, "%s: invalid tshut=%d, error=%d\n",
-				__func__, thermal->tshut_temp, error);
 	}
 
 	thermal->chip->control(thermal->regs, true);

@@ -326,7 +326,7 @@ void w_conn_id_status_change(void *p)
 		DWC_ASSERT(++count < 10000,
 			   "Connection id status change timed out");
 		core_if->op_state = B_PERIPHERAL;
-		cil_hcd_stop(core_if);;
+		cil_hcd_stop(core_if);
 		/* pcd->phy_suspend = 1; */
 		pcd->vbus_status = 0;
 		dwc_otg_pcd_start_check_vbus_work(pcd);
@@ -499,34 +499,6 @@ void w_wakeup_detected(void *data)
 	core_if->lx_state = DWC_OTG_L0;
 }
 
-static inline void rk_dwc_otg_phy_soft_reset(dwc_otg_core_if_t *core_if)
-{
-	struct dwc_otg_platform_data *pldata;
-	guid_data_t guid;
-
-	pldata = core_if->otg_dev->pldata;
-	guid.d32 = core_if->core_global_regs->guid;
-
-	if ((is_rk3288_usb()) && ((guid.d32 & 0x01) == 0)) {
-		/* only used for HOST20, OTG HOST do not need.
-		 * first, do soft reset usb phy, and then usb phy
-		 * can drive resume signal.
-		 * second, set usb phy into suspend mode and
-		 * normal mode once time, and then usb phy can
-		 * send SOFs immediately after resume.
-		 */
-		rk3288_cru_set_soft_reset(RK3288_SOFT_RST_USBHOST1PHY, true);
-		udelay(50);
-		rk3288_cru_set_soft_reset(RK3288_SOFT_RST_USBHOST1PHY, false);
-		udelay(50);
-
-		pldata->phy_suspend(pldata, USB_PHY_SUSPEND);
-		udelay(50);
-		pldata->phy_suspend(pldata, USB_PHY_ENABLED);
-		udelay(100);
-	}
-}
-
 /**
  * This interrupt indicates that the DWC_otg controller has detected a
  * resume or remote wakeup sequence. If the DWC_otg controller is in
@@ -604,8 +576,6 @@ int32_t dwc_otg_handle_wakeup_detected_intr(dwc_otg_core_if_t *core_if)
 			pcgcctl.b.stoppclk = 1;
 			DWC_MODIFY_REG32(core_if->pcgcctl, pcgcctl.d32, 0);
 			udelay(10);
-
-			rk_dwc_otg_phy_soft_reset(core_if);
 
 			DWC_TASK_SCHEDULE(core_if->wkp_tasklet);
 		} else {
@@ -856,8 +826,7 @@ static int32_t dwc_otg_handle_pwrdn_session_change(dwc_otg_core_if_t *core_if)
 			return 1;
 		}
 
-		if ((otg_cap_param != DWC_OTG_CAP_PARAM_HNP_SRP_CAPABLE ||
-		     otg_cap_param != DWC_OTG_CAP_PARAM_SRP_ONLY_CAPABLE) &&
+		if (otg_cap_param == DWC_OTG_CAP_PARAM_NO_HNP_SRP_CAPABLE &&
 		    gpwrdn.b.bsessvld == 0) {
 			/* Save gpwrdn register for further usage if stschng interrupt */
 			core_if->gr_backup->gpwrdn_local =
@@ -950,7 +919,7 @@ static int32_t dwc_otg_handle_pwrdn_session_change(dwc_otg_core_if_t *core_if)
  */
 static uint32_t dwc_otg_handle_pwrdn_stschng_intr(dwc_otg_device_t *otg_dev)
 {
-	int retval;
+	int retval = 0;
 	gpwrdn_data_t gpwrdn = {.d32 = 0 };
 	gpwrdn_data_t gpwrdn_temp = {.d32 = 0 };
 	dwc_otg_core_if_t *core_if = otg_dev->core_if;
@@ -1371,7 +1340,7 @@ int32_t dwc_otg_handle_usb_suspend_intr(dwc_otg_core_if_t *core_if)
 			gotgctl_data_t gotgctl = {.d32 = 0 };
 			gotgctl.d32 =
 			    DWC_READ_REG32(&core_if->core_global_regs->gotgctl);
-			if (gotgctl.b.devhnpen && core_if->otg_ver == 1) {
+			if (gotgctl.b.devhnpen) {
 				gotgctl_data_t gotgctl = {.d32 = 0 };
 				dwc_mdelay(5);
 				/**@todo Is the gotgctl.devhnpen cleared

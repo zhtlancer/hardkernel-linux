@@ -183,7 +183,8 @@ static struct resource mali_gpu_resources_m400_mp2[] = {
 static struct thermal_zone_device *gpu_tz;
 
 /* Calculate gpu static power example for reference */
-static unsigned long arm_model_static_power(unsigned long voltage)
+static unsigned long arm_model_static_power(struct devfreq *devfreq,
+					    unsigned long voltage)
 {
 	int temperature, temp;
 	int temp_squared, temp_cubed, temp_scaling_factor;
@@ -223,7 +224,8 @@ static unsigned long arm_model_static_power(unsigned long voltage)
 }
 
 /* Calculate gpu dynamic power example for reference */
-static unsigned long arm_model_dynamic_power(unsigned long freq,
+static unsigned long arm_model_dynamic_power(struct devfreq *devfreq,
+		unsigned long freq,
 		unsigned long voltage)
 {
 	/* The inputs: freq (f) is in Hz, and voltage (v) in mV.
@@ -534,6 +536,10 @@ int mali_platform_device_init(struct platform_device *device)
 	}
 
 #if defined(CONFIG_MALI_DEVFREQ) && defined(CONFIG_DEVFREQ_THERMAL)
+	/* Some Socs didn't support the devfreq thermal for mali */
+	if (of_machine_is_compatible("rockchip,rk3036"))
+		return 0;
+
 	/* Get thermal zone */
 	gpu_tz = thermal_zone_get_zone_by_name("soc_thermal");
 	if (IS_ERR(gpu_tz)) {

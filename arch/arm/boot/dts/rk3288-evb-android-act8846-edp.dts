@@ -87,63 +87,6 @@
 		pwms = <&pwm0 0 1000000 PWM_POLARITY_INVERTED>;
 	};
 
-	adc-keys {
-		compatible = "adc-keys";
-		io-channels = <&saradc 1>;
-		io-channel-names = "buttons";
-		poll-interval = <100>;
-		keyup-threshold-microvolt = <1800000>;
-
-		button-up {
-			label = "Volume Up";
-			linux,code = <KEY_VOLUMEUP>;
-			press-threshold-microvolt = <100000>;
-		};
-
-		button-down {
-			label = "Volume Down";
-			linux,code = <KEY_VOLUMEDOWN>;
-			press-threshold-microvolt = <300000>;
-		};
-
-		menu {
-			label = "Menu";
-			linux,code = <KEY_MENU>;
-			press-threshold-microvolt = <640000>;
-		};
-
-		esc {
-			label = "Esc";
-			linux,code = <KEY_ESC>;
-			press-threshold-microvolt = <1000000>;
-		};
-
-		home  {
-			label = "Home";
-			linux,code = <KEY_HOME>;
-			press-threshold-microvolt = <1300000>;
-		};
-	};
-
-	gpio-keys {
-		compatible = "gpio-keys";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		autorepeat;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&pwrbtn>;
-
-		button@0 {
-			gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;
-			linux,code = <116>;
-			label = "GPIO Key Power";
-			linux,input-type = <1>;
-			gpio-key,wakeup = <1>;
-			debounce-interval = <100>;
-		};
-	};
-
 	sdio_pwrseq: sdio-pwrseq {
 		compatible = "mmc-pwrseq-simple";
 		clocks = <&hym8563>;
@@ -187,7 +130,7 @@
 };
 
 &cpu0 {
-	cpu0-supply = <&vdd_cpu>;
+	cpu-supply = <&vdd_cpu>;
 };
 
 &dfi {
@@ -212,9 +155,9 @@
 &edp_panel {
 	compatible ="lg,lp079qx1-sp0v", "simple-panel";
 	enable-gpios = <&gpio7 4 GPIO_ACTIVE_HIGH>;
+	enable-delay-ms = <120>;
 	pinctrl-0 = <&lcd_cs>;
 	power-supply = <&vcc_lcd>;
-	delay,prepare = <120>;
 	status = "okay";
 
 	disp_timings: display-timings {

@@ -14,19 +14,13 @@
  *
  */
 
+#include <linux/fence.h>
+#include <linux/kref.h>
+#include <linux/memblock.h>
+#include <linux/module.h>
 #include <linux/rockchip_ion.h>
 #include <linux/rockchip-iovmm.h>
 #include <linux/slab.h>
-#include <linux/pm_runtime.h>
-#include <linux/memblock.h>
-#include <linux/module.h>
-#include <linux/of_address.h>
-#include <linux/of_graph.h>
-#include <linux/component.h>
-#include <linux/fence.h>
-#include <linux/console.h>
-#include <linux/kref.h>
-#include <linux/fdtable.h>
 
 #include "vcodec_iommu_ops.h"
 
@@ -65,7 +59,6 @@ vcodec_ion_clear_session(struct vcodec_iommu_session_info *session_info)
 static int vcodec_ion_attach(struct vcodec_iommu_info *iommu_info)
 {
 	struct vcodec_iommu_ion_info *ion_info = iommu_info->private;
-	int ret;
 
 	mutex_lock(&iommu_info->iommu_mutex);
 
@@ -80,7 +73,7 @@ static int vcodec_ion_attach(struct vcodec_iommu_info *iommu_info)
 
 	mutex_unlock(&iommu_info->iommu_mutex);
 
-	return ret;
+	return 0;
 }
 
 static void vcodec_ion_detach(struct vcodec_iommu_info *iommu_info)
@@ -157,7 +150,7 @@ vcodec_ion_unmap_iommu(struct vcodec_iommu_session_info *session_info, int idx)
 
 static int
 vcodec_ion_map_iommu(struct vcodec_iommu_session_info *session_info, int idx,
-		     unsigned long *iova, unsigned long *size)
+		     dma_addr_t *iova, unsigned long *size)
 {
 	struct vcodec_ion_buffer *ion_buffer;
 	struct device *dev = session_info->dev;
@@ -180,12 +173,38 @@ vcodec_ion_map_iommu(struct vcodec_iommu_session_info *session_info, int idx,
 
 	if (session_info->mmu_dev)
 		ret = ion_map_iommu(dev, ion_info->ion_client,
-				    ion_buffer->handle, iova, size);
+				    ion_buffer->handle, (unsigned long *)iova,
+				    size);
 	else
 		ret = ion_phys(ion_info->ion_client, ion_buffer->handle,
-			       iova, (size_t *)size);
+			       (ion_phys_addr_t *)iova, (size_t *)size);
 
 	return ret;
+}
+
+static int
+vcodec_ion_import(struct vcodec_iommu_session_info *session_info, int fd)
+{
+	struct vcodec_ion_buffer *ion_buffer = NULL;
+	struct vcodec_iommu_info *iommu_info = session_info->iommu_info;
+	struct vcodec_iommu_ion_info *ion_info = iommu_info->private;
+
+	ion_buffer = kzalloc(sizeof(*ion_buffer), GFP_KERNEL);
+	if (!ion_buffer)
+		return -ENOMEM;
+
+	ion_buffer->handle = ion_import_dma_buf(ion_info->ion_client, fd);
+
+	INIT_LIST_HEAD(&ion_buffer->list);
+	mutex_lock(&session_info->list_mutex);
+	ion_buffer->index = session_info->max_idx;
+	list_add_tail(&ion_buffer->list, &session_info->buffer_list);
+	session_info->max_idx++;
+	if ((session_info->max_idx & 0xfffffff) == 0)
+		session_info->max_idx = 0;
+	mutex_unlock(&session_info->list_mutex);
+
+	return ion_buffer->index;
 }
 
 static int
@@ -207,7 +226,7 @@ vcodec_ion_unmap_kernel(struct vcodec_iommu_session_info *session_info,
 	return 0;
 }
 
-static void *
+static void*
 vcodec_ion_map_kernel(struct vcodec_iommu_session_info *session_info, int idx)
 {
 	struct vcodec_ion_buffer *ion_buffer;
@@ -229,18 +248,26 @@ vcodec_ion_map_kernel(struct vcodec_iommu_session_info *session_info, int idx)
 	return ion_map_kernel(ion_info->ion_client, ion_buffer->handle);
 }
 
-static int
-vcodec_ion_import(struct vcodec_iommu_session_info *session_info, int fd)
+static int vcodec_ion_alloc(struct vcodec_iommu_session_info *session_info,
+			    unsigned long size,
+			    unsigned long align)
 {
 	struct vcodec_ion_buffer *ion_buffer = NULL;
 	struct vcodec_iommu_info *iommu_info = session_info->iommu_info;
 	struct vcodec_iommu_ion_info *ion_info = iommu_info->private;
+	unsigned int heap_id_mask;
+
+	if (iommu_info->mmu_dev)
+		heap_id_mask = ION_HEAP_TYPE_SYSTEM;
+	else
+		heap_id_mask = ION_HEAP_TYPE_DMA;
 
 	ion_buffer = kzalloc(sizeof(*ion_buffer), GFP_KERNEL);
 	if (!ion_buffer)
 		return -ENOMEM;
 
-	ion_buffer->handle = ion_import_dma_buf(ion_info->ion_client, fd);
+	ion_buffer->handle = ion_alloc(ion_info->ion_client, size,
+				       align, heap_id_mask, 0);
 
 	INIT_LIST_HEAD(&ion_buffer->list);
 	mutex_lock(&session_info->list_mutex);
@@ -275,6 +302,7 @@ static int vcodec_ion_create(struct vcodec_iommu_info *iommu_info)
 static struct vcodec_iommu_ops ion_ops = {
 	.create = vcodec_ion_create,
 	.destroy = vcodec_ion_destroy,
+	.alloc = vcodec_ion_alloc,
 	.import = vcodec_ion_import,
 	.free = vcodec_ion_free,
 	.free_fd = NULL,
@@ -282,6 +310,8 @@ static struct vcodec_iommu_ops ion_ops = {
 	.unmap_kernel = vcodec_ion_unmap_kernel,
 	.map_iommu = vcodec_ion_map_iommu,
 	.unmap_iommu = vcodec_ion_unmap_iommu,
+	.map_iommu_with_iova = NULL,
+	.unmap_iommu_with_iova = NULL,
 	.dump = NULL,
 	.attach = vcodec_ion_attach,
 	.detach = vcodec_ion_detach,

@@ -772,7 +772,7 @@ int dwc_otg_save_global_regs(dwc_otg_core_if_t *core_if)
 	gr->pcgcctl_local = DWC_READ_REG32(core_if->pcgcctl);
 	gr->gdfifocfg_local =
 	    DWC_READ_REG32(&core_if->core_global_regs->gdfifocfg);
-	for (i = 0; i < MAX_EPS_CHANNELS; i++) {
+	for (i = 0; i < MAX_TX_FIFOS; i++) {
 		gr->dtxfsiz_local[i] =
 		    DWC_READ_REG32(&(core_if->core_global_regs->dtxfsiz[i]));
 	}
@@ -933,7 +933,7 @@ int dwc_otg_restore_global_regs(dwc_otg_core_if_t *core_if)
 			gr->hptxfsiz_local);
 	DWC_WRITE_REG32(&core_if->core_global_regs->gdfifocfg,
 			gr->gdfifocfg_local);
-	for (i = 0; i < MAX_EPS_CHANNELS; i++) {
+	for (i = 0; i < MAX_TX_FIFOS; i++) {
 		DWC_WRITE_REG32(&core_if->core_global_regs->dtxfsiz[i],
 				gr->dtxfsiz_local[i]);
 	}
@@ -2855,8 +2855,12 @@ void dwc_otg_hc_halt(dwc_otg_core_if_t *core_if,
 		hc->halt_status = halt_status;
 
 		hcchar.d32 = DWC_READ_REG32(&hc_regs->hcchar);
-		if (hcchar.b.chen == 0) {
+		if ((hcchar.b.chen == 0) ||
+		    (!hc->do_split && !core_if->hc_halt_quirk &&
+		    ((hc->ep_type == DWC_OTG_EP_TYPE_ISOC) ||
+		    (hc->ep_type == DWC_OTG_EP_TYPE_INTR)))) {
 			/*
+			 * hcchar.b.chen is 0 means that:
 			 * The channel is either already halted or it hasn't
 			 * started yet. In DMA mode, the transfer may halt if
 			 * it finishes normally or a condition occurs that
@@ -2866,7 +2870,16 @@ void dwc_otg_hc_halt(dwc_otg_core_if_t *core_if,
 			 * to a channel, but not started yet when an URB is
 			 * dequeued. Don't want to halt a channel that hasn't
 			 * started yet.
+			 * If channel is used for non-split periodic transfer
+			 * according to DWC Programming Guide:
+			 * '3.5 Halting a Channel': Channel disable must not
+			 * be programmed for non-split periodic channels. At
+			 * the end of the next uframe/frame (in the worst
+			 * case), the core generates a channel halted and
+			 * disables the channel automatically.
 			 */
+			DWC_PRINTF("%s: hcchar.b.chen %d, ep_type %d\n",
+				   __func__, hcchar.b.chen, hc->ep_type);
 			return;
 		}
 	}
@@ -3670,10 +3683,7 @@ void dwc_otg_ep_activate(dwc_otg_core_if_t *core_if, dwc_ep_t *ep)
 		depctl.b.eptype = ep->type;
 		depctl.b.txfnum = ep->tx_fifo_num;
 
-		if (ep->type == DWC_OTG_EP_TYPE_ISOC)
-			depctl.b.setd0pid = 1;
-		else
-			depctl.b.setd0pid = 1;
+		depctl.b.setd0pid = 1;
 
 		depctl.b.usbactep = 1;
 
@@ -4110,6 +4120,7 @@ void dwc_otg_ep_start_transfer(dwc_otg_core_if_t *core_if, dwc_ep_t *ep)
 	depctl_data_t depctl;
 	deptsiz_data_t deptsiz;
 	gintmsk_data_t intr_mask = {.d32 = 0 };
+	u32 pktcnt;
 
 	DWC_DEBUGPL((DBG_PCDV | DBG_CILV), "%s()\n", __func__);
 	DWC_DEBUGPL(DBG_PCD, "ep%d-%s xfer_len=%d xfer_cnt=%d "
@@ -4162,13 +4173,14 @@ void dwc_otg_ep_start_transfer(dwc_otg_core_if_t *core_if, dwc_ep_t *ep)
 			 *	exist ? 1 : 0)
 			 */
 			deptsiz.b.xfersize = ep->xfer_len - ep->xfer_count;
-			deptsiz.b.pktcnt =
-			    (ep->xfer_len - ep->xfer_count - 1 +
-			     ep->maxpacket) / ep->maxpacket;
-			if (deptsiz.b.pktcnt > MAX_PKT_CNT) {
+			pktcnt = (ep->xfer_len - ep->xfer_count - 1 +
+				  ep->maxpacket) / ep->maxpacket;
+			if (pktcnt > MAX_PKT_CNT) {
 				deptsiz.b.pktcnt = MAX_PKT_CNT;
 				deptsiz.b.xfersize =
 				    deptsiz.b.pktcnt * ep->maxpacket;
+			} else {
+				deptsiz.b.pktcnt = pktcnt;
 			}
 			if (ep->type == DWC_OTG_EP_TYPE_ISOC)
 				deptsiz.b.mc = deptsiz.b.pktcnt;
@@ -4296,11 +4308,12 @@ void dwc_otg_ep_start_transfer(dwc_otg_core_if_t *core_if, dwc_ep_t *ep)
 			deptsiz.b.xfersize = ep->maxpacket;
 			deptsiz.b.pktcnt = 1;
 		} else {
-			deptsiz.b.pktcnt =
-			    (ep->xfer_len - ep->xfer_count +
-			     (ep->maxpacket - 1)) / ep->maxpacket;
-			if (deptsiz.b.pktcnt > MAX_PKT_CNT)
+			pktcnt = (ep->xfer_len - ep->xfer_count +
+				  (ep->maxpacket - 1)) / ep->maxpacket;
+			if (pktcnt > MAX_PKT_CNT)
 				deptsiz.b.pktcnt = MAX_PKT_CNT;
+			else
+				deptsiz.b.pktcnt = pktcnt;
 			if (!core_if->dma_desc_enable) {
 				ep->xfer_len =
 				    deptsiz.b.pktcnt * ep->maxpacket +

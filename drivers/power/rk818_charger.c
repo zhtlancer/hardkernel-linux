@@ -134,6 +134,7 @@ struct rk818_charger {
 	struct regmap *regmap;
 	struct power_supply *ac_psy;
 	struct power_supply *usb_psy;
+	struct power_supply *bat_psy;
 	struct extcon_dev *cable_edev;
 	struct charger_platform_data *pdata;
 	struct workqueue_struct *usb_charger_wq;
@@ -297,14 +298,76 @@ static int rk818_cg_lowpwr_check(struct rk818_charger *cg)
 	return fake_offline;
 }
 
+static int rk818_cg_get_bat_psy(struct device *dev, void *data)
+{
+	struct rk818_charger *cg = data;
+	struct power_supply *psy = dev_get_drvdata(dev);
+
+	if (psy->desc->type == POWER_SUPPLY_TYPE_BATTERY) {
+		cg->bat_psy = psy;
+		return 1;
+	}
+
+	return 0;
+}
+
+static void rk818_cg_get_psy(struct rk818_charger *cg)
+{
+	if (!cg->bat_psy)
+		class_for_each_device(power_supply_class, NULL, (void *)cg,
+				      rk818_cg_get_bat_psy);
+}
+
+static int rk818_cg_get_bat_max_cur(struct rk818_charger *cg)
+{
+	union power_supply_propval val;
+	int ret;
+
+	rk818_cg_get_psy(cg);
+
+	if (!cg->bat_psy)
+		return cg->pdata->max_chrg_current;
+
+	ret = cg->bat_psy->desc->get_property(cg->bat_psy,
+					      POWER_SUPPLY_PROP_CURRENT_MAX,
+					      &val);
+	if (!ret && val.intval)
+		return val.intval;
+
+	return cg->pdata->max_chrg_current;
+}
+
+static int rk818_cg_get_bat_max_vol(struct rk818_charger *cg)
+{
+	union power_supply_propval val;
+	int ret;
+
+	rk818_cg_get_psy(cg);
+
+	if (!cg->bat_psy)
+		return cg->pdata->max_chrg_voltage;
+
+	ret = cg->bat_psy->desc->get_property(cg->bat_psy,
+					      POWER_SUPPLY_PROP_VOLTAGE_MAX,
+					      &val);
+	if (!ret && val.intval)
+		return val.intval;
+
+	return cg->pdata->max_chrg_voltage;
+}
+
 static enum power_supply_property rk818_ac_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
 };
 
 static enum power_supply_property rk818_usb_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_STATUS,
+	POWER_SUPPLY_PROP_VOLTAGE_MAX,
+	POWER_SUPPLY_PROP_CURRENT_MAX,
 };
 
 static int rk818_cg_ac_get_property(struct power_supply *psy,
@@ -337,6 +400,12 @@ static int rk818_cg_ac_get_property(struct power_supply *psy,
 			val->intval = cg->prop_status;
 
 		DBG("report prop: %d\n", val->intval);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		val->intval = rk818_cg_get_bat_max_vol(cg);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = rk818_cg_get_bat_max_cur(cg);
 		break;
 	default:
 		ret = -EINVAL;
@@ -376,6 +445,12 @@ static int rk818_cg_usb_get_property(struct power_supply *psy,
 			val->intval = cg->prop_status;
 
 		DBG("report prop: %d\n", val->intval);
+		break;
+	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
+		val->intval = rk818_cg_get_bat_max_vol(cg);
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_MAX:
+		val->intval = rk818_cg_get_bat_max_cur(cg);
 		break;
 	default:
 		ret = -EINVAL;
@@ -1700,15 +1775,19 @@ static void rk818_charger_shutdown(struct platform_device *pdev)
 		cancel_delayed_work_sync(&cg->discnt_work);
 	}
 
+	rk818_cg_set_otg_state(cg, USB_OTG_POWER_OFF);
+	disable_irq(cg->plugin_irq);
+	disable_irq(cg->plugout_irq);
+
 	cancel_delayed_work_sync(&cg->usb_work);
 	cancel_delayed_work_sync(&cg->dc_work);
 	cancel_delayed_work_sync(&cg->finish_sig_work);
 	cancel_delayed_work_sync(&cg->irq_work);
 	cancel_delayed_work_sync(&cg->ts2_vol_work);
-	destroy_workqueue(cg->ts2_wq);
-	destroy_workqueue(cg->usb_charger_wq);
-	destroy_workqueue(cg->dc_charger_wq);
-	destroy_workqueue(cg->finish_sig_wq);
+	flush_workqueue(cg->ts2_wq);
+	flush_workqueue(cg->usb_charger_wq);
+	flush_workqueue(cg->dc_charger_wq);
+	flush_workqueue(cg->finish_sig_wq);
 
 	if (cg->pdata->extcon) {
 		extcon_unregister_notifier(cg->cable_edev, EXTCON_CHG_USB_SDP,
@@ -1727,7 +1806,6 @@ static void rk818_charger_shutdown(struct platform_device *pdev)
 
 	rk818_bat_temp_notifier_unregister(&cg->temp_nb);
 
-	rk818_cg_set_otg_state(cg, USB_OTG_POWER_OFF);
 	rk818_cg_set_finish_sig(cg, CHRG_FINISH_ANA_SIGNAL);
 
 	CG_INFO("shutdown: ac=%d usb=%d dc=%d otg=%d\n",

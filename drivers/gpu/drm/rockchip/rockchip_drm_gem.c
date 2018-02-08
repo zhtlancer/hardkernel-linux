@@ -247,7 +247,8 @@ static int rockchip_gem_alloc_cma(struct rockchip_gem_object *rk_obj)
 	struct drm_gem_object *obj = &rk_obj->base;
 	struct drm_device *drm = obj->dev;
 	struct sg_table *sgt;
-	int ret;
+	int ret, i;
+	struct scatterlist *s;
 
 	init_dma_attrs(&rk_obj->dma_attrs);
 	dma_set_attr(DMA_ATTR_WRITE_COMBINE, &rk_obj->dma_attrs);
@@ -274,6 +275,9 @@ static int rockchip_gem_alloc_cma(struct rockchip_gem_object *rk_obj)
 		DRM_ERROR("failed to allocate sgt, %d\n", ret);
 		goto err_sgt_free;
 	}
+
+	for_each_sg(sgt->sgl, s, sgt->nents, i)
+		sg_dma_address(s) = sg_phys(s);
 
 	rk_obj->num_pages = rk_obj->base.size >> PAGE_SHIFT;
 
@@ -303,7 +307,7 @@ err_sgt_free:
 	kfree(sgt);
 err_dma_free:
 	dma_free_attrs(drm->dev, obj->size, rk_obj->cookie,
-		       rk_obj->dma_addr, &rk_obj->dma_attrs);
+		       rk_obj->dma_handle, &rk_obj->dma_attrs);
 
 	return ret;
 }
@@ -317,7 +321,7 @@ static void rockchip_gem_free_cma(struct rockchip_gem_object *rk_obj)
 	sg_free_table(rk_obj->sgt);
 	kfree(rk_obj->sgt);
 	dma_free_attrs(drm->dev, obj->size, rk_obj->cookie,
-		       rk_obj->dma_addr, &rk_obj->dma_attrs);
+		       rk_obj->dma_handle, &rk_obj->dma_attrs);
 }
 
 static int rockchip_gem_alloc_secure(struct rockchip_gem_object *rk_obj)
@@ -476,7 +480,7 @@ static int rockchip_drm_gem_object_mmap_shm(struct drm_gem_object *obj,
 {
 	struct rockchip_gem_object *rk_obj = to_rockchip_obj(obj);
 	unsigned int i, count = obj->size >> PAGE_SHIFT;
-	unsigned long user_count = (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
+	unsigned long user_count = vma_pages(vma);
 	unsigned long uaddr = vma->vm_start;
 	unsigned long offset = vma->vm_pgoff;
 	unsigned long end = user_count + offset;
@@ -588,11 +592,8 @@ rockchip_gem_alloc_object(struct drm_device *drm, unsigned int size)
 
 	drm_gem_object_init(drm, obj, size);
 
-	if (IS_ENABLED(CONFIG_ARM_LPAE)) {
-		mapping = file_inode(obj->filp)->i_mapping;
-		mapping_set_gfp_mask(mapping,
-				     mapping_gfp_mask(mapping) | __GFP_DMA32);
-	}
+	mapping = file_inode(obj->filp)->i_mapping;
+	mapping_set_gfp_mask(mapping, GFP_USER | __GFP_DMA32);
 
 	return rk_obj;
 }

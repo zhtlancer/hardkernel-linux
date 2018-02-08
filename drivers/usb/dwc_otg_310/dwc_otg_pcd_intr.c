@@ -2404,7 +2404,8 @@ static void complete_ep(dwc_otg_pcd_ep_t *ep)
 				/*      Check if the whole transfer was completed,
 				 *      if no, setup transfer for next portion of data
 				 */
-				if (ep->dwc_ep.xfer_len < ep->dwc_ep.total_len) {
+				if (ep->dwc_ep.xfer_len < ep->dwc_ep.total_len &&
+				    deptsiz.b.xfersize == 0) {
 					dwc_otg_ep_start_transfer(core_if,
 								  &ep->dwc_ep);
 				} else if (ep->dwc_ep.sent_zlp) {
@@ -4908,12 +4909,10 @@ exit_xfercompl:
 				deptsiz.d32 =
 				    DWC_READ_REG32(&core_if->dev_if->
 						   out_ep_regs[0]->doeptsiz);
-				if ((core_if->dma_desc_enable)
-				    || (core_if->dma_enable
-					&& core_if->snpsid >=
-					OTG_CORE_REV_3_00a)) {
+				if (core_if->dma_desc_enable) {
 					do_setup_in_status_phase(pcd);
 				}
+
 			}
 
 			/* Endpoint disable      */

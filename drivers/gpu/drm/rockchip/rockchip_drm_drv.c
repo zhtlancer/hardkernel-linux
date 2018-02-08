@@ -20,6 +20,7 @@
 #include <drm/drm_fb_helper.h>
 #include <drm/drm_sync_helper.h>
 #include <drm/rockchip_drm.h>
+#include <linux/devfreq.h>
 #include <linux/dma-mapping.h>
 #include <linux/dma-iommu.h>
 #include <linux/genalloc.h>
@@ -34,6 +35,7 @@
 #include <linux/fence.h>
 #include <linux/console.h>
 #include <linux/iommu.h>
+#include <linux/of_reserved_mem.h>
 
 #include <drm/rockchip_drm.h>
 
@@ -63,6 +65,12 @@ struct rockchip_drm_mode_set {
 	int hdisplay;
 	int vdisplay;
 	int vrefresh;
+	int flags;
+
+	int left_margin;
+	int right_margin;
+	int top_margin;
+	int bottom_margin;
 
 	bool mode_changed;
 	bool ymirror;
@@ -110,7 +118,7 @@ static
 struct drm_connector *find_connector_by_bridge(struct drm_device *drm_dev,
 					       struct device_node *node)
 {
-	struct device_node *np_encoder, *np_connector;
+	struct device_node *np_encoder, *np_connector = NULL;
 	struct drm_encoder *encoder;
 	struct drm_connector *connector = NULL;
 	struct device_node *port, *endpoint;
@@ -215,7 +223,7 @@ static int init_loader_memory(struct drm_device *drm_dev)
 	struct resource res;
 	int i, ret;
 
-	node = of_parse_phandle(np, "memory-region", 0);
+	node = of_parse_phandle(np, "logo-memory-region", 0);
 	if (!node)
 		return -ENOMEM;
 
@@ -388,8 +396,23 @@ of_parse_display_resource(struct drm_device *drm_dev, struct device_node *route)
 	if (!of_property_read_u32(route, "video,vrefresh", &val))
 		set->vrefresh = val;
 
+	if (!of_property_read_u32(route, "video,flags", &val))
+		set->flags = val;
+
 	if (!of_property_read_u32(route, "logo,ymirror", &val))
 		set->ymirror = val;
+
+	if (!of_property_read_u32(route, "overscan,left_margin", &val))
+		set->left_margin = val;
+
+	if (!of_property_read_u32(route, "overscan,right_margin", &val))
+		set->right_margin = val;
+
+	if (!of_property_read_u32(route, "overscan,top_margin", &val))
+		set->top_margin = val;
+
+	if (!of_property_read_u32(route, "overscan,bottom_margin", &val))
+		set->bottom_margin = val;
 
 	set->ratio = 1;
 	if (!of_property_read_string(route, "logo,mode", &string) &&
@@ -407,6 +430,7 @@ int setup_initial_state(struct drm_device *drm_dev,
 			struct drm_atomic_state *state,
 			struct rockchip_drm_mode_set *set)
 {
+	struct rockchip_drm_private *priv = drm_dev->dev_private;
 	struct drm_connector *connector = set->connector;
 	struct drm_crtc *crtc = set->crtc;
 	struct drm_crtc_state *crtc_state;
@@ -415,6 +439,7 @@ int setup_initial_state(struct drm_device *drm_dev,
 	struct drm_display_mode *mode = NULL;
 	const struct drm_connector_helper_funcs *funcs;
 	const struct drm_encoder_helper_funcs *encoder_funcs;
+	int pipe = drm_crtc_index(crtc);
 	bool is_crtc_enabled = true;
 	int hdisplay, vdisplay;
 	int fb_width, fb_height;
@@ -449,7 +474,8 @@ int setup_initial_state(struct drm_device *drm_dev,
 	list_for_each_entry(mode, &connector->modes, head) {
 		if (mode->hdisplay == set->hdisplay &&
 		    mode->vdisplay == set->vdisplay &&
-		    drm_mode_vrefresh(mode) == set->vrefresh) {
+		    drm_mode_vrefresh(mode) == set->vrefresh &&
+		    mode->flags == set->flags) {
 			found = 1;
 			match = 1;
 			break;
@@ -496,6 +522,10 @@ int setup_initial_state(struct drm_device *drm_dev,
 			goto error;
 
 		crtc_state->active = true;
+
+		if (priv->crtc_funcs[pipe] &&
+		    priv->crtc_funcs[pipe]->loader_protect)
+			priv->crtc_funcs[pipe]->loader_protect(crtc, true);
 	}
 
 	if (!set->fb) {
@@ -550,6 +580,10 @@ error:
 	if (encoder_funcs->loader_protect)
 		encoder_funcs->loader_protect(conn_state->best_encoder, false);
 	conn_state->best_encoder->loader_protect = false;
+	if (priv->crtc_funcs[pipe] &&
+	    priv->crtc_funcs[pipe]->loader_protect)
+		priv->crtc_funcs[pipe]->loader_protect(crtc, false);
+
 	return ret;
 }
 
@@ -566,6 +600,7 @@ static int update_state(struct drm_device *drm_dev,
 	struct drm_crtc_state *crtc_state;
 	struct drm_connector_state *conn_state;
 	int ret;
+	struct rockchip_crtc_state *s;
 
 	crtc_state = drm_atomic_get_crtc_state(state, crtc);
 	if (IS_ERR(crtc_state))
@@ -573,6 +608,11 @@ static int update_state(struct drm_device *drm_dev,
 	conn_state = drm_atomic_get_connector_state(state, connector);
 	if (IS_ERR(conn_state))
 		return PTR_ERR(conn_state);
+	s = to_rockchip_crtc_state(crtc_state);
+	s->left_margin = set->left_margin;
+	s->right_margin = set->right_margin;
+	s->top_margin = set->top_margin;
+	s->bottom_margin = set->bottom_margin;
 
 	if (set->mode_changed) {
 		ret = drm_atomic_set_crtc_for_connector(conn_state, crtc);
@@ -588,12 +628,9 @@ static int update_state(struct drm_device *drm_dev,
 		const struct drm_encoder_helper_funcs *encoder_helper_funcs;
 		const struct drm_connector_helper_funcs *connector_helper_funcs;
 		struct drm_encoder *encoder;
-		int pipe = drm_crtc_index(crtc);
 
 		connector_helper_funcs = connector->helper_private;
-		if (!priv->crtc_funcs[pipe] ||
-		    !priv->crtc_funcs[pipe]->loader_protect ||
-		    !connector_helper_funcs ||
+		if (!connector_helper_funcs ||
 		    !connector_helper_funcs->best_encoder)
 			return -ENXIO;
 		encoder = connector_helper_funcs->best_encoder(connector);
@@ -608,7 +645,6 @@ static int update_state(struct drm_device *drm_dev,
 			return ret;
 		if (encoder_helper_funcs->mode_set)
 			encoder_helper_funcs->mode_set(encoder, mode, mode);
-		priv->crtc_funcs[pipe]->loader_protect(crtc, true);
 	}
 
 	primary_state = drm_atomic_get_plane_state(state, crtc->primary);
@@ -690,6 +726,13 @@ static void show_loader_logo(struct drm_device *drm_dev)
 		goto err_free_state;
 	}
 
+	/*
+	 * The state save initial devices status, swap the state into
+	 * drm deivces as old state, so if new state come, can compare
+	 * with this state to judge which status need to update.
+	 */
+	drm_atomic_helper_swap_state(drm_dev, state);
+	drm_atomic_state_free(state);
 	old_state = drm_atomic_helper_duplicate_state(drm_dev,
 						      mode_config->acquire_ctx);
 	if (IS_ERR(old_state)) {
@@ -698,13 +741,6 @@ static void show_loader_logo(struct drm_device *drm_dev)
 		goto err_free_state;
 	}
 
-	/*
-	 * The state save initial devices status, swap the state into
-	 * drm deivces as old state, so if new state come, can compare
-	 * with this state to judge which status need to update.
-	 */
-	drm_atomic_helper_swap_state(drm_dev, state);
-	drm_atomic_state_free(state);
 	state = drm_atomic_helper_duplicate_state(drm_dev,
 						  mode_config->acquire_ctx);
 	if (IS_ERR(state)) {
@@ -754,6 +790,7 @@ err_unlock:
 	drm_modeset_unlock_all(drm_dev);
 	if (ret)
 		dev_err(drm_dev->dev, "failed to show loader logo\n");
+	rockchip_free_loader_memory(drm_dev);
 }
 
 static const char *const loader_protect_clocks[] __initconst = {
@@ -1088,6 +1125,23 @@ static int rockchip_drm_create_properties(struct drm_device *dev)
 	if (!prop)
 		return -ENOMEM;
 	private->cabc_calc_pixel_num_property = prop;
+	prop = drm_property_create_range(dev, DRM_MODE_PROP_ATOMIC,
+					 "EOTF", 0, 5);
+	if (!prop)
+		return -ENOMEM;
+	private->eotf_prop = prop;
+
+	prop = drm_property_create_range(dev, DRM_MODE_PROP_ATOMIC,
+					 "COLOR_SPACE", 0, 12);
+	if (!prop)
+		return -ENOMEM;
+	private->color_space_prop = prop;
+
+	prop = drm_property_create_range(dev, DRM_MODE_PROP_ATOMIC,
+					 "GLOBAL_ALPHA", 0, 255);
+	if (!prop)
+		return -ENOMEM;
+	private->global_alpha_prop = prop;
 
 	return drm_mode_create_tv_properties(dev, 0, NULL);
 }
@@ -1211,6 +1265,8 @@ static int rockchip_drm_bind(struct device *dev)
 	struct drm_device *drm_dev;
 	struct rockchip_drm_private *private;
 	int ret;
+	struct device_node *np = dev->of_node;
+	struct device_node *parent_np;
 
 	drm_dev = drm_dev_alloc(&rockchip_drm_driver, dev);
 	if (!drm_dev)
@@ -1228,10 +1284,31 @@ static int rockchip_drm_bind(struct device *dev)
 		goto err_free;
 	}
 
-	mutex_init(&private->commit.lock);
-	INIT_WORK(&private->commit.work, rockchip_drm_atomic_work);
+	mutex_init(&private->commit_lock);
+	INIT_WORK(&private->commit_work, rockchip_drm_atomic_work);
 
 	drm_dev->dev_private = private;
+
+	private->dmc_support = false;
+	private->devfreq = devfreq_get_devfreq_by_phandle(dev, 0);
+	if (IS_ERR(private->devfreq)) {
+		if (PTR_ERR(private->devfreq) == -EPROBE_DEFER) {
+			parent_np = of_parse_phandle(np, "devfreq", 0);
+			if (parent_np &&
+			    of_device_is_available(parent_np)) {
+				private->dmc_support = true;
+				dev_warn(dev, "defer getting devfreq\n");
+			} else {
+				dev_info(dev, "dmc is disabled\n");
+			}
+		} else {
+			dev_info(dev, "devfreq is not set\n");
+		}
+		private->devfreq = NULL;
+	} else {
+		private->dmc_support = true;
+		dev_info(dev, "devfreq is ready\n");
+	}
 
 	private->hdmi_pll.pll = devm_clk_get(dev, "hdmi-tmds-pll");
 	if (PTR_ERR(private->hdmi_pll.pll) == -ENOENT) {
@@ -1306,6 +1383,9 @@ static int rockchip_drm_bind(struct device *dev)
 #ifndef MODULE
 	show_loader_logo(drm_dev);
 #endif
+	ret = of_reserved_mem_device_init(drm_dev->dev);
+	if (ret)
+		DRM_DEBUG_KMS("No reserved memory region assign to drm\n");
 
 	ret = rockchip_drm_fbdev_init(drm_dev);
 	if (ret)
@@ -1723,6 +1803,13 @@ static int rockchip_drm_platform_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static void rockchip_drm_platform_shutdown(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+
+	rockchip_drm_sys_suspend(dev);
+}
+
 static const struct of_device_id rockchip_drm_dt_ids[] = {
 	{ .compatible = "rockchip,display-subsystem", },
 	{ /* sentinel */ },
@@ -1732,6 +1819,7 @@ MODULE_DEVICE_TABLE(of, rockchip_drm_dt_ids);
 static struct platform_driver rockchip_drm_platform_driver = {
 	.probe = rockchip_drm_platform_probe,
 	.remove = rockchip_drm_platform_remove,
+	.shutdown = rockchip_drm_platform_shutdown,
 	.driver = {
 		.name = "rockchip-drm",
 		.of_match_table = rockchip_drm_dt_ids,
