@@ -22,8 +22,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/scatterlist.h>
 
-#include < linux/of_gpio.h>
-
 #define DRIVER_NAME "rockchip-spi"
 
 /* SPI register offsets */
@@ -285,9 +283,6 @@ static void rockchip_spi_set_cs(struct spi_device *spi, bool enable)
 		ser |= 1 << spi->chip_select;
 	else
 		ser &= ~(1 << spi->chip_select);
-
-	if (gpio_is_valid(spi->cs_gpio))
-		gpio_direction_output(spi->cs_gpio, enable);
 
 	writel_relaxed(ser, rs->regs + ROCKCHIP_SPI_SER);
 
