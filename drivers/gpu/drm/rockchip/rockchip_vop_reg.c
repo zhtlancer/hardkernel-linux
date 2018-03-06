@@ -886,6 +886,7 @@ static const struct vop_ctrl rk3328_ctrl_data = {
 	.global_regdone_en = VOP_REG(RK3328_SYS_CTRL, 0x1, 11),
 	.overlay_mode = VOP_REG(RK3328_SYS_CTRL, 0x1, 16),
 	.core_dclk_div = VOP_REG(RK3328_DSP_CTRL0, 0x1, 4),
+	.dclk_ddr = VOP_REG(RK3328_DSP_CTRL0, 0x1, 8),
 	.p2i_en = VOP_REG(RK3328_DSP_CTRL0, 0x1, 5),
 	.rgb_en = VOP_REG(RK3328_SYS_CTRL, 0x1, 12),
 	.hdmi_en = VOP_REG(RK3328_SYS_CTRL, 0x1, 13),
@@ -1244,8 +1245,10 @@ static const struct vop_win_phy rk3366_lit_win0_data = {
 	.yrgb_vir = VOP_REG(RK3366_LIT_WIN0_VIR, 0x1fff, 0),
 	.uv_vir = VOP_REG(RK3366_LIT_WIN0_VIR, 0x1fff, 16),
 
+	.alpha_pre_mul = VOP_REG(RK3366_LIT_WIN0_ALPHA_CTRL, 0x1, 2),
 	.alpha_mode = VOP_REG(RK3366_LIT_WIN0_ALPHA_CTRL, 0x1, 1),
 	.alpha_en = VOP_REG(RK3366_LIT_WIN0_ALPHA_CTRL, 0x1, 0),
+	.global_alpha_val = VOP_REG(RK3366_LIT_WIN0_ALPHA_CTRL, 0xff, 4),
 	.key_color = VOP_REG(RK3366_LIT_WIN0_COLOR_KEY, 0xffffff, 0),
 	.key_en = VOP_REG(RK3366_LIT_WIN0_COLOR_KEY, 0x1, 24),
 };
@@ -1262,8 +1265,10 @@ static const struct vop_win_phy rk3366_lit_win1_data = {
 	.yrgb_mst = VOP_REG(RK3366_LIT_WIN1_MST, 0xffffffff, 0),
 	.yrgb_vir = VOP_REG(RK3366_LIT_WIN1_VIR, 0x1fff, 0),
 
+	.alpha_pre_mul = VOP_REG(RK3366_LIT_WIN1_ALPHA_CTRL, 0x1, 2),
 	.alpha_mode = VOP_REG(RK3366_LIT_WIN1_ALPHA_CTRL, 0x1, 1),
 	.alpha_en = VOP_REG(RK3366_LIT_WIN1_ALPHA_CTRL, 0x1, 0),
+	.global_alpha_val = VOP_REG(RK3366_LIT_WIN1_ALPHA_CTRL, 0xff, 4),
 	.key_color = VOP_REG(RK3366_LIT_WIN1_COLOR_KEY, 0xffffff, 0),
 	.key_en = VOP_REG(RK3366_LIT_WIN1_COLOR_KEY, 0x1, 24),
 };
@@ -1457,16 +1462,36 @@ static const struct vop_ctrl px30_ctrl_data = {
 	.cabc_global_dn_limit_en = VOP_REG(PX30_CABC_CTRL3, 0x1, 8),
 };
 
+static const struct vop_win_phy px30_win23_data = {
+	.data_formats = formats_win_lite,
+	.nformats = ARRAY_SIZE(formats_win_lite),
+	.gate = VOP_REG(RK3368_WIN2_CTRL0, 0x1, 0),
+	.enable = VOP_REG(RK3368_WIN2_CTRL0, 0x1, 4),
+	.format = VOP_REG(RK3368_WIN2_CTRL0, 0x3, 5),
+	.rb_swap = VOP_REG(RK3368_WIN2_CTRL0, 0x1, 20),
+	.dsp_info = VOP_REG(RK3368_WIN2_DSP_INFO0, 0x0fff0fff, 0),
+	.dsp_st = VOP_REG(RK3368_WIN2_DSP_ST0, 0x1fff1fff, 0),
+	.yrgb_mst = VOP_REG(RK3368_WIN2_MST0, 0xffffffff, 0),
+	.yrgb_vir = VOP_REG(RK3368_WIN2_VIR0_1, 0x1fff, 0),
+	.alpha_pre_mul = VOP_REG(RK3368_WIN2_SRC_ALPHA_CTRL, 0x1, 2),
+	.alpha_mode = VOP_REG(RK3368_WIN2_SRC_ALPHA_CTRL, 0x1, 1),
+	.alpha_en = VOP_REG(RK3368_WIN2_SRC_ALPHA_CTRL, 0x1, 0),
+	.global_alpha_val = VOP_REG(RK3368_WIN2_SRC_ALPHA_CTRL, 0xff, 4),
+	.channel = VOP_REG(RK3368_WIN2_CTRL1, 0xff, 8),
+};
+
 static const struct vop_win_data px30_vop_big_win_data[] = {
 	{ .base = 0x00, .phy = &rk3366_lit_win0_data,
 	  .type = DRM_PLANE_TYPE_PRIMARY },
 	{ .base = 0x00, .phy = &rk3366_lit_win1_data,
 	  .type = DRM_PLANE_TYPE_CURSOR,
 	  .feature = WIN_FEATURE_AFBDC },
-	{ .base = 0xe0, .phy = &rk3368_win23_data,
-	  .type = DRM_PLANE_TYPE_OVERLAY,
-	  .area = rk3368_area_data,
-	  .area_size = ARRAY_SIZE(rk3368_area_data), },
+	/*
+	 * { .base = 0xe0, .phy = &px30_win23_data,
+	 * .type = DRM_PLANE_TYPE_OVERLAY,
+	 * .area = rk3368_area_data,
+	 * .area_size = ARRAY_SIZE(rk3368_area_data), },
+	 */
 };
 
 static const struct vop_win_data px30_vop_lit_win_data[] = {

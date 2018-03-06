@@ -732,31 +732,31 @@ static struct rockchip_mux_route_data px30_mux_route_data[] = {
 	}, {
 		/* uart2-rxm0 */
 		.bank_num = 1,
-		.pin = 26,
+		.pin = 27,
 		.func = 2,
 		.route_offset = 0x184,
-		.route_val = BIT(16 + 9),
+		.route_val = BIT(16 + 10),
 	}, {
 		/* uart2-rxm1 */
 		.bank_num = 2,
 		.pin = 14,
 		.func = 2,
 		.route_offset = 0x184,
-		.route_val = BIT(16 + 9) | BIT(9),
+		.route_val = BIT(16 + 10) | BIT(10),
 	}, {
 		/* uart3-rxm0 */
 		.bank_num = 0,
 		.pin = 17,
 		.func = 2,
 		.route_offset = 0x184,
-		.route_val = BIT(16 + 10),
+		.route_val = BIT(16 + 9),
 	}, {
 		/* uart3-rxm1 */
 		.bank_num = 1,
-		.pin = 13,
+		.pin = 15,
 		.func = 2,
 		.route_offset = 0x184,
-		.route_val = BIT(16 + 10) | BIT(10),
+		.route_val = BIT(16 + 9) | BIT(9),
 	},
 };
 
@@ -1844,6 +1844,9 @@ static int rockchip_get_drive_perpin(struct rockchip_pin_bank *bank,
 
 		break;
 	case DRV_TYPE_IO_WIDE_LEVEL:
+		if (!ctrl->drv_calc_extra_reg)
+			return -EINVAL;
+
 		rmask_bits = RK3288_DRV_BITS_PER_PIN;
 		/* enable the write to the equivalent lower bits */
 		ret = regmap_read(regmap, reg, &data);
@@ -1856,11 +1859,10 @@ static int rockchip_get_drive_perpin(struct rockchip_pin_bank *bank,
 		 * assume the drive strength of N channel and
 		 * P channel are the same.
 		 */
-		if (ctrl->drv_calc_extra_reg)
-			ctrl->drv_calc_extra_reg(bank, pin_num,
-						 &extra_regmap,
-						 &extra_reg,
-						 &extra_bit);
+		ctrl->drv_calc_extra_reg(bank, pin_num,
+					 &extra_regmap,
+					 &extra_reg,
+					 &extra_bit);
 
 		/*
 		 * It is enough to read one channel drive strength,
@@ -1981,6 +1983,9 @@ static int rockchip_set_drive_perpin(struct rockchip_pin_bank *bank,
 		}
 		break;
 	case DRV_TYPE_IO_WIDE_LEVEL:
+		if (!ctrl->drv_calc_extra_reg)
+			return -EINVAL;
+
 		extra_value = ((strength -
 				rockchip_perpin_drv_list[drv_type][ret])) >> 1;
 		rmask_bits = RK3288_DRV_BITS_PER_PIN;
@@ -1989,11 +1994,10 @@ static int rockchip_set_drive_perpin(struct rockchip_pin_bank *bank,
 		 * assume the drive strength of N channel and
 		 * P channel are the same.
 		 */
-		if (ctrl->drv_calc_extra_reg)
-			extra_drv_type = ctrl->drv_calc_extra_reg(bank, pin_num,
-								  &extra_regmap,
-								  &extra_reg,
-								  &extra_bit);
+		extra_drv_type = ctrl->drv_calc_extra_reg(bank, pin_num,
+							  &extra_regmap,
+							  &extra_reg,
+							  &extra_bit);
 
 		/* enable the write to the equivalent lower bits */
 		data = ((1 << rmask_bits) - 1) << (extra_bit + 16);

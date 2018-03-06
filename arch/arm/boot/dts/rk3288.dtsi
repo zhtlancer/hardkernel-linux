@@ -1452,6 +1452,15 @@
 		};
 	};
 
+	mipi_phy_tx1rx1: mipi-phy-tx1rx1@ff968000 {
+		compatible = "rockchip,rk3288-mipi-dphy";
+		reg = <0x0 0xff968000 0x0 0x4000>;
+		rockchip,grf = <&grf>;
+		clocks = <&cru SCLK_MIPIDSI_24M>, <&cru PCLK_MIPI_CSI>;
+		clock-names = "dphy-ref", "pclk";
+		status = "disabled";
+	};
+
 	edp: dp@ff970000 {
 		compatible = "rockchip,rk3288-dp";
 		reg = <0x0 0xff970000 0x0 0x4000>;
@@ -1490,8 +1499,6 @@
 		reg = <0x0 0xff96c000 0x0 0x4000>;
 		clocks = <&cru PCLK_LVDS_PHY>;
 		clock-names = "pclk_lvds";
-		pinctrl-names = "lcdc";
-		pinctrl-0 = <&lcdc_ctl>;
 		power-domains = <&power RK3288_PD_VIO>;
 		rockchip,grf = <&grf>;
 		status = "disabled";

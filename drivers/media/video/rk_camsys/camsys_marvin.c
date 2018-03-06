@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #include "camsys_marvin.h"
 #include "camsys_soc_priv.h"
 #include "camsys_gpio.h"
@@ -478,11 +479,14 @@ static int camsys_mrv_drm_iommu_cb(void *ptr, camsys_sysctrl_t *devctl)
 			(index >= CAMSYS_DMA_BUF_MAX_NUM))
 			return -EINVAL;
 
-		for (index = 0; index < camsys_dev->dma_buf_cnt; index++) {
-			if (camsys_dev->dma_buf[index].fd == iommu->map_fd)
+		for (index = 0; index < CAMSYS_DMA_BUF_MAX_NUM; index++) {
+			if (camsys_dev->dma_buf[index].fd == iommu->map_fd ||
+			    /* force release */
+			    (camsys_dev->dma_buf[index].fd != -1 &&
+			     iommu->client_fd == -1))
 				break;
 		}
-		if (index == camsys_dev->dma_buf_cnt) {
+		if (index == CAMSYS_DMA_BUF_MAX_NUM) {
 			camsys_warn("can't find map fd %d", iommu->map_fd);
 			return -EINVAL;
 		}

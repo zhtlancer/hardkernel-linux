@@ -1617,7 +1617,7 @@ static void ffs_func_eps_disable(struct ffs_function *func)
 	unsigned long flags;
 
 	spin_lock_irqsave(&func->ffs->eps_lock, flags);
-	do {
+	while (count--) {
 		/* pending requests get nuked */
 		if (likely(ep->ep))
 			usb_ep_disable(ep->ep);
@@ -1627,7 +1627,7 @@ static void ffs_func_eps_disable(struct ffs_function *func)
 			epfile->ep = NULL;
 			++epfile;
 		}
-	} while (--count);
+	}
 	spin_unlock_irqrestore(&func->ffs->eps_lock, flags);
 }
 
@@ -1641,45 +1641,21 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 	int ret = 0;
 
 	spin_lock_irqsave(&func->ffs->eps_lock, flags);
-	do {
-		struct usb_endpoint_descriptor *ds;
-		struct usb_ss_ep_comp_descriptor *comp_desc = NULL;
-		int needs_comp_desc = false;
-		int desc_idx;
-
-		if (ffs->gadget->speed == USB_SPEED_SUPER) {
-			desc_idx = 2;
-			needs_comp_desc = true;
-		} else if (ffs->gadget->speed == USB_SPEED_HIGH)
-			desc_idx = 1;
-		else
-			desc_idx = 0;
-
-		/* fall-back to lower speed if desc missing for current speed */
-		do {
-			ds = ep->descs[desc_idx];
-		} while (!ds && --desc_idx >= 0);
-
-		if (!ds) {
-			ret = -EINVAL;
-			break;
-		}
-
+	while(count--) {
 		ep->ep->driver_data = ep;
-		ep->ep->desc = ds;
 
-		if (needs_comp_desc) {
-			comp_desc = (struct usb_ss_ep_comp_descriptor *)(ds +
-					USB_DT_ENDPOINT_SIZE);
-			ep->ep->maxburst = comp_desc->bMaxBurst + 1;
-			ep->ep->comp_desc = comp_desc;
+		ret = config_ep_by_speed(func->gadget, &func->function, ep->ep);
+		if (ret) {
+			pr_err("%s: config_ep_by_speed(%s) returned %d\n",
+			       __func__, ep->ep->name, ret);
+			break;
 		}
 
 		ret = usb_ep_enable(ep->ep);
 		if (likely(!ret)) {
 			epfile->ep = ep;
-			epfile->in = usb_endpoint_dir_in(ds);
-			epfile->isoc = usb_endpoint_xfer_isoc(ds);
+			epfile->in = usb_endpoint_dir_in(ep->ep->desc);
+			epfile->isoc = usb_endpoint_xfer_isoc(ep->ep->desc);
 		} else {
 			break;
 		}
@@ -1688,7 +1664,7 @@ static int ffs_func_eps_enable(struct ffs_function *func)
 
 		++ep;
 		++epfile;
-	} while (--count);
+	}
 	spin_unlock_irqrestore(&func->ffs->eps_lock, flags);
 
 	return ret;
@@ -2072,18 +2048,21 @@ static int __ffs_data_do_os_desc(enum ffs_os_desc_type type,
 		int i;
 
 		if (len < sizeof(*d) ||
-		    d->bFirstInterfaceNumber >= ffs->interfaces_count ||
-		    d->Reserved1 != 1) {
-			pr_err("%s(): Invalid os_desct_ext_compat\n",
-							__func__);
+		    d->bFirstInterfaceNumber >= ffs->interfaces_count)
 			return -EINVAL;
+		if (d->Reserved1 != 1) {
+			/*
+			 * According to the spec, Reserved1 must be set to 1
+			 * but older kernels incorrectly rejected non-zero
+			 * values.  We fix it here to avoid returning EINVAL
+			 * in response to values we used to accept.
+			 */
+			pr_debug("usb_ext_compat_desc::Reserved1 forced to 1\n");
+			d->Reserved1 = 1;
 		}
 		for (i = 0; i < ARRAY_SIZE(d->Reserved2); ++i)
-			if (d->Reserved2[i]) {
-				pr_err("%s(): Invalid Reserved2 of ext_compat\n",
-							__func__);
+			if (d->Reserved2[i])
 				return -EINVAL;
-			}
 
 		length = sizeof(struct usb_ext_compat_desc);
 	}
@@ -3257,12 +3236,12 @@ static void ffs_func_unbind(struct usb_configuration *c,
 
 	/* cleanup after autoconfig */
 	spin_lock_irqsave(&func->ffs->eps_lock, flags);
-	do {
+	while (count--) {
 		if (ep->ep && ep->req)
 			usb_ep_free_request(ep->ep, ep->req);
 		ep->req = NULL;
 		++ep;
-	} while (--count);
+	}
 	spin_unlock_irqrestore(&func->ffs->eps_lock, flags);
 	kfree(func->eps);
 	func->eps = NULL;
@@ -3387,6 +3366,11 @@ static void _ffs_free_dev(struct ffs_dev *dev)
 	list_del(&dev->entry);
 	if (dev->name_allocated)
 		kfree(dev->name);
+
+	/* Clear the private_data pointer to stop incorrect dev access */
+	if (dev->ffs_data)
+		dev->ffs_data->private_data = NULL;
+
 	kfree(dev);
 	if (list_empty(&ffs_devices))
 		functionfs_cleanup();
@@ -3479,6 +3463,7 @@ static void ffs_closed(struct ffs_data *ffs)
 		goto done;
 
 	ffs_obj->desc_ready = false;
+	ffs_obj->ffs_data = NULL;
 
 	if (test_and_clear_bit(FFS_FL_CALL_CLOSED_CALLBACK, &ffs->flags) &&
 	    ffs_obj->ffs_closed_callback)

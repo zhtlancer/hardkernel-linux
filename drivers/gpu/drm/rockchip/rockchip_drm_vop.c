@@ -168,6 +168,7 @@ struct vop_plane_state {
 	unsigned int csc_mode;
 	bool enable;
 	int global_alpha;
+	int blend_mode;
 };
 
 struct vop_win {
@@ -201,6 +202,7 @@ struct vop {
 	bool is_iommu_enabled;
 	bool is_iommu_needed;
 	bool is_enabled;
+	bool mode_update;
 
 	u32 version;
 
@@ -443,6 +445,7 @@ static void vop_disable_allwin(struct vop *vop)
 		struct vop_win *win = &vop->win[i];
 
 		VOP_WIN_SET(vop, win, enable, 0);
+		VOP_WIN_SET(vop, win, gate, 0);
 	}
 }
 
@@ -858,6 +861,20 @@ static int to_vop_csc_mode(int csc_mode)
 	default:
 		return CSC_BT709L;
 	}
+}
+
+static void vop_disable_all_planes(struct vop *vop)
+{
+	bool active;
+	int ret;
+
+	vop_disable_allwin(vop);
+	vop_cfg_done(vop);
+	ret = readx_poll_timeout_atomic(vop_is_allwin_disabled,
+					vop, active, active,
+					0, 500 * 1000);
+	if (ret)
+		dev_err(vop->dev, "wait win close timeout\n");
 }
 
 /*
@@ -1304,7 +1321,7 @@ static void vop_initial(struct drm_crtc *crtc)
 			VOP_SCL_SET_EXT(vop, win, cbcr_ver_scl_mode, SCALE_NONE);
 		}
 		VOP_WIN_SET(vop, win, enable, 0);
-		VOP_WIN_SET(vop, win, gate, 1);
+		VOP_WIN_SET(vop, win, gate, 0);
 	}
 	VOP_CTRL_SET(vop, afbdc_en, 0);
 
@@ -1537,6 +1554,8 @@ static void vop_plane_atomic_disable(struct drm_plane *plane,
 		VOP_SCL_SET_EXT(vop, win, cbcr_ver_scl_mode, SCALE_NONE);
 	}
 	VOP_WIN_SET(vop, win, enable, 0);
+	if (win->area_id == 0)
+		VOP_WIN_SET(vop, win, gate, 0);
 
 	spin_unlock(&vop->reg_lock);
 
@@ -1641,6 +1660,8 @@ static void vop_plane_atomic_update(struct drm_plane *plane,
 			SRC_FACTOR_M0(global_alpha_en ?
 				      ALPHA_SRC_GLOBAL : ALPHA_ONE);
 		VOP_WIN_SET(vop, win, src_alpha_ctl, val);
+		VOP_WIN_SET(vop, win, alpha_pre_mul,
+			    vop_plane_state->blend_mode);
 		VOP_WIN_SET(vop, win, alpha_mode, 1);
 		VOP_WIN_SET(vop, win, alpha_en, 1);
 	} else {
@@ -1659,6 +1680,7 @@ static void vop_plane_atomic_update(struct drm_plane *plane,
 		VOP_WIN_SET_EXT(vop, win, csc, r2y_en, vop_plane_state->r2y_en);
 	}
 	VOP_WIN_SET(vop, win, enable, 1);
+	VOP_WIN_SET(vop, win, gate, 1);
 	spin_unlock(&vop->reg_lock);
 	vop->is_iommu_needed = true;
 }
@@ -1762,6 +1784,11 @@ static int vop_atomic_plane_set_property(struct drm_plane *plane,
 		return 0;
 	}
 
+	if (property == private->blend_mode_prop) {
+		plane_state->blend_mode = val;
+		return 0;
+	}
+
 	DRM_ERROR("failed to set vop plane property\n");
 	return -EINVAL;
 }
@@ -1797,6 +1824,11 @@ static int vop_atomic_plane_get_property(struct drm_plane *plane,
 
 	if (property == private->global_alpha_prop) {
 		*val = plane_state->global_alpha;
+		return 0;
+	}
+
+	if (property == private->blend_mode_prop) {
+		*val = plane_state->blend_mode;
 		return 0;
 	}
 
@@ -2401,8 +2433,7 @@ static void vop_crtc_enable(struct drm_crtc *crtc)
 	int sys_status = drm_crtc_index(crtc) ?
 				SYS_STATUS_LCDC1 : SYS_STATUS_LCDC0;
 	uint32_t val;
-	bool active;
-	int ret, act_end;
+	int act_end;
 
 	rockchip_set_system_status(sys_status);
 	mutex_lock(&vop->vop_lock);
@@ -2523,7 +2554,8 @@ static void vop_crtc_enable(struct drm_crtc *crtc)
 	VOP_CTRL_SET(vop, win_csc_mode_sel, 1);
 
 	if (vop_crtc_mode_update(crtc)) {
-		vop_disable_allwin(vop);
+		vop_disable_all_planes(vop);
+		vop->mode_update = true;
 		DRM_DEV_INFO(vop->dev, "Update mode to %d*%d, close all win\n",
 			      hdisplay, vdisplay);
 	}
@@ -2538,20 +2570,7 @@ static void vop_crtc_enable(struct drm_crtc *crtc)
 
 	enable_irq(vop->irq);
 	drm_crtc_vblank_on(crtc);
-	drm_crtc_vblank_get(crtc);
 	mutex_unlock(&vop->vop_lock);
-	/* make sure timing config take effect */
-	ret = readx_poll_timeout_atomic(vop_fs_irq_is_active,
-					vop, active, !active,
-					0, 100 * 1000);
-	if (ret)
-		dev_err(vop->dev, "wait exit fs irq timeout\n");
-	ret = readx_poll_timeout_atomic(vop_fs_irq_is_active,
-					vop, active, active,
-					0, 100 * 1000);
-	if (ret)
-		dev_err(vop->dev, "wait get fs irq timeout\n");
-	drm_crtc_vblank_put(crtc);
 }
 
 static int vop_zpos_cmp(const void *a, const void *b)
@@ -3142,8 +3161,16 @@ static void vop_crtc_atomic_flush(struct drm_crtc *crtc,
 	vop_cfg_update(crtc, old_crtc_state);
 
 	if (!vop->is_iommu_enabled && vop->is_iommu_needed) {
-		bool need_wait_vblank = !vop_is_allwin_disabled(vop);
+		bool need_wait_vblank;
 		int ret;
+
+		if (vop->mode_update)
+			vop_disable_all_planes(vop);
+
+		need_wait_vblank = !vop_is_allwin_disabled(vop);
+		if (vop->mode_update && need_wait_vblank)
+			dev_warn(vop->dev, "mode_update:%d, need wait blk:%d\n",
+				 vop->mode_update, need_wait_vblank);
 
 		if (need_wait_vblank) {
 			bool active;
@@ -3188,6 +3215,7 @@ static void vop_crtc_atomic_flush(struct drm_crtc *crtc,
 	spin_lock_irqsave(&vop->irq_lock, flags);
 	vop->pre_overlay = s->hdr.pre_overlay;
 	vop_cfg_done(vop);
+	vop->mode_update = false;
 	spin_unlock_irqrestore(&vop->irq_lock, flags);
 
 	/*
@@ -3637,6 +3665,8 @@ static int vop_plane_init(struct vop *vop, struct vop_win *win,
 	if (VOP_WIN_SUPPORT(vop, win, global_alpha_val))
 		drm_object_attach_property(&win->base.base,
 					   private->global_alpha_prop, 0xff);
+	drm_object_attach_property(&win->base.base,
+				   private->blend_mode_prop, 0);
 
 	return 0;
 }

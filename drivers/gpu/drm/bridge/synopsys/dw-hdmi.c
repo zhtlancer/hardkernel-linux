@@ -1278,6 +1278,20 @@ static bool hdmi_phy_wait_i2c_done(struct dw_hdmi *hdmi, int msec)
 	return true;
 }
 
+void dw_hdmi_set_high_tmds_clock_ratio(struct dw_hdmi *hdmi)
+{
+	unsigned long mtmdsclock = hdmi->hdmi_data.video_mode.mtmdsclock;
+
+	/* Control for TMDS Bit Period/TMDS Clock-Period Ratio */
+	if (hdmi->connector.display_info.hdmi.scdc.supported) {
+		if (mtmdsclock > 340000000)
+			drm_scdc_set_high_tmds_clock_ratio(hdmi->ddc, 1);
+		else
+			drm_scdc_set_high_tmds_clock_ratio(hdmi->ddc, 0);
+	}
+}
+EXPORT_SYMBOL_GPL(dw_hdmi_set_high_tmds_clock_ratio);
+
 void dw_hdmi_phy_i2c_write(struct dw_hdmi *hdmi, unsigned short data,
 			   unsigned char addr)
 {
@@ -2640,6 +2654,10 @@ dw_hdmi_connector_atomic_flush(struct drm_connector *connector,
 					     connector);
 	struct drm_display_mode *mode = NULL;
 	void *data = hdmi->plat_data->phy_data;
+	struct hdmi_vmode *vmode = &hdmi->hdmi_data.video_mode;
+	unsigned int in_bus_format = hdmi->hdmi_data.enc_in_bus_format;
+	unsigned int out_bus_format = hdmi->hdmi_data.enc_out_bus_format;
+
 
 	if (!hdmi->hpd_state || !conn_state->crtc)
 		return;
@@ -2650,7 +2668,7 @@ dw_hdmi_connector_atomic_flush(struct drm_connector *connector,
 	 * If HDMI is enabled in uboot, it's need to record
 	 * drm_display_mode and set phy status to enabled.
 	 */
-	if (!hdmi->hdmi_data.video_mode.mpixelclock) {
+	if (!vmode->mpixelclock) {
 		if (hdmi->plat_data->get_enc_in_encoding)
 			hdmi->hdmi_data.enc_in_encoding =
 				hdmi->plat_data->get_enc_in_encoding(data);
@@ -2666,12 +2684,19 @@ dw_hdmi_connector_atomic_flush(struct drm_connector *connector,
 
 		mode = &conn_state->crtc->mode;
 		memcpy(&hdmi->previous_mode, mode, sizeof(hdmi->previous_mode));
-		hdmi->hdmi_data.video_mode.mpixelclock = mode->clock;
-		hdmi->hdmi_data.video_mode.previous_pixelclock = mode->clock;
-		hdmi->hdmi_data.video_mode.previous_tmdsclock = mode->clock;
-		hdmi->mc_clkdis = hdmi_readb(hdmi, HDMI_MC_CLKDIS);
-		hdmi->phy.enabled = true;
-		return;
+		vmode->mpixelclock = mode->crtc_clock * 1000;
+		vmode->previous_pixelclock = mode->clock;
+		vmode->previous_tmdsclock = mode->clock;
+		vmode->mtmdsclock = hdmi_get_tmdsclock(hdmi,
+						       vmode->mpixelclock);
+		if (hdmi_bus_fmt_is_yuv420(hdmi->hdmi_data.enc_out_bus_format))
+			vmode->mtmdsclock /= 2;
+
+		if (in_bus_format != hdmi->hdmi_data.enc_in_bus_format ||
+		    out_bus_format != hdmi->hdmi_data.enc_out_bus_format)
+			hdmi->hdmi_data.update = true;
+		else
+			return;
 	}
 
 	if (hdmi->hdmi_data.update) {
@@ -3038,12 +3063,16 @@ static void dw_hdmi_attatch_properties(struct dw_hdmi *hdmi)
 		case 0x09:
 			if (colorspace == HDMI_COLORSPACE_YUV420)
 				color = MEDIA_BUS_FMT_UYYVYY8_0_5X24;
+			else if (colorspace == HDMI_COLORSPACE_YUV422)
+				color = MEDIA_BUS_FMT_UYVY8_1X16;
 			else
 				color = MEDIA_BUS_FMT_YUV8_1X24;
 			break;
 		case 0x0b:
 			if (colorspace == HDMI_COLORSPACE_YUV420)
 				color = MEDIA_BUS_FMT_UYYVYY10_0_5X30;
+			else if (colorspace == HDMI_COLORSPACE_YUV422)
+				color = MEDIA_BUS_FMT_UYVY10_1X20;
 			else
 				color = MEDIA_BUS_FMT_YUV10_1X30;
 			break;
@@ -3058,6 +3087,20 @@ static void dw_hdmi_attatch_properties(struct dw_hdmi *hdmi)
 			dev_err(hdmi->dev, "unexpected mapping: 0x%x\n",
 				video_mapping);
 		}
+
+		hdmi->hdmi_data.enc_in_bus_format = color;
+		hdmi->hdmi_data.enc_out_bus_format = color;
+		/*
+		 * input format will be set as yuv444 when output
+		 * format is yuv420
+		 */
+		if (color == MEDIA_BUS_FMT_UYVY10_1X20)
+			hdmi->hdmi_data.enc_in_bus_format =
+				MEDIA_BUS_FMT_YUV10_1X30;
+		else if (color == MEDIA_BUS_FMT_UYVY8_1X16)
+			hdmi->hdmi_data.enc_in_bus_format =
+				MEDIA_BUS_FMT_YUV8_1X24;
+
 	}
 
 	if (ops && ops->attatch_properties)
@@ -3611,6 +3654,13 @@ int dw_hdmi_bind(struct device *dev, struct device *master,
 		 prod_id1 & HDMI_PRODUCT_ID1_HDCP ? "with" : "without",
 		 hdmi->phy.name);
 
+	ret = hdmi_readb(hdmi, HDMI_PHY_STAT0);
+	if ((ret & HDMI_PHY_TX_PHY_LOCK) && (ret & HDMI_PHY_HPD)) {
+		hdmi->mc_clkdis = hdmi_readb(hdmi, HDMI_MC_CLKDIS);
+		hdmi->disabled = false;
+		hdmi->bridge_is_on = true;
+		hdmi->phy.enabled = true;
+	}
 	init_hpd_work(hdmi);
 	initialize_hdmi_ih_mutes(hdmi);
 
