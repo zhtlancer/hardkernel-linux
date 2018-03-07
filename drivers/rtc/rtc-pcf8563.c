@@ -315,6 +315,10 @@ static int pcf8563_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, pcf8563);
 
+	/* platform setup code should have handled this; sigh */
+	if (!device_can_wakeup(&client->dev))
+		device_init_wakeup(&client->dev, 1);
+
 	pcf8563->rtc = devm_rtc_device_register(&client->dev,
 				pcf8563_driver.driver.name,
 				&pcf8563_rtc_ops, THIS_MODULE);
