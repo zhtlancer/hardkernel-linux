@@ -1120,6 +1120,9 @@ void mark_buffer_dirty(struct buffer_head *bh)
 	WARN_ON_ONCE(!buffer_uptodate(bh));
 
 	trace_block_dirty_buffer(bh);
+	part_stat_add_uid_whole(bh->b_bdev->bd_part,
+			__kuid_val(get_current()->cred->uid),
+			bh->b_size / 0x200);
 
 	/*
 	 * Very *carefully* optimize the it-is-already-dirty case.
@@ -1139,6 +1142,9 @@ void mark_buffer_dirty(struct buffer_head *bh)
 			struct address_space *mapping = page_mapping(page);
 			if (mapping)
 				__set_page_dirty(page, mapping, 0);
+			part_stat_add_uid(bh->b_bdev->bd_part,
+					__kuid_val(get_current()->cred->uid),
+					bh->b_size / 0x200);
 		}
 	}
 }

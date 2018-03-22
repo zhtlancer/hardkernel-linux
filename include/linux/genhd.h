@@ -13,6 +13,7 @@
 #include <linux/kdev_t.h>
 #include <linux/rcupdate.h>
 #include <linux/slab.h>
+#include <linux/sched.h>
 
 #ifdef CONFIG_BLOCK
 
@@ -87,6 +88,16 @@ struct disk_stats {
 	unsigned long time_in_queue;
 };
 
+#define MAX_STATS_ENTRIES 509
+
+
+extern int *disk_stats_uid_slots;
+extern spinlock_t disk_stats_uid_slots_lock;
+
+struct disk_stats_uid {
+	unsigned long sectors[MAX_STATS_ENTRIES];
+};
+
 #define PARTITION_META_INFO_VOLNAMELTH	64
 /*
  * Enough for the string representation of any kind of UUID plus NULL.
@@ -121,6 +132,9 @@ struct hd_struct {
 	atomic_t in_flight[2];
 #ifdef	CONFIG_SMP
 	struct disk_stats __percpu *dkstats;
+	struct disk_stats_uid __percpu *dkstats_uid;
+	struct disk_stats_uid __percpu *dkstats_whole;
+	struct disk_stats_uid __percpu *dkstats_mapped;
 #else
 	struct disk_stats dkstats;
 #endif
@@ -326,6 +340,27 @@ static inline void part_stat_set_all(struct hd_struct *part, int value)
 	for_each_possible_cpu(i)
 		memset(per_cpu_ptr(part->dkstats, i), value,
 				sizeof(struct disk_stats));
+	for_each_possible_cpu(i)
+		memset(per_cpu_ptr(part->dkstats_uid, i), value,
+				sizeof(struct disk_stats_uid));
+	for_each_possible_cpu(i)
+		memset(per_cpu_ptr(part->dkstats_whole, i), value,
+				sizeof(struct disk_stats_uid));
+	for_each_possible_cpu(i)
+		memset(per_cpu_ptr(part->dkstats_mapped, i), value,
+				sizeof(struct disk_stats_uid));
+}
+
+static inline void part_stat_set_all_uid_whole(struct hd_struct *part, int value)
+{
+}
+
+static inline void part_stat_set_all_uid_mapped(struct hd_struct *part, int value)
+{
+}
+
+static inline void part_stat_set_all_uid(struct hd_struct *part, int value)
+{
 }
 
 static inline int init_part_stats(struct hd_struct *part)
@@ -333,12 +368,87 @@ static inline int init_part_stats(struct hd_struct *part)
 	part->dkstats = alloc_percpu(struct disk_stats);
 	if (!part->dkstats)
 		return 0;
+	part->dkstats_uid = alloc_percpu(struct disk_stats_uid);
+	if (!part->dkstats_uid)
+		return 0;
+	part->dkstats_whole = alloc_percpu(struct disk_stats_uid);
+	if (!part->dkstats_uid)
+		return 0;
+	part->dkstats_mapped = alloc_percpu(struct disk_stats_uid);
+	if (!part->dkstats_uid)
+		return 0;
 	return 1;
 }
 
 static inline void free_part_stats(struct hd_struct *part)
 {
 	free_percpu(part->dkstats);
+}
+
+static inline int alloc_stats_index(uid_t uid)
+{
+	int bucket = uid % MAX_STATS_ENTRIES;
+	if (disk_stats_uid_slots[bucket] != -1
+			&& disk_stats_uid_slots[bucket] != uid) {
+		printk(KERN_ERR "XXX failed uid %d bucket %d in_bucket %d\n",
+				uid, bucket, disk_stats_uid_slots[bucket]);
+		BUG();
+		return -1;
+	}
+	if (disk_stats_uid_slots[bucket] == -1) {
+		printk(KERN_ERR "bucket %d allocated to uid %d\n",
+				bucket, uid);
+		disk_stats_uid_slots[bucket] = uid;
+	}
+	return bucket;
+}
+
+static inline int get_stats_index(void)
+{
+	BUG_ON(current->disk_stats_index == -1);
+	return current->disk_stats_index;
+}
+
+static inline void part_stat_add_uid_whole(struct hd_struct *part, uid_t uid, int value)
+{
+	int bucket;
+	int cpu = get_cpu();
+	struct disk_stats_uid *dkstats_uid =
+		per_cpu_ptr(part->dkstats_whole, cpu);
+
+	bucket = get_stats_index();
+
+	if (bucket >= 0)
+		dkstats_uid->sectors[bucket] += value;
+	put_cpu();
+}
+
+static inline void part_stat_add_uid_mapped(struct hd_struct *part, uid_t uid, int value)
+{
+	int bucket;
+	int cpu = get_cpu();
+	struct disk_stats_uid *dkstats_uid =
+		per_cpu_ptr(part->dkstats_mapped, cpu);
+
+	bucket = get_stats_index();
+
+	if (bucket >= 0)
+		dkstats_uid->sectors[bucket] += value;
+	put_cpu();
+}
+
+static inline void part_stat_add_uid(struct hd_struct *part, uid_t uid, int value)
+{
+	int bucket;
+	int cpu = get_cpu();
+	struct disk_stats_uid *dkstats_uid =
+		per_cpu_ptr(part->dkstats_uid, cpu);
+
+	bucket = get_stats_index();
+
+	if (bucket >= 0)
+		dkstats_uid->sectors[bucket] += value;
+	put_cpu();
 }
 
 #else /* !CONFIG_SMP */

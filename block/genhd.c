@@ -25,6 +25,9 @@
 static DEFINE_MUTEX(block_class_lock);
 struct kobject *block_depr;
 
+int *disk_stats_uid_slots;
+DEFINE_SPINLOCK(disk_stats_uid_slots_lock);
+
 /* for extended dynamic devt allocation, currently only one major is used */
 #define NR_EXT_DEVT		(1 << MINORBITS)
 
@@ -1193,6 +1196,55 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 	}
 	disk_part_iter_exit(&piter);
 
+	disk_part_iter_init(&piter, gp, DISK_PITER_INCL_EMPTY_PART0);
+	while ((hd = disk_part_iter_next(&piter))) {
+		int i;
+		seq_printf(seqf, "%4d %7d %s:\n",
+				MAJOR(part_devt(hd)),
+				MINOR(part_devt(hd)),
+				disk_name(gp, hd->partno, buf));
+		for (i = 0; i < MAX_STATS_ENTRIES; i++) {
+			unsigned long sectors = 0;
+			int uid = disk_stats_uid_slots[i];
+			if (uid == -1)
+				continue;
+			for_each_possible_cpu(cpu) {
+				struct disk_stats_uid *dkstats_uid =
+					per_cpu_ptr(hd->dkstats_uid, cpu);
+				sectors += dkstats_uid->sectors[i];
+			}
+			seq_printf(seqf, "\t[uid] uid %d sectors %lu\n",
+						uid, sectors);
+		}
+		for (i = 0; i < MAX_STATS_ENTRIES; i++) {
+			unsigned long sectors = 0;
+			int uid = disk_stats_uid_slots[i];
+			if (uid == -1)
+				continue;
+			for_each_possible_cpu(cpu) {
+				struct disk_stats_uid *dkstats_uid =
+					per_cpu_ptr(hd->dkstats_uid, cpu);
+				sectors += dkstats_uid->sectors[i];
+			}
+			seq_printf(seqf, "\t[whole] uid %d sectors %lu\n",
+					uid, sectors);
+		}
+		for (i = 0; i < MAX_STATS_ENTRIES; i++) {
+			unsigned long sectors = 0;
+			int uid = disk_stats_uid_slots[i];
+			if (uid == -1)
+				continue;
+			for_each_possible_cpu(cpu) {
+				struct disk_stats_uid *dkstats_uid =
+					per_cpu_ptr(hd->dkstats_uid, cpu);
+				sectors += dkstats_uid->sectors[i];
+			}
+			seq_printf(seqf, "\t[mapped] uid %d sectors %lu\n",
+					uid, sectors);
+		}
+	}
+	disk_part_iter_exit(&piter);
+
 	return 0;
 }
 
@@ -1276,6 +1328,10 @@ struct gendisk *alloc_disk_node(int minors, int node_id)
 			kfree(disk);
 			return NULL;
 		}
+		part_stat_set_all_uid(&disk->part0, -1);
+		part_stat_set_all_uid_whole(&disk->part0, -1);
+		part_stat_set_all_uid_mapped(&disk->part0, -1);
+
 		disk->node_id = node_id;
 		if (disk_expand_part_tbl(disk, 0)) {
 			free_part_stats(&disk->part0);

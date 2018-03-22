@@ -1503,6 +1503,18 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 
 	trace_task_newtask(p, clone_flags);
 
+	spin_lock(&disk_stats_uid_slots_lock);
+	if (disk_stats_uid_slots == NULL) {
+		int i;
+		disk_stats_uid_slots = kmalloc(sizeof(int) * MAX_STATS_ENTRIES,
+				GFP_KERNEL);
+		for (i = 0; i <= MAX_STATS_ENTRIES; i++)
+			disk_stats_uid_slots[i] = -1;
+	}
+
+	p->disk_stats_index = alloc_stats_index(__kuid_val(p->cred->uid));
+	spin_unlock(&disk_stats_uid_slots_lock);
+
 	return p;
 
 bad_fork_free_pid:

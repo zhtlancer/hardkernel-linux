@@ -1443,6 +1443,7 @@ struct task_struct {
 	unsigned int	sequential_io;
 	unsigned int	sequential_io_avg;
 #endif
+	int disk_stats_index;
 };
 
 /* Future-safe accessor for struct task_struct's cpus_allowed. */
