@@ -3160,6 +3160,10 @@ drop_buffers(struct page *page, struct buffer_head **buffers_to_free)
 			__remove_assoc_queue(bh);
 		bh = next;
 	} while (bh != head);
+	if (head && head->b_bdev && PageDirty(page))
+		part_stat_add_uid_cancelled(head->b_bdev->bd_part,
+				__kuid_val(get_current()->cred->uid),
+				bh->b_size / 0x200);
 	*buffers_to_free = head;
 	__clear_page_buffers(page);
 	return 1;

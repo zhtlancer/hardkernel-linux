@@ -1213,6 +1213,8 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 					per_cpu_ptr(hd->dkstats_uid, cpu);
 				sectors += dkstats_uid->sectors[i];
 			}
+			if (!sectors)
+				continue;
 			seq_printf(seqf, "\t[uid] uid %d sectors %lu\n",
 						uid, sectors);
 		}
@@ -1223,9 +1225,11 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 				continue;
 			for_each_possible_cpu(cpu) {
 				struct disk_stats_uid *dkstats_uid =
-					per_cpu_ptr(hd->dkstats_uid, cpu);
+					per_cpu_ptr(hd->dkstats_whole, cpu);
 				sectors += dkstats_uid->sectors[i];
 			}
+			if (!sectors)
+				continue;
 			seq_printf(seqf, "\t[whole] uid %d sectors %lu\n",
 					uid, sectors);
 		}
@@ -1236,10 +1240,12 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 				continue;
 			for_each_possible_cpu(cpu) {
 				struct disk_stats_uid *dkstats_uid =
-					per_cpu_ptr(hd->dkstats_uid, cpu);
+					per_cpu_ptr(hd->dkstats_mapped, cpu);
 				sectors += dkstats_uid->sectors[i];
 			}
-			seq_printf(seqf, "\t[mapped] uid %d sectors %lu\n",
+			if (!sectors)
+				continue;
+			seq_printf(seqf, "\t[cancelled] uid %d sectors %lu\n",
 					uid, sectors);
 		}
 	}

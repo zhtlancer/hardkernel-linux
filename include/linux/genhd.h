@@ -423,7 +423,7 @@ static inline void part_stat_add_uid_whole(struct hd_struct *part, uid_t uid, in
 	put_cpu();
 }
 
-static inline void part_stat_add_uid_mapped(struct hd_struct *part, uid_t uid, int value)
+static inline void part_stat_add_uid_cancelled(struct hd_struct *part, uid_t uid, int value)
 {
 	int bucket;
 	int cpu = get_cpu();
