@@ -1658,6 +1658,12 @@ static const struct hid_device_id mt_devices[] = {
 		HID_USB_DEVICE(USB_VENDOR_ID_NEC_1926,
 				USB_DEVICE_ID_V652_TM) },
 
+/* NEWHAVEN DISPLAY capacitive Screen */
+	{ .driver_data = MT_CLS_DEFAULT,
+		HID_USB_DEVICE(
+				USB_VENDOR_ID_NHD,
+				USB_DEVICE_ID_NHD_7_0_HDMI_N_RSXN_CTU) },
+
 	/* Generic MT device */
 	{ HID_DEVICE(HID_BUS_ANY, HID_GROUP_MULTITOUCH, HID_ANY_ID, HID_ANY_ID) },
 	{ }
