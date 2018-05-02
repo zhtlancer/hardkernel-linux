@@ -58,6 +58,29 @@ int usb_stor_euscsi_init(struct us_data *us)
 	return 0;
 }
 
+int usb_stor_huawei_init(struct us_data *us)
+{
+	int result = 0;
+	int act_len = 0;
+	struct bulk_cb_wrap *bcbw = (struct bulk_cb_wrap *)us->iobuf;
+	char rewind_cmd[] = {0x11, 0x06, 0x20, 0x00, 0x00, 0x01, 0x01, 0x00,
+		0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+	bcbw->Signature = cpu_to_le32(US_BULK_CB_SIGN);
+	bcbw->Tag = 0;
+	bcbw->DataTransferLength = 0;
+	bcbw->Flags = 0;
+	bcbw->Lun = 0;
+	bcbw->Length = sizeof(rewind_cmd);
+	memset(bcbw->CDB, 0, sizeof(bcbw->CDB));
+	memcpy(bcbw->CDB, rewind_cmd, sizeof(rewind_cmd));
+	result = usb_stor_bulk_transfer_buf(us, us->send_bulk_pipe, bcbw,
+			US_BULK_CB_WRAP_LEN, &act_len);
+	printk(
+			KERN_INFO "transfer actual length=%d, result=%d\n",
+			act_len, result);
+	return result;
+}
+
 /* This function is required to activate all four slots on the UCR-61S2B
  * flash reader */
 int usb_stor_ucr61s2b_init(struct us_data *us)
