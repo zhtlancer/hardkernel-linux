@@ -114,10 +114,10 @@ endif
 
 obj-$(CONFIG_AM_WIFI) += wifi/
 ifneq ($(wildcard $(srctree)/../hardware/wifi),)
-	obj-$(CONFIG_RTL8812AU) += ../../../hardware/wifi/realtek/drivers/rtl8812au/
+	obj-$(CONFIG_RTL8812AU_SDK) += ../../../hardware/wifi/realtek/drivers/rtl8812au/
 endif
 ifneq ($(wildcard $(srctree)/../hardware/wifi),)
-	obj-$(CONFIG_RTL8812AU) += ../../../hardware/wifi/realtek/drivers/rtl8812au/
+	obj-$(CONFIG_RTL8812AU_SDK) += ../../../hardware/wifi/realtek/drivers/rtl8812au/
 endif
 
 
