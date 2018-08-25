@@ -1987,6 +1987,7 @@ struct task_struct {
 	/* A live task holds one reference. */
 	atomic_t stack_refcount;
 #endif
+	int disk_stats_index;
 /* CPU-specific state of this task */
 	struct thread_struct thread;
 /*

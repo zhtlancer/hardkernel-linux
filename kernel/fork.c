@@ -1836,6 +1836,22 @@ static __latent_entropy struct task_struct *copy_process(
 	trace_task_newtask(p, clone_flags);
 	uprobe_copy_process(p, clone_flags);
 
+	spin_lock(&disk_stats_uid_slots_lock);
+	if (disk_stats_uid_slots == NULL) {
+		int i;
+		disk_stats_uid_slots = kmalloc(sizeof(int) * MAX_STATS_ENTRIES,
+				GFP_KERNEL);
+		for (i = 0; i <= MAX_STATS_ENTRIES; i++) {
+			disk_stats_uid_slots[i] = -1;
+		}
+		disk_stats_uid_slots_collided = 0;
+		disk_stats_uid_slots_allocated = 0;
+		printk(KERN_INFO "disk_stats_uid_slots allocated\n");
+	}
+
+	p->disk_stats_index = alloc_stats_index(__kuid_val(p->cred->uid));
+	spin_unlock(&disk_stats_uid_slots_lock);
+
 	return p;
 
 bad_fork_cancel_cgroup:
