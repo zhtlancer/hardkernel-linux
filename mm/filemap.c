@@ -2828,6 +2828,9 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 			part_stat_add_uid(part,
 					__kuid_val(get_current()->cred->uid),
 					written / 0x200);
+			part_stat_add_global(part,
+					__kuid_val(get_current()->cred->uid),
+					written / 0x200);
 		}
 		/*
 		 * If the write stopped short of completing, fall back to
