@@ -1148,6 +1148,11 @@ void mark_buffer_dirty(struct buffer_head *bh)
 	WARN_ON_ONCE(!buffer_uptodate(bh));
 
 	trace_block_dirty_buffer(bh);
+#if 1
+	part_stat_add_uid_whole(bh->b_bdev->bd_part,
+			__kuid_val(get_current()->cred->uid),
+			bh->b_size / 0x200);
+#endif
 
 	/*
 	 * Very *carefully* optimize the it-is-already-dirty case.
@@ -1161,6 +1166,13 @@ void mark_buffer_dirty(struct buffer_head *bh)
 			return;
 	}
 
+	part_stat_add_uid(bh->b_bdev->bd_part,
+			__kuid_val(get_current()->cred->uid),
+			bh->b_size / 0x200);
+	part_stat_add_global(bh->b_bdev->bd_part,
+			__kuid_val(get_current()->cred->uid),
+			bh->b_size / 0x200);
+
 	if (!test_set_buffer_dirty(bh)) {
 		struct page *page = bh->b_page;
 		struct address_space *mapping = NULL;
@@ -1170,6 +1182,11 @@ void mark_buffer_dirty(struct buffer_head *bh)
 			mapping = page_mapping(page);
 			if (mapping)
 				__set_page_dirty(page, mapping, 0);
+#if 0
+			part_stat_add_uid(bh->b_bdev->bd_part,
+					__kuid_val(get_current()->cred->uid),
+					bh->b_size / 0x200);
+#endif
 		}
 		unlock_page_memcg(page);
 		if (mapping)
@@ -3296,6 +3313,10 @@ drop_buffers(struct page *page, struct buffer_head **buffers_to_free)
 			__remove_assoc_queue(bh);
 		bh = next;
 	} while (bh != head);
+	if (head && head->b_bdev && PageDirty(page))
+		part_stat_add_uid_cancelled(head->b_bdev->bd_part,
+				__kuid_val(get_current()->cred->uid),
+				bh->b_size / 0x200);
 	*buffers_to_free = head;
 	__clear_page_buffers(page);
 	return 1;

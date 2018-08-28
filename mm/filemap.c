@@ -3104,6 +3104,17 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		loff_t pos, endbyte;
 
 		written = generic_file_direct_write(iocb, from);
+		if (written > 0) {
+			struct hd_struct *part =
+				iocb->ki_filp->f_mapping->host->i_sb->s_bdev->bd_part;
+			// Do we want to separate O_DIRECT traffic?
+			part_stat_add_uid(part,
+					__kuid_val(get_current()->cred->uid),
+					written / 0x200);
+			part_stat_add_global(part,
+					__kuid_val(get_current()->cred->uid),
+					written / 0x200);
+		}
 		/*
 		 * If the write stopped short of completing, fall back to
 		 * buffered writes.  Some filesystems do this for writes to
