@@ -1513,16 +1513,15 @@ static int diskstats_uid_global_show(struct seq_file *seqf, void *v)
 	int cpu;
 
 	int i;
-	struct timespec uptime;
+	struct timespec64 uptime;
 	unsigned long uptime_ts;
 	int new_iter = 0;
 	unsigned long total_sectors = 0;
 	const char *sanity = disk_stats_uid_slots_collided == 0 ?
 		"[sane]" : "[collided]";
-	get_monotonic_boottime(&uptime);
-	uptime_ts = uptime.tv_sec * 1000000000 + uptime.tv_nsec
-		- dkstats_uid_ts_offset;
-	if ((uptime_ts - dkstats_uid_ts1) > 100000000) {
+	get_monotonic_boottime64(&uptime);
+	uptime_ts = uptime.tv_sec - dkstats_uid_ts_offset;
+	if ((uptime_ts - dkstats_uid_ts1) >= 1) {
 		new_iter = 1;
 		dkstats_uid_ts2 = dkstats_uid_ts1;
 		dkstats_uid_ts1 = uptime_ts;
@@ -1531,8 +1530,8 @@ static int diskstats_uid_global_show(struct seq_file *seqf, void *v)
 		atomic_inc(&dkstats_uid_seq);
 	seq_printf(seqf, "%u %lu %lu count %d / %d %s\n",
 			atomic_read(&dkstats_uid_seq),
-			uptime_ts / 1000000000,
-			(uptime_ts - dkstats_uid_ts2)/1000000000,
+			uptime_ts,
+			uptime_ts - dkstats_uid_ts2,
 			disk_stats_uid_slots_allocated,
 			MAX_STATS_ENTRIES,
 			sanity);
@@ -1603,15 +1602,16 @@ static int diskstats_uid_global_open(struct inode *inode, struct file *file)
 static ssize_t diskstats_uid_global_write(struct file *file,
 		const char *buf, size_t count, loff_t *offp)
 {
-	struct timespec uptime;
+	struct timespec64 uptime;
 	int i;
 	int cpu;
 
 	printk(KERN_WARNING "%s resetting uid stats\n", __func__);
 
-	get_monotonic_boottime(&uptime);
+	get_monotonic_boottime64(&uptime);
 
-	dkstats_uid_ts_offset = uptime.tv_sec * 1000000000 + uptime.tv_nsec;
+	atomic_set(&dkstats_uid_seq, 0);
+	dkstats_uid_ts_offset = uptime.tv_sec;
 	dkstats_uid_ts1 = 0;
 	dkstats_uid_ts2 = 0;
 	for (i = 0; i < MAX_STATS_ENTRIES; i++) {
