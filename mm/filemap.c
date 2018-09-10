@@ -36,6 +36,7 @@
 #include <linux/memcontrol.h>
 #include <linux/cleancache.h>
 #include <linux/rmap.h>
+#include <linux/blk-uid-throttle.h>
 #include "internal.h"
 
 #define CREATE_TRACE_POINTS
@@ -3057,6 +3058,7 @@ again:
 		pos += copied;
 		written += copied;
 
+		blk_uid_rl_throttle(mapping, written);
 		balance_dirty_pages_ratelimited(mapping);
 	} while (iov_iter_count(i));
 
