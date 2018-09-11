@@ -2954,6 +2954,7 @@ generic_file_direct_write(struct kiocb *iocb, struct iov_iter *from)
 		iocb->ki_pos = pos;
 	}
 	iov_iter_revert(from, write_len - iov_iter_count(from));
+	blk_uid_rl_throttle(mapping, written);
 out:
 	return written;
 }
@@ -3058,7 +3059,7 @@ again:
 		pos += copied;
 		written += copied;
 
-		blk_uid_rl_throttle(mapping, written);
+		blk_uid_rl_throttle(mapping, copied);
 		balance_dirty_pages_ratelimited(mapping);
 	} while (iov_iter_count(i));
 

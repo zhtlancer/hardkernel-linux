@@ -7,15 +7,29 @@
 
 #include <linux/blk-uid-throttle.h>
 
+#define BLK_UID_DEBUG 0
+
 static uint8_t input_buf[PAGE_SIZE];
 
 struct blk_uid_rl **blk_uid_rl_slots;
 LIST_HEAD(blk_uid_rl_list);
 DEFINE_SPINLOCK(blk_uid_rl_list_lock);
 
+static inline long throttle_sleep(long timeout)
+{
+	__set_current_state(TASK_KILLABLE);
+	return io_schedule_timeout(timeout);
+}
+
 void blk_uid_rl_throttle(struct address_space *mapping, ssize_t written)
 {
 	struct blk_uid_rl *rl;
+	/* debug */
+#if BLK_UID_DEBUG
+	unsigned long iterations = 0, cmpxchg_iter = 0, stats_alloc = 0;
+	static unsigned long func_iter = 0;
+	func_iter += 1;
+#endif
 
 	if (unlikely(blk_uid_rl_slots == NULL))
 		return;
@@ -28,6 +42,12 @@ void blk_uid_rl_throttle(struct address_space *mapping, ssize_t written)
 	do {
 		unsigned long old_quota, new_quota, allocate;
 		unsigned long timestamp = jiffies;
+		unsigned long pause;
+
+#if BLK_UID_DEBUG
+		iterations += 1;
+#endif
+
 		if (rl == NULL || rl->ratelimit < 0)
 			return;
 
@@ -37,17 +57,49 @@ void blk_uid_rl_throttle(struct address_space *mapping, ssize_t written)
 			rl->quota = rl->ratelimit;
 		}
 
+		pause = HZ - (timestamp - rl->timestamp);
+
+#if BLK_UID_DEBUG
+		if (iterations > 1) {
+			printk(KERN_WARNING "%s:%d %d %s %p throttled for too long: "
+					"func_iter %lu iterations %lu cmpxchg_iter %lu stats_alloc %lu written %d pause %lu\n",
+					__func__, __LINE__,
+					current->pid, current->comm, &rl,
+					func_iter, iterations, cmpxchg_iter, stats_alloc, written, pause);
+		}
+#endif
+
+		if (rl->quota == 0) {
+			throttle_sleep(pause);
+			continue;
+		}
+
 		old_quota = rl->quota;
 		allocate = min(written, (ssize_t)old_quota);
 		new_quota = old_quota - allocate;
-		if (!cmpxchg(&rl->quota, old_quota, new_quota))
+		if (cmpxchg(&rl->quota, old_quota, new_quota) != old_quota) {
+			/* Racing with someone? */
+			throttle_sleep(pause / 2);
+#if BLK_UID_DEBUG
+			printk(KERN_WARNING "%s:%d rl->quota %lu old_quota %lu new_quota %lu\n",
+					__func__, __LINE__, rl->quota, old_quota, new_quota);
+			cmpxchg_iter += 1;
+#endif
 			continue;
+		}
 		written -= allocate;
+		rl->stats_quota += allocate;
+		rl->last_written = written;
+
+#if BLK_UID_DEBUG
+		stats_alloc += allocate;
+#endif
 		if (written == 0)
 			return;
-		if (new_quota == 0)
-			io_schedule_timeout(HZ -
-					(timestamp - rl->timestamp));
+		if (new_quota == 0) {
+			rl->stats_hz = pause;
+			throttle_sleep(pause);
+		}
 	} while (1);
 }
 
@@ -56,7 +108,11 @@ static int ratelimit_uid_show(struct seq_file *seqf, void *v)
 	struct blk_uid_rl *ptr;
 
 	list_for_each_entry(ptr, &blk_uid_rl_list, list) {
-		seq_printf(seqf, "%d %d\n", ptr->uid, ptr->ratelimit);
+		seq_printf(seqf, "%d %d ts %lu qa %lu stats_qa %lu slp hz %lu / HZ %d last wr %lu\n",
+				ptr->uid, ptr->ratelimit,
+				ptr->timestamp, ptr->quota, ptr->stats_quota,
+				ptr->stats_hz, HZ,
+				ptr->last_written);
 	}
 	return 0;
 }
@@ -110,6 +166,7 @@ static int ratelimit_uid_write(struct file *file, const char *buf,
 			blk_uid_rl_slots[rl_slot_index];
 		WARN_ON(ptr->uid != uid);
 		ptr->ratelimit = rate;
+		ptr->stats_quota = 0;
 	}
 	spin_unlock(&blk_uid_rl_list_lock);
 
