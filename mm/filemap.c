@@ -33,6 +33,7 @@
 #include <linux/hardirq.h> /* for BUG_ON(!in_atomic()) only */
 #include <linux/memcontrol.h>
 #include <linux/cleancache.h>
+#include <linux/blk-uid-throttle.h>
 #include "internal.h"
 
 #define CREATE_TRACE_POINTS
@@ -2254,6 +2255,7 @@ generic_file_direct_write(struct kiocb *iocb, const struct iovec *iov,
 		}
 		*ppos = pos;
 	}
+	blk_uid_rl_throttle(mapping, written);
 out:
 	return written;
 }
@@ -2379,6 +2381,7 @@ again:
 		pos += copied;
 		written += copied;
 
+		blk_uid_rl_throttle(mapping, copied);
 		balance_dirty_pages_ratelimited(mapping);
 		if (fatal_signal_pending(current)) {
 			status = -EINTR;
