@@ -2475,6 +2475,10 @@ ssize_t __generic_file_aio_write(struct kiocb *iocb, const struct iovec *iov,
 
 		written = generic_file_direct_write(iocb, iov, &nr_segs, pos,
 							ppos, count, ocount);
+		if (written > 0) {
+			part_stat_add_global(__kuid_val(get_current()->cred->uid),
+					written / 0x200);
+		}
 		if (written < 0 || written == count)
 			goto out;
 		/*

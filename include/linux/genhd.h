@@ -93,6 +93,15 @@ struct disk_stats {
 
 extern int *disk_stats_uid_slots;
 extern spinlock_t disk_stats_uid_slots_lock;
+extern unsigned int disk_stats_uid_slots_collided;
+extern int disk_stats_uid_slots_allocated;
+
+extern struct disk_stats_uid __percpu *dkstats_uid_global;
+extern unsigned long dkstats_uid_ts1;
+extern unsigned long dkstats_uid_ts2;
+extern atomic_t dkstats_uid_seq;
+extern unsigned long *dkstats_uid_hist1;
+extern unsigned long *dkstats_uid_hist2;
 
 struct disk_stats_uid {
 	unsigned long sectors[MAX_STATS_ENTRIES];
@@ -390,15 +399,24 @@ static inline int alloc_stats_index(uid_t uid)
 	int bucket = uid % MAX_STATS_ENTRIES;
 	if (disk_stats_uid_slots[bucket] != -1
 			&& disk_stats_uid_slots[bucket] != uid) {
-		printk(KERN_ERR "XXX failed uid %d bucket %d in_bucket %d\n",
-				uid, bucket, disk_stats_uid_slots[bucket]);
-		BUG();
-		return -1;
+		int orig_bucket = bucket;
+		disk_stats_uid_slots_collided = 1;
+
+		while (disk_stats_uid_slots[bucket] != -1 &&
+				disk_stats_uid_slots[bucket] != uid)
+			bucket = (bucket + 1) % MAX_STATS_ENTRIES;
+
+		printk(KERN_ERR "XXX collided, uid %d bucket %d in_bucket %d"
+				" replace bucket %d, in replace bucket %d\n",
+				uid, orig_bucket,
+				disk_stats_uid_slots[orig_bucket],
+				bucket, disk_stats_uid_slots[bucket]);
 	}
 	if (disk_stats_uid_slots[bucket] == -1) {
 		printk(KERN_ERR "bucket %d allocated to uid %d\n",
 				bucket, uid);
 		disk_stats_uid_slots[bucket] = uid;
+		disk_stats_uid_slots_allocated += 1;
 	}
 	return bucket;
 }
@@ -443,6 +461,20 @@ static inline void part_stat_add_uid(struct hd_struct *part, uid_t uid, int valu
 	int cpu = get_cpu();
 	struct disk_stats_uid *dkstats_uid =
 		per_cpu_ptr(part->dkstats_uid, cpu);
+
+	bucket = get_stats_index();
+
+	if (bucket >= 0)
+		dkstats_uid->sectors[bucket] += value;
+	put_cpu();
+}
+
+static inline void part_stat_add_global(uid_t uid, int value)
+{
+	int bucket;
+	int cpu = get_cpu();
+	struct disk_stats_uid *dkstats_uid =
+		per_cpu_ptr(dkstats_uid_global, cpu);
 
 	bucket = get_stats_index();
 

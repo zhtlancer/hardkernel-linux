@@ -1510,6 +1510,10 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 				GFP_KERNEL);
 		for (i = 0; i <= MAX_STATS_ENTRIES; i++)
 			disk_stats_uid_slots[i] = -1;
+
+		disk_stats_uid_slots_collided = 0;
+		disk_stats_uid_slots_allocated = 0;
+		printk(KERN_INFO "disk_stats_uid_slots allocated\n");
 	}
 
 	p->disk_stats_index = alloc_stats_index(__kuid_val(p->cred->uid));
